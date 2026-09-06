@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SCIMA Study — Community Decks</title>
+
+<link rel="stylesheet" href="lib/katex/katex.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header id="topbar">
+  <div id="brand">
+    <span class="grad-text">SCIMA</span> Study
+  </div>
+
+  <div id="api-status">
+    <span class="dot" id="api-dot"></span>
+    <span id="api-label">checking API…</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ───────────────────────────────────────────────────────────── -->
+  <!-- Community -->
+  <!-- ───────────────────────────────────────────────────────────── -->
+
+  <section id="screen-search" class="screen active">
+
+    <h1>Community decks</h1>
+    <p class="section-sub">
+      Search and discover decks shared by the SCIMA community.
+    </p>
+
+    <!-- Search -->
+    <div class="search-row">
+      <input
+        id="search-input"
+        type="search"
+        autocomplete="off"
+        placeholder="Search decks…"
+        maxlength="200"
+      >
+
+      <select id="search-sort" class="sc-select" style="width:auto;min-width:140px">
+        <option value="relevance">Relevance</option>
+        <option value="newest">Newest</option>
+        <option value="popularity">Popularity</option>
+      </select>
+
+      <button class="btn btn-primary" id="search-btn">
+        Search
+      </button>
+    </div>
+
+    <!-- Search results -->
+    <div id="search-results-section" style="display:none">
+      <div
+        style="
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          margin-bottom:12px;
+        "
+      >
+        <h3 style="margin:0;font-size:14px" id="results-title">
+          Search results
+        </h3>
+
+        <span
+          id="results-count"
+          style="font-size:11px;color:var(--muted)"
+        ></span>
+      </div>
+
+      <div id="search-results" class="deck-grid"></div>
+
+      <div
+        id="search-empty"
+        class="empty-state"
+        style="display:none"
+      >
+        <div class="big-emoji">🔎</div>
+        <div>No decks matched your search.</div>
+      </div>
+    </div>
+
+    <!-- Popular -->
+    <section id="popular-section">
+
+      <div
+        style="
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          margin-bottom:12px;
+        "
+      >
+        <div>
+          <h3 style="margin:0;font-size:15px">
+            Most downloaded
+          </h3>
+          <p
+            style="
+              margin:3px 0 0;
+              color:var(--muted);
+              font-size:11px;
+            "
+          >
+            The five most downloaded decks of all time
+          </p>
+        </div>
+      </div>
+
+      <div id="popular-grid" class="deck-grid"></div>
+
+      <div
+        id="popular-empty"
+        class="empty-state"
+        style="display:none"
+      >
+        <div class="big-emoji">📭</div>
+        <div>No decks have been published yet.</div>
+      </div>
+
+    </section>
+
+    <!-- Upload -->
+    <section id="upload-panel">
+
+      <h3>⬆ Upload a deck</h3>
+
+      <p>
+        Publish a SCIMA deck export to the community registry.
+      </p>
+
+      <!-- File -->
+      <label class="sc-field-label" for="upload-file">
+        Deck file
+      </label>
+
+      <div
+        id="upload-dropzone"
+        style="
+          border:1px dashed var(--border);
+          border-radius:10px;
+          padding:18px;
+          text-align:center;
+          cursor:pointer;
+          background:rgba(255,255,255,0.025);
+          transition:border-color .15s,background .15s;
+        "
+      >
+        <div
+          id="upload-file-name"
+          style="
+            font-size:13px;
+            font-weight:700;
+            margin-bottom:4px;
+          "
+        >
+          Drop a SCIMA JSON export here
+        </div>
+
+        <div
+          style="
+            color:var(--muted);
+            font-size:11px;
+          "
+        >
+          or click to choose a file
+        </div>
+
+        <input
+          type="file"
+          id="upload-file"
+          accept=".json,application/json"
+          hidden
+        >
+      </div>
+
+      <!-- Extracted metadata preview -->
+      <div
+        id="upload-extracted"
+        style="
+          display:none;
+          margin-top:12px;
+          padding:12px;
+          border-radius:10px;
+          background:rgba(91,206,250,0.06);
+          border:1px solid rgba(91,206,250,0.15);
+        "
+      >
+        <div
+          style="
+            font-size:10px;
+            color:var(--muted);
+            text-transform:uppercase;
+            letter-spacing:.05em;
+            font-weight:700;
+            margin-bottom:8px;
+          "
+        >
+          Deck detected
+        </div>
+
+        <div
+          id="upload-extracted-name"
+          style="
+            font-weight:800;
+            font-size:14px;
+          "
+        ></div>
+
+        <div
+          id="upload-extracted-meta"
+          style="
+            margin-top:4px;
+            color:var(--muted);
+            font-size:11px;
+          "
+        ></div>
+      </div>
+
+      <!-- Description -->
+      <label class="sc-field-label" for="upload-desc">
+        Description
+      </label>
+
+      <textarea
+        id="upload-desc"
+        class="quiz-input-area"
+        placeholder="A short description of this deck…"
+        style="min-height:80px"
+      ></textarea>
+
+      <!-- Author -->
+      <label class="sc-field-label" for="upload-author">
+        Author
+      </label>
+
+      <input
+        id="upload-author"
+        class="sc-text-input"
+        type="text"
+        placeholder="Creator name (optional)"
+        autocomplete="name"
+      >
+
+      <!-- Tags -->
+      <label class="sc-field-label" for="upload-tag-input">
+        Tags
+      </label>
+
+      <div
+        id="tag-input-container"
+        style="
+          display:flex;
+          flex-wrap:wrap;
+          gap:6px;
+          align-items:center;
+          min-height:40px;
+          padding:6px 8px;
+          background:rgba(255,255,255,0.06);
+          border:1px solid var(--border);
+          border-radius:8px;
+        "
+      >
+        <div
+          id="upload-tags-list"
+          style="
+            display:flex;
+            flex-wrap:wrap;
+            gap:5px;
+          "
+        ></div>
+
+        <input
+          id="upload-tag-input"
+          type="text"
+          placeholder="Add a tag…"
+          autocomplete="off"
+          style="
+            flex:1;
+            min-width:100px;
+            background:none;
+            border:none;
+            outline:none;
+            color:var(--text);
+            font:inherit;
+            font-size:12px;
+            padding:4px;
+          "
+        >
+      </div>
+
+      <div
+        style="
+          margin-top:4px;
+          font-size:10px;
+          color:var(--muted);
+        "
+      >
+        Press Enter or comma to add a tag.
+      </div>
+
+      <!-- Subject / level -->
+      <div class="field-row" style="margin-top:10px">
+
+        <div style="flex:1;min-width:160px">
+          <label class="sc-field-label" for="upload-subject">
+            Subject
+          </label>
+
+          <select id="upload-subject" class="sc-select">
+            <option value="">Select a subject</option>
+            <option value="biology">Biology</option>
+            <option value="chemistry">Chemistry</option>
+            <option value="physics">Physics</option>
+            <option value="mathematics">Mathematics</option>
+            <option value="computer science">Computer Science</option>
+            <option value="english">English</option>
+            <option value="geography">Geography</option>
+            <option value="history">History</option>
+            <option value="languages">Languages</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <div style="flex:1;min-width:160px">
+          <label class="sc-field-label" for="upload-level">
+            Level
+          </label>
+
+          <select id="upload-level" class="sc-select">
+            <option value="">Select a level</option>
+            <option value="KS3">KS3</option>
+            <option value="GCSE">GCSE</option>
+            <option value="A Level">A Level</option>
+            <option value="University">University</option>
+          </select>
+        </div>
+
+      </div>
+
+      <!-- Exam board -->
+      <label class="sc-field-label" for="upload-exam-board">
+        Exam Board
+      </label>
+
+      <select id="upload-exam-board" class="sc-select">
+        <option value="">Not applicable</option>
+        <option value="AQA">AQA</option>
+        <option value="Edexcel">Edexcel</option>
+        <option value="OCR">OCR</option>
+        <option value="Eduqas">Eduqas</option>
+        <option value="WJEC">WJEC</option>
+        <option value="CCEA">CCEA</option>
+        <option value="Cambridge">Cambridge</option>
+        <option value="Other">Other</option>
+      </select>
+
+      <button
+        class="btn btn-primary btn-sm"
+        id="upload-btn"
+        style="margin-top:16px"
+      >
+        Upload deck
+      </button>
+
+      <div id="upload-status"></div>
+
+    </section>
+
+  </section>
+
+
+  <!-- ───────────────────────────────────────────────────────────── -->
+  <!-- Deck detail -->
+  <!-- ───────────────────────────────────────────────────────────── -->
+
+  <section id="screen-deck" class="screen">
+
+    <button
+      class="btn btn-ghost btn-sm"
+      id="back-to-search"
+    >
+      ← Back to decks
+    </button>
+
+    <div
+      id="deck-detail"
+      style="margin-top:16px"
+    ></div>
+
+  </section>
+
+</main>
+
+<script src="lib/katex/katex.min.js"></script>
+<script src="lib/katex/mhchem.min.js"></script>
+<!-- Same origin as the dashboard (see the "Dashboard bridge" section of
+     app.js), so we load its theme.js directly rather than keeping a
+     second copy of the palette here — one source of truth for both. -->
+<script src="/dashboard/shared/theme.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>

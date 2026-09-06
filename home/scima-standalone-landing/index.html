@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SCIMA Learning</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard/dashboard.css">
+  <link rel="stylesheet" href="lib/katex/katex.min.css">
+  <!--
+    Phase 0/1 site slice: Decks, Library, Capture, Analytics/Quests, the
+    onboarding tour, and (flashcard-side) Settings are now ported, which
+    pulls in KaTeX (rich text in card previews), fflate (full-backup
+    /source-export .zip creation), the epub/mobi parser bundles +
+    process-shim (Library file import), and translate-shared.js (Define
+    Target Language / Smart Define). pdf.min.js/pdf.worker.min.js are
+    loaded on demand by dashboard-decks.js/dashboard-library.js themselves
+    via assetUrl() (see dashboard-blobstore.js), not eagerly here, matching
+    the extension's own lazy-load behavior. The Mark Tracker (including its
+    own separate Tracker Settings view) is still stubbed
+    (dashboard-stubs.js) — a separate index.html is planned for it.
+  -->
+</head>
+<body>
+  <div id="stripe"></div>
+  <button id="info-btn" title="About this page" aria-label="Page help">i</button>
+  <div id="app">
+    <aside id="sidebar">
+      <div id="sidebar-header">
+        <div id="logo">
+          <div id="logo-icon">✦</div>
+          <div>
+            <div id="logo-name">SCIMA Learning</div>
+            <div id="logo-sub">Adaptive Learning</div>
+          </div>
+        </div>
+        <div id="xp-bar-wrap">
+          <span id="xp-level">Lv.1</span>
+          <div id="xp-track"><div id="xp-fill"></div></div>
+          <span id="xp-label">0/500</span>
+        </div>
+      </div>
+      <div id="pinned-decks"></div>
+      <nav id="nav"></nav>
+      <div id="sidebar-footer">
+        <div id="footer-stats"></div>
+      </div>
+    </aside>
+    <main id="main">
+      <!-- Flashcard views -->
+      <div id="view-home"      class="view"></div>
+      <div id="view-decks"     class="view"></div>
+      <div id="view-study"     class="view"></div>
+      <div id="view-capture"   class="view"></div>
+      <div id="view-library"   class="view"></div>
+      <div id="view-analytics" class="view"></div>
+      <div id="view-quests"    class="view"></div>
+      <div id="view-settings"  class="view"></div>
+      <!-- Tracker views -->
+      <div id="view-tracker-overview"        class="view tracker-view"></div>
+      <div id="view-tracker-logmarks"        class="view tracker-view"></div>
+      <div id="view-tracker-subjects"        class="view tracker-view"></div>
+      <div id="view-tracker-history"         class="view tracker-view"></div>
+      <div id="view-tracker-managesubjects"  class="view tracker-view"></div>
+      <div id="view-tracker-trackersettings" class="view tracker-view"></div>
+    </main>
+  </div>
+
+  <div id="modal-backdrop" class="hidden">
+    <div id="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
+      <div id="modal-header">
+        <span id="modal-title"></span>
+        <button id="modal-close" aria-label="Close dialog">×</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="cmd-backdrop" class="hidden">
+    <div id="cmd-box" role="dialog" aria-modal="true" aria-label="Command palette" tabindex="-1">
+      <div id="cmd-input-row">
+        <span class="cmd-icon">⌘</span>
+        <input id="cmd-input" placeholder="Quick action… (Esc to close)" aria-label="Search commands" role="combobox" aria-expanded="true" aria-controls="cmd-list" autocomplete="off">
+        <span class="cmd-esc">ESC</span>
+      </div>
+      <div id="cmd-list" role="listbox" aria-label="Commands"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div id="cmd-hint">
+    <span class="cmd-key">⌘K</span> Command Palette
+  </div>
+
+  <!--
+    Site build load order — same rule as the extension (dashboard-core.js
+    first, dashboard-bootstrap.js last). process-shim.js must load before
+    epub-parser.bundle.js (polyfills the Node `process` global the epub
+    parser's bundled path-resolution code expects — see process-shim.js's
+    own header) — both loaded early alongside fflate to mirror the
+    extension's dashboard.html order. translate-shared.js (LANGS/
+    translateText/fetchPinyin) must load before dashboard-core.js, which
+    calls those in smartDefine() — matches the extension's own dashboard.html
+    order (loaded alongside the other shared/*.js files, before
+    dashboard-core.js). dashboard-blobstore.js must load after
+    dashboard-core.js (uses isExtension) and before dashboard-decks.js
+    /dashboard-library.js (both call blobStore.*/assetUrl()).
+    dashboard-study.js has no ordering constraint of its own — it only calls
+    functions already defined in dashboard-core.js/dashboard-decks.js/
+    shared.js/srs-core.js/srs.js, all loaded before it here — but it's
+    placed after dashboard-decks.js to mirror the extension's dashboard.html
+    script order. dashboard-library.js likewise has no constraint of its own
+    beyond the parsers/blobstore above, and is placed after dashboard-study.js
+    to mirror the extension's order. dashboard-capture.js only calls
+    functions already defined by that point (state/el/btn/navigate from
+    dashboard-core.js, sourceTypeIcon/openCitationPicker from
+    dashboard-library.js) and is placed right after it, mirroring the
+    extension's order. dashboard-analytics.js (Home stats, achievements,
+    Quests) and dashboard-onboarding.js (guided tour) are likewise
+    order-independent beyond dashboard-core.js, and are placed next,
+    matching the extension. dashboard-settings.js (flashcard-side Settings
+    only — see its own header) is placed after those, also matching the
+    extension's order; it has no constraint of its own beyond
+    dashboard-core.js/shared.js. dashboard-stubs.js must load after all of
+    the above (so their real render fns — and, since dashboard-analytics.js/
+    dashboard-onboarding.js are now loaded, checkAchievements/
+    notifyClaimableAchievements/startTutorial/TUTORIAL_VERSION — exist
+    before stubs.js decides what still needs a placeholder) and before
+    dashboard-bootstrap.js (init() calls those same functions).
+  -->
+  <script src="lib/katex/katex.min.js"></script>
+  <script src="lib/katex/mhchem.min.js"></script>
+  <script src="lib/process-shim.js"></script>
+  <script src="lib/fflate.umd.js"></script>
+  <script src="lib/epub-parser.bundle.js"></script>
+  <script src="lib/mobi-parser.bundle.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/shared.js"></script>
+  <script src="shared/srs-core.js"></script>
+  <script src="shared/srs.js"></script>
+  <script src="shared/translate-shared.js"></script>
+  <script src="dashboard/dashboard-core.js"></script>
+  <script src="dashboard/dashboard-blobstore.js"></script>
+  <script src="dashboard/dashboard-home.js"></script>
+  <script src="dashboard/dashboard-decks.js"></script>
+  <script src="dashboard/dashboard-study.js"></script>
+  <script src="dashboard/dashboard-library.js"></script>
+  <script src="dashboard/dashboard-capture.js"></script>
+  <script src="dashboard/dashboard-analytics.js"></script>
+  <script src="dashboard/dashboard-onboarding.js"></script>
+  <script src="dashboard/dashboard-settings.js"></script>
+  <script src="dashboard/dashboard-stubs.js"></script>
+  <script src="dashboard/dashboard-bootstrap.js"></script>
+</body>
+</html>
