@@ -10,14 +10,17 @@
   <link rel="stylesheet" href="../app/dashboard.css">
   <link rel="stylesheet" href="../lib/katex/katex.min.css">
   <!--
-    SCIMA Learning — Study (six-page build; see the landing index.html header
-    for the map). Own page per the IA (decks and study stay separate).
-    Manifest notes: dashboard-decks.js is loaded because sessions call its
-    openCitationViewer() (the 📖 Source badge on cited cards) and because the
-    shared `studySession` binding lives at its bottom; KaTeX + mhchem render
-    LaTeX on card faces. The active session is carried across page swaps by
-    bootstrap's pagehide snapshot / init() restore (sessionStorage), matching
-    the SPA's in-memory lifetime.
+    SCIMA Learning — Decks (six-page build; see the landing index.html header
+    for the map). Kept as its own page (separate from Study) per the IA:
+    deck management is browsing/editing-heavy and doesn't need the study
+    session machinery loaded. Manifest notes: KaTeX + mhchem render LaTeX in
+    card previews/edits; dashboard-home.js is loaded for the `dragData`
+    binding the drag-and-drop reorganization shares with it;
+    dashboard-library.js is NOT loaded — sourceTypeIcon() (the only symbol
+    the citation pickers needed from it) lives in dashboard-core.js now.
+    fflate and the parser bundles stay out (no zip export or file import
+    here); pdf.min.js is still lazy-loaded on demand via assetUrl() by the
+    PDF text extractor and the double-sided print export.
   -->
 </head>
 <body>
@@ -49,7 +52,7 @@
   <div id="app">
     <main id="main">
       <div id="page-tabs"></div>
-      <div id="view-study"     class="view"></div>
+      <div id="view-decks"     class="view"></div>
     </main>
   </div>
 
@@ -82,7 +85,7 @@
   <!-- Page identity for the multi-page router (app/dashboard-core.js
        reads this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is
        the relative path from this page back to the landing folder. -->
-  <script>window.SCIMA_PAGE = { id: 'study', root: '../', views: ['study'] };</script>
+  <script>window.SCIMA_PAGE = { id: 'decks', root: '../', views: ['decks'] };</script>
   <script src="../lib/katex/katex.min.js"></script>
   <script src="../lib/katex/mhchem.min.js"></script>
   <script src="../shared/theme.js"></script>
@@ -92,8 +95,8 @@
   <script src="../shared/translate-shared.js"></script>
   <script src="../app/dashboard-core.js"></script>
   <script src="../app/dashboard-blobstore.js"></script>
+  <script src="../app/dashboard-home.js"></script>
   <script src="../app/dashboard-decks.js"></script>
-  <script src="../app/dashboard-study.js"></script>
   <script src="../app/dashboard-analytics.js"></script>
   <script src="../app/dashboard-onboarding.js"></script>
   <script src="../app/dashboard-bootstrap.js"></script>

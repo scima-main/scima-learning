@@ -9,43 +9,48 @@
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../app/dashboard.css">
   <!--
-    SCIMA Learning — Settings route (multi-page route build; see the
-    landing index.html header for the full map). Manifest notes: fflate +
-    dashboard-decks.js power Data Management — exportAllDataZip() and the
-    .zip/.json import (which writes PDF chunks and HTML chapters back
-    through the blobstore helpers decks.js owns). dashboard-onboarding.js
-    (in the common tail) provides "Replay tutorial". Theme scheduling uses
-    bootstrap's tickThemeSchedule()/fetchGeoForSchedule(), as before. Note
-    this page's script order keeps dashboard-settings.js after
-    dashboard-onboarding.js, mirroring the old single-page order.
+    SCIMA Learning — Settings (six-page build; see the landing index.html
+    header for the map). Manifest notes: fflate + dashboard-decks.js power
+    Data Management — exportAllDataZip() and the .zip/.json import (which
+    writes PDF chunks and HTML chapters back through the blobstore helpers
+    decks.js owns). dashboard-onboarding.js (in the common tail) provides
+    "Replay tutorial". Theme scheduling uses bootstrap's
+    tickThemeSchedule()/fetchGeoForSchedule(), as before. This page's script
+    order keeps dashboard-settings.js after dashboard-onboarding.js,
+    mirroring the old single-page order. The Navigation section now lists
+    the six nav entries (reorder/hide), the tracker entries having gone
+    with the tracker stubs.
   -->
 </head>
 <body>
   <div id="stripe"></div>
+  <button id="nav-pill" aria-label="Open navigation menu" aria-expanded="false" aria-controls="sidebar" title="Menu">☰</button>
   <button id="info-btn" title="About this page" aria-label="Page help">i</button>
+  <div id="nav-backdrop"></div>
+  <aside id="sidebar" aria-hidden="true" tabindex="-1">
+    <div id="sidebar-header">
+      <div id="logo">
+        <div id="logo-icon">✦</div>
+        <div>
+          <div id="logo-name">SCIMA Learning</div>
+          <div id="logo-sub">Adaptive Learning</div>
+        </div>
+      </div>
+      <div id="xp-bar-wrap">
+        <span id="xp-level">Lv.1</span>
+        <div id="xp-track"><div id="xp-fill"></div></div>
+        <span id="xp-label">0/500</span>
+      </div>
+    </div>
+    <div id="pinned-decks"></div>
+    <nav id="nav"></nav>
+    <div id="sidebar-footer">
+      <div id="footer-stats"></div>
+    </div>
+  </aside>
   <div id="app">
-    <aside id="sidebar">
-      <div id="sidebar-header">
-        <div id="logo">
-          <div id="logo-icon">✦</div>
-          <div>
-            <div id="logo-name">SCIMA Learning</div>
-            <div id="logo-sub">Adaptive Learning</div>
-          </div>
-        </div>
-        <div id="xp-bar-wrap">
-          <span id="xp-level">Lv.1</span>
-          <div id="xp-track"><div id="xp-fill"></div></div>
-          <span id="xp-label">0/500</span>
-        </div>
-      </div>
-      <div id="pinned-decks"></div>
-      <nav id="nav"></nav>
-      <div id="sidebar-footer">
-        <div id="footer-stats"></div>
-      </div>
-    </aside>
     <main id="main">
+      <div id="page-tabs"></div>
       <div id="view-settings"  class="view"></div>
     </main>
   </div>
@@ -76,9 +81,9 @@
     <span class="cmd-key">⌘K</span> Command Palette
   </div>
 
-  <!-- Route identity for the multi-page router (dashboard-core.js reads
-       this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is the
-       relative path from this page back to the landing folder. -->
+  <!-- Page identity for the multi-page router (app/dashboard-core.js
+       reads this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is
+       the relative path from this page back to the landing folder. -->
   <script>window.SCIMA_PAGE = { id: 'settings', root: '../', views: ['settings'] };</script>
   <script src="../lib/fflate.umd.js"></script>
   <script src="../shared/theme.js"></script>

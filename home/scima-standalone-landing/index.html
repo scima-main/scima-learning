@@ -9,94 +9,87 @@
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="app/dashboard.css">
   <!--
-    SCIMA Learning — Home. Multi-page route build.
+    SCIMA Learning — Home. Six-page build.
 
-    This dashboard used to be a single index.html hosting all fourteen views
-    and loading every module (plus KaTeX, mhchem, fflate and the EPUB/MOBI
-    parser bundles — ~1.3 MB of JS) synchronously before anything rendered.
-    It is now split into workflow routes — one directory per destination,
-    each carrying only the script slice its views need — grouped so the tabs
-    users actually bounce between switch in-page (instant, no reload) instead
-    of crossing a page boundary:
+    The dashboard is six pages; the nav pill opens a drawer listing exactly
+    these six destinations, and merged pages switch between their views with
+    an in-page tab bar (no reload):
 
       /            Home                        (this page — lightest slice)
-      /study/      Decks + Study               the flashcard core: deck
-                   (study/)                    management and review
-                   sessions share scope,
-                   session and sub-nav state
-                   in one document; "Study
-                   Now"/"Study Selected" are
-                   in-page switches. + KaTeX/
-                   mhchem for card faces.
-      /capture/    Capture + Library           the sources → cards pipeline:
-                   (capture/)                  Quick Add / AI Generate
-                   beside the reader and
-                   imports. + fflate, EPUB/
-                   MOBI parsers, process-shim.
-      /insights/   Analytics + Quests          + dashboard-library.js for
-                   (insights/)                 the reading-time breakdown.
+      /decks/      Decks                       + KaTeX/mhchem for card previews
+      /study/      Study                       + KaTeX/mhchem for card faces
+      /library/    Library + Capture           the sources → cards pipeline;
+                   (library/)                  + fflate, EPUB/MOBI parsers,
+                   process-shim. /capture/ redirects here (#capture).
+      /insights/   Analytics + Quests          + dashboard-library.js for the
+                   (insights/)                 reading-time breakdown.
       /settings/   Settings                    + fflate (Export/Import All
                    (settings/)                 Data .zip).
-      /tracker/    the six Mark Tracker views  still stubs (dashboard-
-                   (tracker/)                  stubs.js) until the real
-                   tracker is ported.
+
+    The Mark Tracker's six stub tabs/views are gone (they only ever rendered
+    "isn't in this build yet" placeholders); /tracker/ redirects home. The
+    old eight-page flat layout and the pre-route dashboard/ module directory
+    are gone too — modules now live in app/.
+
+    Navigation is a collapsible drawer: at rest a single ☰ pill top-left
+    (styled like the ⓘ help button); opening it slides the panel over a dim
+    backdrop (modal pattern: click-outside or Esc closes, focus returns to
+    the pill). The slide is transform/opacity-only so the content behind
+    never reflows; .power-saving and prefers-reduced-motion disable it.
 
     The backend serves the landing folder both at the domain root (canonical,
     backend/app/main.py's "/" mount) and at /dashboard/ (legacy mount — kept
     for old bookmarks and because community/index.html loads
     /dashboard/shared/theme.js root-absolute). Every reference below is
-    RELATIVE (scripts, styles, lazy pdf.js via assetUrl(), and the cross-route
-    links the router builds), so the same files work under both prefixes and
-    a session never jumps between URL families. Static assets stay shared at
-    the landing root — route directories contain only their index.html.
+    RELATIVE (scripts, styles, lazy pdf.js via assetUrl(), cross-route links),
+    so the same files work under both prefixes and a session never jumps
+    between URL families. Shared assets stay at the landing root; route
+    directories contain only their index.html (or a redirect stub).
 
-    The sidebar still lists all fourteen tabs; navigate() switches in-page
-    when the target view lives on the current route and does a real
-    navigation otherwise (hash selects the view, e.g. /study/#study).
-    Cross-page seams live in dashboard-core.js (VIEW_ROUTES/PAGE_VIEWS, the
+    Cross-page seams live in app/dashboard-core.js (VIEW_ROUTES/PAGE_VIEWS,
     navigate()/renderView() redirects, the sessionStorage nav handoff,
-    openDeckDetail()'s redirecting fallback) and dashboard-bootstrap.js
-    (handoff + per-route view-memory restore in init(), the pagehide
-    flush/snapshot, the once-per-session achievement toast). Every seam is
-    gated on window.SCIMA_PAGE / !isExtension, so the extension build —
-    which still loads all views in one dashboard.html — behaves exactly as
-    before.
+    openDeckDetail()'s redirecting fallback, the nav drawer) and
+    app/dashboard-bootstrap.js (handoff + per-route view-memory restore in
+    init(), the pagehide flush/snapshot, the once-per-session achievement
+    toast).
 
-    Load order within each page follows the same rules as the old build (and
-    the extension's dashboard.html): process-shim.js before the epub parser
-    bundle; translate-shared.js before dashboard-core.js; dashboard-core.js
-    first of the dashboard-*.js files; dashboard-blobstore.js after core and
-    before decks/library; dashboard-bootstrap.js last. pdf.min.js /
-    pdf.worker.min.js are still loaded on demand by dashboard-decks.js /
-    dashboard-library.js themselves via assetUrl(), never eagerly here.
+    Load order within each page follows the old single-page rules:
+    process-shim.js before the epub parser bundle; translate-shared.js before
+    dashboard-core.js; dashboard-core.js first of the app/*.js;
+    dashboard-blobstore.js after core and before decks/library;
+    dashboard-bootstrap.js last. pdf.min.js / pdf.worker.min.js are still
+    loaded on demand via assetUrl(), never eagerly here.
   -->
 </head>
 <body>
   <div id="stripe"></div>
+  <button id="nav-pill" aria-label="Open navigation menu" aria-expanded="false" aria-controls="sidebar" title="Menu">☰</button>
   <button id="info-btn" title="About this page" aria-label="Page help">i</button>
+  <div id="nav-backdrop"></div>
+  <aside id="sidebar" aria-hidden="true" tabindex="-1">
+    <div id="sidebar-header">
+      <div id="logo">
+        <div id="logo-icon">✦</div>
+        <div>
+          <div id="logo-name">SCIMA Learning</div>
+          <div id="logo-sub">Adaptive Learning</div>
+        </div>
+      </div>
+      <div id="xp-bar-wrap">
+        <span id="xp-level">Lv.1</span>
+        <div id="xp-track"><div id="xp-fill"></div></div>
+        <span id="xp-label">0/500</span>
+      </div>
+    </div>
+    <div id="pinned-decks"></div>
+    <nav id="nav"></nav>
+    <div id="sidebar-footer">
+      <div id="footer-stats"></div>
+    </div>
+  </aside>
   <div id="app">
-    <aside id="sidebar">
-      <div id="sidebar-header">
-        <div id="logo">
-          <div id="logo-icon">✦</div>
-          <div>
-            <div id="logo-name">SCIMA Learning</div>
-            <div id="logo-sub">Adaptive Learning</div>
-          </div>
-        </div>
-        <div id="xp-bar-wrap">
-          <span id="xp-level">Lv.1</span>
-          <div id="xp-track"><div id="xp-fill"></div></div>
-          <span id="xp-label">0/500</span>
-        </div>
-      </div>
-      <div id="pinned-decks"></div>
-      <nav id="nav"></nav>
-      <div id="sidebar-footer">
-        <div id="footer-stats"></div>
-      </div>
-    </aside>
     <main id="main">
+      <div id="page-tabs"></div>
       <div id="view-home"      class="view"></div>
     </main>
   </div>
@@ -127,9 +120,9 @@
     <span class="cmd-key">⌘K</span> Command Palette
   </div>
 
-  <!-- Route identity for the multi-page router (dashboard-core.js reads
-       this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is the
-       relative path from this page back to the landing folder. -->
+  <!-- Page identity for the multi-page router (app/dashboard-core.js
+       reads this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is
+       the relative path from this page back to the landing folder. -->
   <script>window.SCIMA_PAGE = { id: 'home', root: '', views: ['home'] };</script>
   <script src="shared/theme.js"></script>
   <script src="shared/shared.js"></script>

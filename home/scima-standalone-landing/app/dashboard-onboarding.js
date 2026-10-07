@@ -100,23 +100,21 @@ const TUTORIAL_STEPS = [
     irreversible: true, // rating commits and advances the session — going Back can't undo that
   },
   {
-    title: 'Your sidebar',
+    title: 'Your menu',
     body: '',
     waitFor: 'next',
     sidebarWalk: [
       { view: 'home', blurb: 'Home — your daily snapshot: what\u2019s due, streaks, and quick shortcuts into recent decks.' },
       { view: 'decks', blurb: 'Decks — where your flashcard decks and folders live, organized by subject.' },
       { view: 'study', blurb: 'Study — launches a review session across one deck, a folder, or everything due today.' },
-      { view: 'library', blurb: 'Library — your imported books and articles, for reading and capturing new cards as you go.' },
-      { view: 'analytics', blurb: 'Analytics — charts on retention, streaks, and time studied.' },
-      { view: 'quests', blurb: 'Quests — daily and milestone challenges that reward XP for consistent studying.' },
-      { view: 'settings', blurb: 'Settings — algorithm, theme, accessibility, data import/export, and sidebar customization.' },
-      { view: 'tracker-overview', blurb: 'Mark Tracker — a separate grade tracker: log scores, review history, and manage subjects.' },
+      { view: 'library', blurb: 'Library — imported books and articles to read and cite, with Capture (Quick Add and AI Generate) on the same page.' },
+      { view: 'analytics', blurb: 'Insights — retention, streak and study-time charts, with Quests and achievements on the same page.' },
+      { view: 'settings', blurb: 'Settings — algorithm, theme, accessibility, data import/export, and navigation customization.' },
     ],
   },
   {
     title: 'Keyboard shortcuts',
-    body: '\u2318/Ctrl+K opens the command palette. Alt+Shift+1\u20139 jumps straight to a sidebar tab. Esc closes any dialog. \u2318/Ctrl+Enter submits a typed quiz answer.\nCtrl+Shift+F opens this dashboard. Ctrl+Shift+Z creates a flashcard with the text selected, while Ctrl+Shift+X defines the selected text.',
+    body: 'The \u2630 pill top-left opens your nav (the backdrop dims everything else; Esc or a tap outside closes it). \u2318/Ctrl+K opens the command palette. Alt+Shift+1\u20136 jumps straight to a nav tab. Esc closes any dialog. \u2318/Ctrl+Enter submits a typed quiz answer.\nCtrl+Shift+F opens this dashboard. Ctrl+Shift+Z creates a flashcard with the text selected, while Ctrl+Shift+X defines the selected text.',
     waitFor: 'next',
   },
   {
@@ -226,6 +224,10 @@ function _renderTutorialStep() {
   const step = TUTORIAL_STEPS[_tut.stepIdx];
   if (!step) { endTutorial(); return; }
   step.beforeShow?.();
+  // The nav-walk step spotlights entries that live inside the nav drawer, so
+  // the drawer has to be open for it; every other step gets the viewport to
+  // itself (a closed drawer also keeps its dim backdrop out of the way).
+  if (step.sidebarWalk) openNav(); else closeNav();
 
   // Composite "sidebar tour" step auto-advances through its own sub-list on Next.
   const live = _currentStep();

@@ -8,16 +8,20 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../app/dashboard.css">
-  <link rel="stylesheet" href="../lib/katex/katex.min.css">
   <!--
-    SCIMA Learning — Study (six-page build; see the landing index.html header
-    for the map). Own page per the IA (decks and study stay separate).
-    Manifest notes: dashboard-decks.js is loaded because sessions call its
-    openCitationViewer() (the 📖 Source badge on cited cards) and because the
-    shared `studySession` binding lives at its bottom; KaTeX + mhchem render
-    LaTeX on card faces. The active session is carried across page swaps by
-    bootstrap's pagehide snapshot / init() restore (sessionStorage), matching
-    the SPA's in-memory lifetime.
+    SCIMA Learning — Library page: Library + Capture (six-page build; see the
+    landing index.html header for the map). The sources → cards pipeline in
+    one document: import/read/cite in Library, then Quick Add / AI Generate
+    in Capture, switching via the in-page tab bar (or #capture / #library).
+    Old /capture/ URLs redirect here. Manifest notes: this is the only page
+    that imports files, so it carries process-shim.js (must precede the epub
+    bundle — it polyfills the Node `process` global the bundled
+    path-resolution code expects), fflate (Library "Import" .zip and
+    exportSourceWithBookmarks), and the EPUB/MOBI parser bundles.
+    dashboard-decks.js provides the citation pickers/viewer, the chunked-blob
+    helpers and openCreateDeckModal() these flows call. pdf.min.js is still
+    lazy-loaded on demand via assetUrl(). KaTeX is NOT loaded — capture
+    previews are plain text and the reader shows source HTML as authored.
   -->
 </head>
 <body>
@@ -49,7 +53,8 @@
   <div id="app">
     <main id="main">
       <div id="page-tabs"></div>
-      <div id="view-study"     class="view"></div>
+      <div id="view-library"   class="view"></div>
+      <div id="view-capture"   class="view"></div>
     </main>
   </div>
 
@@ -82,9 +87,11 @@
   <!-- Page identity for the multi-page router (app/dashboard-core.js
        reads this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is
        the relative path from this page back to the landing folder. -->
-  <script>window.SCIMA_PAGE = { id: 'study', root: '../', views: ['study'] };</script>
-  <script src="../lib/katex/katex.min.js"></script>
-  <script src="../lib/katex/mhchem.min.js"></script>
+  <script>window.SCIMA_PAGE = { id: 'library', root: '../', views: ['library', 'capture'] };</script>
+  <script src="../lib/process-shim.js"></script>
+  <script src="../lib/fflate.umd.js"></script>
+  <script src="../lib/epub-parser.bundle.js"></script>
+  <script src="../lib/mobi-parser.bundle.js"></script>
   <script src="../shared/theme.js"></script>
   <script src="../shared/shared.js"></script>
   <script src="../shared/srs-core.js"></script>
@@ -93,7 +100,8 @@
   <script src="../app/dashboard-core.js"></script>
   <script src="../app/dashboard-blobstore.js"></script>
   <script src="../app/dashboard-decks.js"></script>
-  <script src="../app/dashboard-study.js"></script>
+  <script src="../app/dashboard-library.js"></script>
+  <script src="../app/dashboard-capture.js"></script>
   <script src="../app/dashboard-analytics.js"></script>
   <script src="../app/dashboard-onboarding.js"></script>
   <script src="../app/dashboard-bootstrap.js"></script>

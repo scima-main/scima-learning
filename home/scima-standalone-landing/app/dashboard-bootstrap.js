@@ -110,7 +110,10 @@ async function init() {
   }
 
   const hash=location.hash.replace('#','');
-  if(hash&&NAV_ITEMS.some(n=>n.id===hash)){
+  if(hash&&(hash in VIEW_ROUTES)){
+    // Hash selects a VIEW (which may be a sub-view of this page, e.g.
+    // #capture on the Library page), not a nav entry — merged pages host
+    // more views than they have nav pills.
     if (PAGE_VIEWS.includes(hash)) {
       state.view=hash;
     } else if (isSitePage) {

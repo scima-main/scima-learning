@@ -74,9 +74,9 @@ body::after {
 #stripe { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 999;
   background: linear-gradient(90deg, var(--blue) 20%, var(--pink) 42%, #FFF 50%, var(--pink) 58%, var(--blue) 80%); }
 
-/* Page-help button — stays fixed in the top-left of the content area (clear of the
-   sidebar) across every view, since #main scrolls internally rather than the body. */
-#info-btn { position: fixed; top: 14px; left: 236px; z-index: 950;
+/* Page-help button — sits beside the nav pill in the top-left corner, clear
+   of the content (which starts below the floating button row). */
+#info-btn { position: fixed; top: 14px; left: 58px; z-index: 950;
   width: 30px; height: 30px; border-radius: 50%;
   background: var(--surface); border: 1px solid var(--border); color: var(--blue);
   font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-weight: 700; font-size: 15px;
@@ -91,18 +91,68 @@ body::after {
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 
 /* Layout */
-#app { display: flex; height: 100vh; padding-top: 3px; }
-#main { flex: 1; overflow-y: auto; }
-.view { display: none; padding: 32px; animation: fadeIn 0.25s ease; }
+/* Layout — the nav is an overlay drawer (see #sidebar below), so the content
+   column owns the full viewport width; views start below the floating
+   pill/ⓘ button row. */
+#app { height: 100vh; padding-top: 3px; }
+#main { height: 100%; overflow-y: auto; }
+.view { display: none; padding: 64px 32px 32px; animation: fadeIn 0.25s ease; }
 .view.active { display: block; }
+
+/* In-page tab bar on pages that host more than one view (Library⇄Capture,
+   Analytics⇄Quests). Empty (display:none) on single-view pages. When the bar
+   is present the view below it needs less top padding — the bar already
+   clears the floating buttons. */
+#page-tabs { display: flex; gap: 6px; padding: 56px 32px 0; flex-wrap: wrap; }
+#page-tabs:empty { display: none; }
+#page-tabs:not(:empty) ~ .view { padding-top: 20px; }
+.page-tab { display: flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 99px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+  transition: color 0.15s, background-color 0.15s, border-color 0.15s; }
+.page-tab:hover { color: var(--text); }
+.page-tab.active { color: var(--blue); background: rgba(var(--blue-rgb),0.12); border-color: rgba(var(--blue-rgb),0.4); }
+.page-tab-icon { font-size: 13px; line-height: 1; }
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes shake  { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
 @keyframes toast-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
 
-/* Sidebar */
-#sidebar { width: 220px; height: 100vh; position: sticky; top: 0; background: var(--surface);
-  border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; }
+/* Nav pill — the whole navigation collapsed to a single floating button,
+   same visual language as the ⓘ help button next to it. */
+#nav-pill { position: fixed; top: 14px; left: 14px; z-index: 950;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  font-size: 15px; display: flex; align-items: center; justify-content: center; line-height: 1;
+  cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease; }
+#nav-pill:hover { background: rgba(var(--blue-rgb),0.14); border-color: rgba(var(--blue-rgb),0.4); box-shadow: 0 6px 18px var(--glow); transform: scale(1.07); }
+#nav-pill:active { transform: scale(0.94); }
+
+/* Nav drawer + dim backdrop. The backdrop follows the modal pattern (fixed
+   inset dim, click-outside closes) at a lighter alpha; it sits below the
+   drawer and above everything else, so opening the nav dims the rest of the
+   viewport exactly like a dialog dims the app. The drawer animates with
+   transform only (compositor-friendly — the content behind never reflows);
+   visibility:hidden (delayed until the slide-out finishes) keeps the closed
+   drawer out of the tab order and off the accessibility tree. Stacked under
+   modals (z 1100) so a dialog opened from anywhere still wins. */
+#nav-backdrop { position: fixed; inset: 0; z-index: 1040; background: rgba(0,0,0,0.6);
+  opacity: 0; pointer-events: none; transition: opacity 0.2s ease; }
+body.nav-open #nav-backdrop { opacity: 1; pointer-events: auto; }
+#sidebar { width: min(280px, 86vw); position: fixed; top: 3px; left: 0; bottom: 0; z-index: 1050;
+  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden; outline: none;
+  transform: translateX(-104%); visibility: hidden;
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.25, 1), visibility 0s linear 0.24s;
+  box-shadow: 12px 0 40px rgba(0,0,0,0.45); }
+body.nav-open #sidebar { transform: translateX(0); visibility: visible;
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.25, 1); }
+/* .power-saving already strips all transitions globally; honour the OS-level
+   preference too — the drawer then appears/disappears instantly. */
+@media (prefers-reduced-motion: reduce) {
+  #sidebar, #nav-backdrop { transition: none !important; }
+}
 #sidebar-header { padding: 20px 16px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 #logo { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 #logo-icon { width: 36px; height: 36px; border-radius: 10px; background: var(--grad);
@@ -161,30 +211,12 @@ body::after {
 .foot-stat .fs-val { font-weight: 800; font-size: 13px; }
 .foot-stat .fs-lab { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
 
-/* Icon-only sidebar on narrow screens. Placed after the base #sidebar/.nav-btn/
-   etc. rules above (not before, like #info-btn's breakpoint rule was) — with
-   equal specificity, source order decides the winner regardless of whether
-   the media query matches, so a rule here would otherwise lose to the base
-   220px rule. Width is sized to the icon itself: .nav-icon is bumped to 20px,
-   sits in a 44px-square button (matches #logo-icon's 36px mark + a bit of
-   breathing room), plus the sidebar's own 1px border. */
+/* Narrow viewports: the drawer is already responsive (min(280px, 86vw)), so
+   all that changes is the content gutter. The old icon-rail sidebar rules
+   are gone with the docked sidebar. */
 @media (max-width: 720px) {
-  #sidebar { width: 68px; }
-  #info-btn { left: 95px; top: 14px; }
-
-  #logo-name, #logo-sub, #xp-bar-wrap, .nav-label, .pinned-deck-name,
-  .pinned-deck-due, .nav-drawer-toggle span:not(.nav-drawer-chevron),
-  .foot-stat .fs-lab { display: none; }
-
-  #logo { justify-content: center; margin-bottom: 0; }
-  #sidebar-header { padding: 14px 38px; }
-  #pinned-decks { padding: 6px 4px 0; }
-  .pinned-deck-row { justify-content: center; padding: 7px 0; }
-  .pinned-deck-study { display: none; }
-  .nav-btn { justify-content: center; padding: 10px 0; gap: 0; }
-  .nav-btn .nav-icon { font-size: 20px; }
-  .nav-drawer-toggle { justify-content: center; padding: 8px 0; gap: 0; }
-  #footer-stats { flex-direction: column; gap: 6px; }
+  .view { padding: 64px 14px 24px; }
+  #page-tabs { padding: 56px 14px 0; }
 }
 
 

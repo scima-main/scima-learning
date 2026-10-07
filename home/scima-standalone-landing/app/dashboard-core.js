@@ -33,72 +33,72 @@
 const DEBUG = false;
 
 // All navigable sidebar tabs. Order here is just the *fallback* — the
-// effective order/visibility a user sees comes from
-// state.settings.navOrder / hiddenTabs (customizable in Settings → Navigation,
-// see getOrderedNavItems()/getVisibleNavItems() below).
+// One entry per PAGE (the site is six pages; merged pages surface their
+// sub-views through the in-page tab bar, see renderPageTabs()/VIEW_TABS).
+// Order here is just the *fallback* — the effective order/visibility a user
+// sees comes from state.settings.navOrder / hiddenTabs (customizable in
+// Settings → Navigation, see getOrderedNavItems()/getVisibleNavItems() below).
+// The Mark Tracker's six stub tabs were removed along with the tracker
+// route: they only ever rendered "isn't in this build yet" placeholders.
 const NAV_ITEMS = [
-  // ── Flashcards ──────────────────────────────────────
-  { id: 'home',                    icon: '🏠', label: 'Home'         },
-  { id: 'decks',                   icon: '📚', label: 'Decks'        },
-  { id: 'study',                   icon: '🧠', label: 'Study'        },
-  { id: 'capture',                 icon: '⚡', label: 'Capture'      },
-  { id: 'library',                 icon: '📖', label: 'Library'      },
-  { id: 'analytics',               icon: '📊', label: 'Analytics'    },
-  { id: 'quests',                  icon: '🎯', label: 'Quests'       },
-  { id: 'settings',                icon: '⚙️', label: 'Settings'     },
-  // ── Tracker (prefixed tracker-) ──────────────────────
-  { id: 'tracker-overview',        icon: '🌟', label: 'XP Overview',     section: 'tracker' },
-  { id: 'tracker-logmarks',        icon: '✏️', label: 'Log Marks',        section: 'tracker' },
-  { id: 'tracker-subjects',        icon: '📋', label: 'Subjects',         section: 'tracker' },
-  { id: 'tracker-history',         icon: '📅', label: 'Mark History',     section: 'tracker' },
-  { id: 'tracker-managesubjects',  icon: '🗂️', label: 'Manage Subjects',  section: 'tracker' },
-  { id: 'tracker-trackersettings', icon: '🎛️', label: 'Tracker Settings', section: 'tracker' },
+  { id: 'home',      icon: '🏠', label: 'Home'     },
+  { id: 'decks',     icon: '📚', label: 'Decks'    },
+  { id: 'study',     icon: '🧠', label: 'Study'    },
+  { id: 'library',   icon: '📖', label: 'Library'  },   // page also hosts Capture
+  { id: 'analytics', icon: '📊', label: 'Insights' },   // page also hosts Quests
+  { id: 'settings',  icon: '⚙️', label: 'Settings' },
 ];
 const NAV_ITEMS_DEFAULT_ORDER = NAV_ITEMS.map(n => n.id);
 
+// Per-view icon/label, used by the nav pill drawer entries' in-page tab bar
+// (merged pages: Library⇄Capture, Analytics⇄Quests) and by the command
+// palette's per-view affordances. Views, not pages: a page's tab bar lists
+// the views it hosts.
+const VIEW_TABS = {
+  home:      { icon: '🏠', label: 'Home'      },
+  decks:     { icon: '📚', label: 'Decks'     },
+  study:     { icon: '🧠', label: 'Study'     },
+  capture:   { icon: '⚡', label: 'Capture'   },
+  library:   { icon: '📖', label: 'Library'   },
+  analytics: { icon: '📊', label: 'Analytics' },
+  quests:    { icon: '🎯', label: 'Quests'    },
+  settings:  { icon: '⚙️', label: 'Settings'  },
+};
+
 // ── Multi-page site router constants ─────────────────────────────────
-// Site build: the dashboard is split across workflow routes — one directory
-// per destination, each with an index.html carrying only the script slice
-// its views need (see the landing folder's index.html header for the full
-// route/manifest map):
+// Site build: the dashboard is six pages — one directory per destination,
+// each with an index.html carrying only the script slice its views need
+// (see the landing folder's index.html header for the full manifest map):
 //
-//   /            Home                        (landing index.html)
-//   /study/      Decks + Study               (the flashcard core — the most
-//                                             jumped-between pair, so they
-//                                             switch in-page, no reload)
-//   /capture/    Capture + Library           (the sources → cards pipeline)
+//   /            Home
+//   /decks/      Decks
+//   /study/      Study
+//   /library/    Library + Capture        (the sources → cards pipeline;
+//                                          /capture/ redirects here)
 //   /insights/   Analytics + Quests
 //   /settings/   Settings
-//   /tracker/    the six Mark Tracker views
 //
-// Routes are plain directories inside the landing folder, so they work under
-// ANY mount prefix with zero extra config: the FastAPI backend serves the
-// folder both at the domain root and (legacy) at /dashboard/, and every URL
-// this router builds is relative — /study/ and /dashboard/study/ both work,
-// and a user never gets bounced between the two URL families.
+// Merged pages switch between their views in-page (tab bar under the
+// header, hash in the URL); everything else is a real navigation.
+// Routes are plain directories inside the landing folder, so they work
+// under ANY mount prefix with zero extra config: the FastAPI backend serves
+// the folder both at the domain root and (legacy) at /dashboard/, and every
+// URL this router builds is relative — /study/ and /dashboard/study/ both
+// work, and a user never gets bounced between the two URL families.
 // Each page declares itself via a tiny inline script that runs before this
 // file:  window.SCIMA_PAGE = { id, root, views }  where `root` is the
 // relative path from the page back to the landing folder ('' at the landing
-// root, '../' inside a route directory) and `views` are the nav ids it hosts.
-// Extension build: dashboard.html has no SCIMA_PAGE declaration, so
-// PAGE_VIEWS falls back to *every* nav id and ROOT_REL to '' — every
-// navigate() stays an in-page view switch and none of the cross-page
-// machinery below ever runs, exactly like before the split.
+// root, '../' inside a route directory) and `views` are the view ids it
+// hosts (also the tab bar's contents, in order; views[0] is the default).
 const VIEW_ROUTES = {
   home: '',
-  decks: 'study',
+  decks: 'decks',
   study: 'study',
-  capture: 'capture',
-  library: 'capture',
+  capture: 'library',
+  library: 'library',
   analytics: 'insights',
   quests: 'insights',
   settings: 'settings',
-  'tracker-overview': 'tracker',
-  'tracker-logmarks': 'tracker',
-  'tracker-subjects': 'tracker',
-  'tracker-history': 'tracker',
-  'tracker-managesubjects': 'tracker',
-  'tracker-trackersettings': 'tracker',
 };
 // Stable per-route id — keys the sessionStorage page-memory slot, so the
 // same logical page shares its memory under both URL families. Falls back
@@ -113,12 +113,13 @@ const CURRENT_PAGE = (typeof window !== 'undefined' && window.SCIMA_PAGE?.id)
 const ROOT_REL = (typeof window !== 'undefined' && typeof window.SCIMA_PAGE?.root === 'string')
   ? window.SCIMA_PAGE.root
   : '';
-// Views hosted by the current page. Extension build (no SCIMA_PAGE): all of
-// them, so navigate()/renderView() below never leave the page.
+// Views hosted by the current page. Without a SCIMA_PAGE declaration (e.g.
+// the extension's single-document build) fall back to *every* view, so
+// navigate()/renderView() below never leave the page.
 const PAGE_VIEWS = (typeof window !== 'undefined' && window.SCIMA_PAGE
     && Array.isArray(window.SCIMA_PAGE.views) && window.SCIMA_PAGE.views.length)
   ? window.SCIMA_PAGE.views
-  : NAV_ITEMS.map(n => n.id);
+  : Object.keys(VIEW_ROUTES);
 
 const state = {
   decks: [],
@@ -1657,36 +1658,91 @@ function openDeckDetail(deckId) {
 
 function navigate(viewId) {
   if (viewId !== 'study' && typeof clearQuizTimer === 'function') clearQuizTimer();
+  // Retired/unknown ids (e.g. the removed Mark Tracker tabs, or a stale
+  // saved navOrder entry) are a no-op rather than a blank render.
+  if (!(viewId in VIEW_ROUTES) && !PAGE_VIEWS.includes(viewId)) return;
   // Site build: views live on separate route pages — a view not hosted here
-  // is a real navigation. Extension build: PAGE_VIEWS holds every id, so
-  // this never triggers and the in-page switch below runs unchanged.
+  // is a real navigation. Single-document builds: PAGE_VIEWS holds every
+  // view id, so this never triggers and the in-page switch below runs.
   if (!PAGE_VIEWS.includes(viewId) && !isExtension && viewId in VIEW_ROUTES) {
     gotoViewPage(viewId);
     return;
   }
   state.view = viewId;
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === viewId));
+  closeNav(); // picking a destination folds the drawer away again
+  // Nav entry for the page stays lit while any of its views is showing
+  // (Quests keeps "Insights" active, Capture keeps "Library" active).
+  const route = routeOfView(viewId);
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', routeOfView(b.dataset.view) === route));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${viewId}`));
   renderView(viewId);
+  renderPageTabs();
+  // Keep the URL hash in step with in-page view switches (shareable links,
+  // sane Back-button behaviour) without piling up history entries.
+  try { history.replaceState(null, '', `#${viewId}`); } catch (e) {}
+}
+function routeOfView(viewId) {
+  return viewId in VIEW_ROUTES ? VIEW_ROUTES[viewId] : viewId;
+}
+// In-page tab bar for pages that host more than one view (Library⇄Capture,
+// Analytics⇄Quests) — the UI face of "six pages, not eight tabs". Single-view
+// pages render an empty bar: their only chrome is the nav pill.
+function renderPageTabs() {
+  const bar = document.getElementById('page-tabs');
+  if (!bar) return;
+  bar.innerHTML = '';
+  if (PAGE_VIEWS.length < 2) return;
+  PAGE_VIEWS.forEach(v => {
+    const meta = VIEW_TABS[v] || { icon: '', label: v };
+    bar.appendChild(el('button', {
+      class: `page-tab${state.view === v ? ' active' : ''}`,
+      'data-view': v,
+      onclick: () => navigate(v),
+    }, el('span', { class: 'page-tab-icon' }, meta.icon), meta.label));
+  });
+}
+
+// ── Collapsible nav drawer ───────────────────────────────────────────
+// The old always-docked sidebar is now an overlay drawer: at rest the whole
+// navigation is a single floating pill (#nav-pill, top-left, styled like the
+// ⓘ help button); opening it slides the panel in over a dim backdrop that
+// follows the modal pattern (fixed inset dim, click-outside closes, Esc
+// closes, focus returns to the opener). The animation is transform/opacity
+// only — compositor-friendly, no layout reflow of the content behind it —
+// and visibility:hidden parks the closed drawer out of the tab order.
+// .power-saving and prefers-reduced-motion switch the transitions off (see
+// dashboard.css); the drawer still works, it just appears instantly.
+let navOpen = false;
+let _navReturnFocus = null;
+function openNav() {
+  if (navOpen) return;
+  navOpen = true;
+  _navReturnFocus = document.activeElement;
+  document.body.classList.add('nav-open');
+  const sb = document.getElementById('sidebar');
+  sb.setAttribute('aria-hidden', 'false');
+  document.getElementById('nav-pill').setAttribute('aria-expanded', 'true');
+  sb.focus();
+}
+function closeNav() {
+  if (!navOpen) return;
+  navOpen = false;
+  document.body.classList.remove('nav-open');
+  document.getElementById('sidebar').setAttribute('aria-hidden', 'true');
+  document.getElementById('nav-pill').setAttribute('aria-expanded', 'false');
+  _navReturnFocus?.focus?.();
+  _navReturnFocus = null;
 }
 // Resolves a view's render fn by name off window. The old renderView() built
-// an object literal referencing all sixteen render fns eagerly — fine when
-// every module is always loaded (extension), but a ReferenceError on a site
-// page whose slice doesn't define them all. Same result as before wherever
-// the fn exists; where it doesn't, renderView() below redirects to the page
-// that hosts the view instead of throwing.
+// an object literal referencing every render fn eagerly — fine when every
+// module is always loaded, but a ReferenceError on a page whose slice doesn't
+// define them all. Same result as before wherever the fn exists; where it
+// doesn't, renderView() below redirects to the page that hosts the view
+// instead of throwing.
 function viewRenderer(id) {
   const FC_RENDERERS = { home: 'renderHome', decks: 'renderDecks', study: 'renderStudy', capture: 'renderCapture',
     library: 'renderLibrary', analytics: 'renderAnalytics', quests: 'renderQuests', settings: 'renderSettings' };
-  if (FC_RENDERERS[id]) return window[FC_RENDERERS[id]];
-  // Tracker views — delegate to tracker render fns that use state.trackerState
-  const TR_RENDERERS = {
-    overview: 'renderTrackerOverview', logmarks: 'renderTrackerLogMarks',
-    subjects: 'renderTrackerSubjects', history: 'renderTrackerHistory',
-    managesubjects: 'renderTrackerManageSubjects', trackersettings: 'renderTrackerSettings',
-  };
-  const tr = TR_RENDERERS[String(id).replace('tracker-', '')];
-  return tr ? window[tr] : null;
+  return FC_RENDERERS[id] ? window[FC_RENDERERS[id]] : null;
 }
 function renderView(id) {
   const fn = viewRenderer(id);
@@ -1708,14 +1764,12 @@ function renderSidebar() {
   document.getElementById('xp-fill').style.width = `${Math.min(100,(xpIntoLevel/xpForNextLevel)*100)}%`;
   document.getElementById('xp-label').textContent = `${fmtXP(xpIntoLevel)}/${fmtXP(xpForNextLevel)}`;
 
-  const isNarrow = window.innerWidth <= 720;
-
   // Pinned decks — quick-access shortcuts above the tab list
   const pinWrap = document.getElementById('pinned-decks');
   pinWrap.innerHTML = '';
   const pinned = state.decks.filter(d => d.pinned);
   if (pinned.length) {
-    pinWrap.appendChild(el('div', { class: 'nav-section-label', style: 'padding-top:8px' }, isNarrow ? '—' : '📌 Pinned'));
+    pinWrap.appendChild(el('div', { class: 'nav-section-label', style: 'padding-top:8px' }, '📌 Pinned'));
     pinned.forEach(deck => {
       const due = getDueCards(deck.cards).length;
       pinWrap.appendChild(el('div', { class: 'pinned-deck-row', onclick: () => openDeckDetail(deck.id) },
@@ -1730,23 +1784,14 @@ function renderSidebar() {
   const nav = document.getElementById('nav');
   nav.innerHTML = '';
 
-  // Section dividers — inserted before the first item whose `section` changes
-  let inTracker = false;
   let dragSrcId = null;
 
   getVisibleNavItems().forEach((n, idx) => {
-    if (n.section === 'tracker' && !inTracker) {
-      inTracker = true;
-      // Below the icon-only sidebar breakpoint (720px), "— Mark Tracker —"
-      // has no room to read as anything but garbled text, so it collapses
-      // to a bare rule instead. Driven from JS (checked against actual
-      // window width) rather than a CSS-only override, since a font-size:0
-      // media-query rule here wasn't reliably taking effect.
-      nav.appendChild(el('div', { class: 'nav-section-label' }, isNarrow ? '—' : '— Mark Tracker —'));
-    }
     const shortcutNum = idx < 9 ? idx + 1 : null;
     const btn = el('button', {
-      class: `nav-btn${state.view === n.id ? ' active' : ''}`,
+      // Active when the CURRENT PAGE matches, so a merged page's nav entry
+      // stays lit across its views (Quests → "Insights", Capture → "Library").
+      class: `nav-btn${routeOfView(state.view) === routeOfView(n.id) ? ' active' : ''}`,
       'data-view': n.id,
       draggable: 'true',
       onclick: () => navigate(n.id),
@@ -1790,7 +1835,7 @@ function renderSidebar() {
     if (navDrawerOpen) {
       const drawer = el('div', { class: 'nav-drawer' });
       hiddenItems.forEach(n => {
-        drawer.appendChild(el('button', { class: `nav-btn nav-btn-hidden${state.view === n.id ? ' active' : ''}`, onclick: () => navigate(n.id) },
+        drawer.appendChild(el('button', { class: `nav-btn nav-btn-hidden${routeOfView(state.view) === routeOfView(n.id) ? ' active' : ''}`, onclick: () => navigate(n.id) },
           el('span', { class: 'nav-icon' }, n.icon), el('span', { class: 'nav-label' }, n.label)));
       });
       nav.appendChild(drawer);
@@ -1876,35 +1921,6 @@ const PAGE_HELP = {
     'Further down: daily review goal, new cards per day, leech threshold, theme/appearance presets, and sidebar navigation order.',
     'Data Management: "Export All Data" downloads a complete .zip backup — every deck/card, folder, source (including bundled PDFs and illustrated EPUBs), review history, achievements, tracker data, streak, and recent study scopes. "Import" reads that .zip (or an older .json export) back in, either merging with or replacing your current data.',
   ]},
-  'tracker-overview': { icon:'🌟', title:'XP Overview', intro:'The GCSE Mark Tracker\u2019s dashboard — a separate system from flashcards, for tracking exam marks by subject.', tips:[
-    'The ring shows your tracker level and progress toward the next level.',
-    'The monthly bars show how much of each subject\u2019s capped monthly XP you\u2019ve used.',
-    'The recent list shows your latest logged mark sessions.',
-  ]},
-  'tracker-logmarks': { icon:'✏️', title:'Log Marks', intro:'Log a mark you scored on a paper or session to earn tracker XP.', tips:[
-    'Pick a subject (it needs a predicted grade set in Tracker Settings first) and enter the marks scored.',
-    'Optionally add the paper/session name, notes, and a linked Library source.',
-    'Submitting awards XP based on that subject\u2019s predicted grade and the marks scored.',
-  ]},
-  'tracker-subjects': { icon:'📋', title:'Subjects', intro:'An overview card per subject: grade, total XP, total marks, sessions logged, and monthly cap usage.', tips:[
-    'Use this to see at a glance which subjects you\u2019ve been neglecting.',
-    '"XP/mark" shows how efficiently a subject converts marks into XP, based on its predicted grade.',
-  ]},
-  'tracker-history': { icon:'📅', title:'Mark History', intro:'A full log of every mark session you\u2019ve recorded.', tips:[
-    'Filter the list by subject with the dropdown.',
-    'Export your history to CSV.',
-    'Delete an entry if you logged something by mistake.',
-  ]},
-  'tracker-managesubjects': { icon:'🗂️', title:'Manage Subjects', intro:'Add, edit, remove, or restore the subjects tracked by the Mark Tracker.', tips:[
-    'Built-in subjects can be edited or removed; you can also add fully custom ones.',
-    'Set each subject\u2019s name, short code, exam board, and total exam marks.',
-    'Any subject you add here also becomes available when tagging a flashcard deck\u2019s subject in Decks, keeping the two systems in sync.',
-  ]},
-  'tracker-trackersettings': { icon:'🎛️', title:'Tracker Settings', intro:'Fine-tune predicted grades, subject colors, and XP configuration for the tracker.', tips:[
-    'Set a predicted grade (1–9, decimals allowed) per subject — this determines how much XP each mark scored is worth.',
-    'Customize each subject\u2019s color, used throughout the tracker\u2019s charts.',
-    'Adjust XP configuration constants here if you want to change the tracker\u2019s overall XP curve.',
-  ]},
 };
 function openPageHelp() {
   const info = PAGE_HELP[state.view] || PAGE_HELP.home;
@@ -1916,6 +1932,13 @@ function openPageHelp() {
   });
 }
 document.getElementById('info-btn').addEventListener('click', openPageHelp);
+// Nav drawer wiring (openNav/closeNav above): the pill toggles, clicking the
+// dim backdrop closes — same interaction shape as the modal backdrop.
+// Initial ARIA state mirrors the shell markup (closed drawer).
+document.getElementById('sidebar').setAttribute('aria-hidden', 'true');
+document.getElementById('nav-pill').setAttribute('aria-expanded', 'false');
+document.getElementById('nav-pill').addEventListener('click', () => { navOpen ? closeNav() : openNav(); });
+document.getElementById('nav-backdrop').addEventListener('click', closeNav);
 
 let _cmdReturnFocus = null;
 function closeCmd() {
@@ -1988,7 +2011,7 @@ function openCmd() {
 }
 window.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); openCmd(); }
-  if (e.key === 'Escape') { closeCmd(); closeModal(); _openColorPickerClose?.(); }
+  if (e.key === 'Escape') { closeCmd(); closeModal(); closeNav(); _openColorPickerClose?.(); }
 
   // Alt+Shift+1..9 → jump to the Nth tab in the sidebar, in the order the user
   // actually sees it (getVisibleNavItems() — respects their custom tab order +
