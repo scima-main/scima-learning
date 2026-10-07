@@ -69,11 +69,17 @@ const blobStore = {
 };
 
 // chrome.runtime.getURL('lib/pdf.min.js') resolver equivalent — on the
-// extension this resolves relative to the extension root; on the site,
-// index.html lives at the project root (not two levels down inside
-// src/dashboard/ the way the extension's dashboard.html does), so these
-// are just plain root-relative static asset paths.
+// extension this resolves relative to the extension root; on the site it
+// resolves relative to the current page's own URL (document.baseURI — none
+// of the site pages set a <base>, so that's just the page URL). Deliberately
+// NOT domain-root-relative ('/lib/…'): the site isn't guaranteed to be served
+// from the domain root — the FastAPI backend mounts this folder at
+// /dashboard/ (backend/app/main.py), and a root-relative path would escape
+// that mount and 404, breaking the lazy pdf.js load. Relative resolution is
+// identical to the old behavior when the site IS at the domain root, and
+// stays inside the mount when it isn't. All site pages live at the landing
+// folder's root, so 'lib/…' resolves to the same place from every page.
 function assetUrl(path) {
   if (isExtension) return chrome.runtime.getURL(path);
-  return `/${path}`;
+  return new URL(path, document.baseURI).href;
 }
