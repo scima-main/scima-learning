@@ -1,10 +1,15 @@
 'use strict';
 /* dashboard-bootstrap.js — MUST load last of the dashboard-*.js files.
-   Theme scheduler, init(), the cross-tab storage.onChanged listener, and the
+   Theme scheduler, init(), the cross-tab storage.onChanged listener, the
+   multi-page site build's pagehide/pageshow persistence seams, and the
    final init() call that actually starts the app — this is the only one of
-   the ten split files with real top-level executing code, which is why load
+   the split files with real top-level executing code, which is why load
    order matters for this one specifically. See dashboard-core.js's header
-   for the full rationale. */
+   for the full rationale. Every site-only branch here is gated on
+   window.SCIMA_PAGE (declared by the site's .html pages only) and/or
+   !isExtension, so this file still runs unmodified inside the extension
+   build, where all views live in one document and none of the cross-page
+   handoff machinery applies. */
 
 // Normally declared in dashboard-tracker.js (not loaded in this
 // landing-page-only slice) alongside the rest of the tracker's interval
@@ -68,8 +73,55 @@ async function init() {
   if (!state.trackerState.config) state.trackerState.config = { xpCoef: XP_COEFFICIENT, capMult: MONTHLY_CAP_MULT, theme: 'dark', customSubjects: {} };
   if (!state.trackerState.config.customSubjects) state.trackerState.config.customSubjects = {};
 
+  // ── Multi-page site build: view routing + carried-over state ──────────
+  // (No-ops in the extension build — SCIMA_PAGE is only declared by the
+  // site's .html pages, and PAGE_VIEWS defaults to every view there.)
+  const isSitePage = !isExtension && !!window.SCIMA_PAGE;
+  // This page's in-memory view state, saved on the last pagehide (below):
+  // the bits the SPA kept alive across in-document view switches that aren't
+  // part of mf_state — the active study session, study scope/refine, the
+  // decks sub-navigation position, capture's last-used deck ids, the quests
+  // tab. Restored per-page so "leave and come back" behaves like it did when
+  // every view shared one document.
+  if (isSitePage) {
+    state.view = PAGE_VIEWS[0];
+    try {
+      const mem = JSON.parse(sessionStorage.getItem(`scima_pagemem_${CURRENT_PAGE}`) || 'null');
+      if (mem) {
+        if (mem.studyScope)  state.studyScope = mem.studyScope;
+        if (mem.studyRefine) state.studyRefine = mem.studyRefine;
+        if (mem.deckNav)     state.deckNav = mem.deckNav;
+        if (mem.studySession && typeof studySession !== 'undefined' && !studySession) studySession = mem.studySession;
+        if (mem.lastQuickAddDeckId != null && typeof _lastQuickAddDeckId !== 'undefined') _lastQuickAddDeckId = mem.lastQuickAddDeckId;
+        if (mem.lastAIGenerateDeckId != null && typeof _lastAIGenerateDeckId !== 'undefined') _lastAIGenerateDeckId = mem.lastAIGenerateDeckId;
+        if (mem.lastQuestsTab && typeof _lastQuestsTab !== 'undefined') _lastQuestsTab = mem.lastQuestsTab;
+      }
+    } catch (e) { console.warn('[SCIMA] page-memory restore failed — opening with defaults:', e); }
+  }
+
+  // Cross-page handoff written by gotoViewPage() on the page we came from
+  // (a "Study Now" scope, a tour step's deckNav reset, a deck to open…).
+  // Applied after the page memory so an explicit navigation intent wins.
+  const navHandoff = isSitePage ? readNavHandoff() : null;
+  if (navHandoff && NAV_ITEMS.some(n => n.id === navHandoff.view) && PAGE_VIEWS.includes(navHandoff.view)) {
+    if (navHandoff.studyScope)  state.studyScope = navHandoff.studyScope;
+    if (navHandoff.studyRefine) state.studyRefine = navHandoff.studyRefine;
+    if (navHandoff.deckNav)     state.deckNav = navHandoff.deckNav;
+  }
+
   const hash=location.hash.replace('#','');
-  if(hash&&NAV_ITEMS.some(n=>n.id===hash)) state.view=hash;
+  if(hash&&NAV_ITEMS.some(n=>n.id===hash)){
+    if (PAGE_VIEWS.includes(hash)) {
+      state.view=hash;
+    } else if (isSitePage) {
+      // Legacy/deep link (e.g. an old index.html#decks bookmark, or a
+      // hand-typed URL): this view lives on another page now — send the
+      // browser there instead of rendering nothing. replace(), not href=,
+      // so the wrong page doesn't stay in the history stack.
+      location.replace(urlForView(hash));
+      return;
+    }
+  }
 
   // Sync pending cards from content script — route each to its target deck.
   // Site build: no content script exists to populate 'pendingCards' at all
@@ -107,8 +159,26 @@ async function init() {
 
   renderSidebar();
   navigate(state.view);
+  // A cross-page openDeckDetail() (sidebar pinned deck, tour step) asked the
+  // decks page to open straight into a deck's detail view — now that the real
+  // openDeckDetail() from dashboard-decks.js is loaded and the decks view has
+  // rendered, honour it (same end state as the SPA's synchronous
+  // navigate('decks') + openDeckDetail(id) one-two).
+  if (navHandoff?.openDeckId && PAGE_VIEWS.includes('decks')) openDeckDetail(navHandoff.openDeckId);
   checkAchievements();
-  notifyClaimableAchievements();
+  if (!isSitePage) {
+    notifyClaimableAchievements();
+  } else {
+    // The SPA fired this once per tab load (init ran once per document).
+    // With one init() per page, gate it to once per tab session so the
+    // "achievements ready to claim" toast doesn't re-pop on every navigation.
+    try {
+      if (!sessionStorage.getItem('scima_achv_notified')) {
+        sessionStorage.setItem('scima_achv_notified', '1');
+        notifyClaimableAchievements();
+      }
+    } catch (e) { notifyClaimableAchievements(); }
+  }
 
   // First-run guided tour, or resume mid-tour if the tab was closed partway
   // through. Bumping TUTORIAL_VERSION in dashboard-onboarding.js re-triggers
@@ -173,5 +243,44 @@ try{
     });
   }
 }catch(e){ console.warn('[SCIMA] failed to register cross-tab sync listener — changes made in another tab may not appear here until reload:', e); }
+
+// ── Multi-page site build: persist across the page swap ─────────────────
+// Site pages only (never runs in the extension build, whose dashboard.html
+// is a single document that keeps all of this in memory):
+//  - pagehide: flush any pending debounced save (the 600ms timer dies with
+//    the page), then snapshot this page's in-memory view state — the bits
+//    the SPA carried across view switches without persisting them to
+//    mf_state — so init() above can restore them when the user comes back.
+//  - pageshow from the back/forward cache: reload, because a bfcache
+//    restore replays a stale document (stale state, dead listeners) where
+//    the SPA always had the live one.
+if (!isExtension && window.SCIMA_PAGE) {
+  window.addEventListener('pagehide', () => {
+    flushSave();
+    try {
+      const mem = {};
+      if (PAGE_VIEWS.includes('study')) {
+        mem.studyScope = state.studyScope;
+        mem.studyRefine = state.studyRefine;
+        if (typeof studySession !== 'undefined' && studySession && studySession.active) mem.studySession = studySession;
+      }
+      if (PAGE_VIEWS.includes('decks')) mem.deckNav = state.deckNav;
+      if (PAGE_VIEWS.includes('capture')) {
+        if (typeof _lastQuickAddDeckId !== 'undefined') mem.lastQuickAddDeckId = _lastQuickAddDeckId;
+        if (typeof _lastAIGenerateDeckId !== 'undefined') mem.lastAIGenerateDeckId = _lastAIGenerateDeckId;
+      }
+      if (PAGE_VIEWS.includes('quests') && typeof _lastQuestsTab !== 'undefined') mem.lastQuestsTab = _lastQuestsTab;
+      const key = `scima_pagemem_${CURRENT_PAGE}`;
+      try { sessionStorage.setItem(key, JSON.stringify(mem)); }
+      catch (quotaErr) {
+        // A study queue full of image-backed cards can outgrow sessionStorage —
+        // drop the session (the only bulky field) and keep the lightweight bits.
+        delete mem.studySession;
+        try { sessionStorage.setItem(key, JSON.stringify(mem)); } catch (e2) {}
+      }
+    } catch (e) { console.warn('[SCIMA] page-memory save failed:', e); }
+  });
+  window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+}
 
 init();

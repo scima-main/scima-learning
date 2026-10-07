@@ -17,10 +17,13 @@
         the final `init()` call that actually starts the app). Every other
         file only *defines* functions, so their relative order doesn't matter.
 
-   Contains: DEBUG flag, NAV_ITEMS, state, store (chrome.storage/localStorage
-   abstraction + the tracker write-lock), generic DOM/string helpers, the
-   colour picker, XP/streak helpers, scope-set helpers (shared by Study),
-   the command palette, and the router (navigate/renderView/renderSidebar).
+   Contains: DEBUG flag, NAV_ITEMS, the multi-page site router constants
+   (VIEW_PAGES/CURRENT_PAGE/PAGE_VIEWS), state, store (chrome.storage/
+   localStorage abstraction + the tracker write-lock), generic DOM/string
+   helpers, the colour picker, XP/streak helpers, scope-set helpers (shared by
+   Study), the command palette, and the router
+   (navigate/renderView/renderSidebar + the cross-page gotoViewPage()/
+   nav-handoff seam used by the split .html site build).
 ═══════════════════════════════════════════════════════════════ */
 
 // Sets are always-on regardless of DEBUG: console.error() calls inside catch blocks
@@ -52,6 +55,45 @@ const NAV_ITEMS = [
   { id: 'tracker-trackersettings', icon: '🎛️', label: 'Tracker Settings', section: 'tracker' },
 ];
 const NAV_ITEMS_DEFAULT_ORDER = NAV_ITEMS.map(n => n.id);
+
+// ── Multi-page site router constants ─────────────────────────────────
+// Site build: the dashboard is split across one .html page per view (group),
+// each loading only the script slice its own views need — see index.html's
+// header comment for the full page/manifest map. Which page hosts which view
+// lives in VIEW_PAGES; the page itself declares the views it hosts via the
+// tiny inline `window.SCIMA_PAGE = { file, views }` script that runs before
+// this file (PAGE_VIEWS below).
+// Extension build: dashboard.html has no SCIMA_PAGE declaration, so
+// PAGE_VIEWS falls back to *every* nav id — every navigate() stays an
+// in-page view switch and none of the cross-page machinery below ever runs,
+// exactly like before the split.
+const VIEW_PAGES = {
+  home: 'index.html',
+  decks: 'decks.html',
+  study: 'study.html',
+  capture: 'capture.html',
+  library: 'library.html',
+  analytics: 'analytics.html',
+  quests: 'analytics.html',
+  settings: 'settings.html',
+  'tracker-overview': 'tracker.html',
+  'tracker-logmarks': 'tracker.html',
+  'tracker-subjects': 'tracker.html',
+  'tracker-history': 'tracker.html',
+  'tracker-managesubjects': 'tracker.html',
+  'tracker-trackersettings': 'tracker.html',
+};
+// Which .html file is currently loaded ('' / directory URL → index.html).
+const CURRENT_PAGE = (() => {
+  const f = location.pathname.split('/').pop();
+  return (f && /\.html?$/i.test(f)) ? f : 'index.html';
+})();
+// Views hosted by the current page. Extension build (no SCIMA_PAGE): all of
+// them, so navigate()/renderView() below never leave the page.
+const PAGE_VIEWS = (typeof window !== 'undefined' && window.SCIMA_PAGE
+    && Array.isArray(window.SCIMA_PAGE.views) && window.SCIMA_PAGE.views.length)
+  ? window.SCIMA_PAGE.views
+  : NAV_ITEMS.map(n => n.id);
 
 const state = {
   decks: [],
@@ -183,18 +225,39 @@ const store = {
 };
 
 let saveTimer = null;
+// Single source of truth for what a save writes — used by both the debounced
+// scheduleSave() and the synchronous flushSave() below, so a flush lands
+// exactly the same payload the debounce would have.
+function buildMFPayload() {
+  return {
+    decks: state.decks, folders: state.folders, sources: state.sources,
+    libraryFolders: state.libraryFolders||[],
+    streak: state.streak, lastStreakDate: state.lastStreakDate, reviewHistory: state.reviewHistory,
+    achievements: state.achievements, settings: state.settings,
+    recentStudyScopes: state.recentStudyScopes,
+    sessionLog: state.sessionLog||[],
+  };
+}
 function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    store.saveMF({
-      decks: state.decks, folders: state.folders, sources: state.sources,
-      libraryFolders: state.libraryFolders||[],
-      streak: state.streak, lastStreakDate: state.lastStreakDate, reviewHistory: state.reviewHistory,
-      achievements: state.achievements, settings: state.settings,
-      recentStudyScopes: state.recentStudyScopes,
-      sessionLog: state.sessionLog||[],
-    });
+    saveTimer = null;
+    store.saveMF(buildMFPayload());
   }, 600);
+}
+// Writes any pending debounced save immediately. The multi-page site build
+// needs this before every cross-page navigation (and on pagehide): the 600ms
+// debounce was tuned for a single-page app that never unloads mid-edit, but a
+// real page navigation kills pending timers — without the flush, whatever the
+// user did in the last 600ms (a pin toggle right before clicking Study, a
+// tutorial step number, …) would silently vanish. force=true writes even with
+// no timer pending (used for the guided tour, which deliberately never calls
+// scheduleSave() itself — see _advance() in dashboard-onboarding.js).
+function flushSave(force = false) {
+  if (!saveTimer && !force) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  store.saveMF(buildMFPayload());
 }
 
 function uid(p = 'id') { return `${p}_${Date.now()}_${Math.random().toString(36).slice(2,7)}`; }
@@ -1472,29 +1535,126 @@ function togglePinDeck(deckId) {
   if (state.view === 'decks') renderView('decks'); // pin button lives on deck cards too — refresh its icon there
 }
 
+// ── Cross-page navigation seam (multi-page site build) ───────────────
+// In the single-page app, navigate() switched views inside one document, so
+// in-memory state the caller had just mutated (state.studyScope set by a
+// "Study Now" button, state.deckNav reset by a tour step, a deck to open…)
+// simply survived — one shared `state` object. Splitting the views across
+// separate .html pages turns every cross-view jump into a real navigation,
+// so that same intent is handed over explicitly:
+//   1. flushSave() — land any pending debounced save before unload;
+//   2. writeNavHandoff() — snapshot the mutated in-memory bits plus the
+//      target view into sessionStorage (per-tab, exactly the lifetime the
+//      in-memory state had before);
+//   3. the target page's init() (dashboard-bootstrap.js) reads the handoff
+//      back and applies it before its first render.
+// None of this runs in the extension build (PAGE_VIEWS contains everything
+// there, and writeNavHandoff() is isExtension-gated besides).
+let _pendingOpenDeckId = null;
+
+function urlForView(viewId) {
+  return `${VIEW_PAGES[viewId] || 'index.html'}#${viewId}`;
+}
+
+function writeNavHandoff(viewId) {
+  if (isExtension) return;
+  try {
+    sessionStorage.setItem('scima_nav_handoff', JSON.stringify({
+      view: viewId,
+      studyScope: state.studyScope,
+      studyRefine: state.studyRefine,
+      deckNav: state.deckNav,
+      openDeckId: _pendingOpenDeckId,
+    }));
+  } catch (e) { console.warn('[SCIMA] nav handoff write failed — the target page will open with defaults:', e); }
+  _pendingOpenDeckId = null;
+}
+
+function readNavHandoff() {
+  try {
+    const raw = sessionStorage.getItem('scima_nav_handoff');
+    sessionStorage.removeItem('scima_nav_handoff');
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { console.warn('[SCIMA] nav handoff read failed:', e); return null; }
+}
+
+function gotoViewPage(viewId) {
+  // The guided tour piggybacks its step number on the next real save (see
+  // _advance() in dashboard-onboarding.js — deliberately not scheduleSave'd),
+  // so sync the live step and force-write before swapping pages, or a tour
+  // that crosses a page boundary would resume from a stale step.
+  let touring = false;
+  try { touring = (typeof _tut !== 'undefined' && !!_tut); } catch (e) {}
+  if (touring) {
+    try {
+      state.settings.onboarding = state.settings.onboarding || {};
+      state.settings.onboarding.step = _tut.stepIdx;
+    } catch (e) {}
+  }
+  flushSave(touring);
+  writeNavHandoff(viewId);
+  location.href = urlForView(viewId);
+}
+
+// Multi-page fallback for openDeckDetail(). On any page that loads
+// dashboard-decks.js, the real openDeckDetail() declared there replaces this
+// one (a later function declaration wins in the shared global scope), so
+// decks.html behaves exactly as before. Everywhere else — the sidebar's
+// pinned-deck rows, the onboarding tour — opening a deck means loading
+// decks.html with that deck's detail already open; the handoff's openDeckId
+// is applied by bootstrap's init() on arrival.
+function openDeckDetail(deckId) {
+  if (!deckId) return;
+  const deck = state.decks.find(d => d.id === deckId);
+  if (!deck) return;
+  _pendingOpenDeckId = deckId;
+  gotoViewPage('decks');
+}
+
 function navigate(viewId) {
   if (viewId !== 'study' && typeof clearQuizTimer === 'function') clearQuizTimer();
+  // Site build: views live on separate .html pages — a view not hosted here
+  // is a real navigation. Extension build: PAGE_VIEWS holds every id, so
+  // this never triggers and the in-page switch below runs unchanged.
+  if (!PAGE_VIEWS.includes(viewId) && !isExtension && VIEW_PAGES[viewId]) {
+    gotoViewPage(viewId);
+    return;
+  }
   state.view = viewId;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === viewId));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${viewId}`));
   renderView(viewId);
 }
-function renderView(id) {
-  const c = document.getElementById(`view-${id}`);
-  if (!c) return;
-  c.innerHTML = '';
-  // Flashcard views
-  const fcMap = { home: renderHome, decks: renderDecks, study: renderStudy, capture: renderCapture,
-    library: renderLibrary, analytics: renderAnalytics, quests: renderQuests, settings: renderSettings };
-  if (fcMap[id]) { fcMap[id](c); return; }
+// Resolves a view's render fn by name off window. The old renderView() built
+// an object literal referencing all sixteen render fns eagerly — fine when
+// every module is always loaded (extension), but a ReferenceError on a site
+// page whose slice doesn't define them all. Same result as before wherever
+// the fn exists; where it doesn't, renderView() below redirects to the page
+// that hosts the view instead of throwing.
+function viewRenderer(id) {
+  const FC_RENDERERS = { home: 'renderHome', decks: 'renderDecks', study: 'renderStudy', capture: 'renderCapture',
+    library: 'renderLibrary', analytics: 'renderAnalytics', quests: 'renderQuests', settings: 'renderSettings' };
+  if (FC_RENDERERS[id]) return window[FC_RENDERERS[id]];
   // Tracker views — delegate to tracker render fns that use state.trackerState
-  const sub = id.replace('tracker-', '');
-  const trMap = {
-    overview: renderTrackerOverview, logmarks: renderTrackerLogMarks,
-    subjects: renderTrackerSubjects, history: renderTrackerHistory,
-    managesubjects: renderTrackerManageSubjects, trackersettings: renderTrackerSettings,
+  const TR_RENDERERS = {
+    overview: 'renderTrackerOverview', logmarks: 'renderTrackerLogMarks',
+    subjects: 'renderTrackerSubjects', history: 'renderTrackerHistory',
+    managesubjects: 'renderTrackerManageSubjects', trackersettings: 'renderTrackerSettings',
   };
-  if (trMap[sub]) trMap[sub](c);
+  const tr = TR_RENDERERS[String(id).replace('tracker-', '')];
+  return tr ? window[tr] : null;
+}
+function renderView(id) {
+  const fn = viewRenderer(id);
+  const c = document.getElementById(`view-${id}`);
+  if (!fn || !c) {
+    // Site build: that view lives on another page — go there rather than
+    // silently doing nothing (mirrors navigate()'s cross-page branch).
+    if (!isExtension && VIEW_PAGES[id] && !PAGE_VIEWS.includes(id)) gotoViewPage(id);
+    return;
+  }
+  c.innerHTML = '';
+  fn(c);
 }
 
 function renderSidebar() {
