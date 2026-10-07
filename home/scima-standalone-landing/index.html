@@ -7,35 +7,60 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="dashboard/dashboard.css">
+  <link rel="stylesheet" href="app/dashboard.css">
   <!--
-    SCIMA Learning — Home. Multi-page site build.
+    SCIMA Learning — Home. Multi-page route build.
 
     This dashboard used to be a single index.html hosting all fourteen views
     and loading every module (plus KaTeX, mhchem, fflate and the EPUB/MOBI
     parser bundles — ~1.3 MB of JS) synchronously before anything rendered.
-    Each view (group) now has its own .html page carrying only the script
-    slice it needs, and the shared shell (sidebar, XP bar, modals, command
-    palette, toast) is static markup on every page — so first paint no longer
-    waits for JS at all, and this landing page ships the lightest slice:
+    It is now split into workflow routes — one directory per destination,
+    each carrying only the script slice its views need — grouped so the tabs
+    users actually bounce between switch in-page (instant, no reload) instead
+    of crossing a page boundary:
 
-      index.html      Home                        (this page)
-      decks.html      Decks                       + KaTeX/mhchem for card previews
-      study.html      Study                       + KaTeX/mhchem for card faces
-      capture.html    Capture (Quick Add / AI Generate)
-      library.html    Library                     + fflate, EPUB/MOBI parsers, process-shim
-      analytics.html  Analytics + Quests          + dashboard-library.js (reading-time stats)
-      settings.html   Settings                    + fflate (Export/Import All Data .zip)
-      tracker.html    the six Mark Tracker views  (still stubbed — the real tracker
-                                                   arrives in a later phase, as before)
+      /            Home                        (this page — lightest slice)
+      /study/      Decks + Study               the flashcard core: deck
+                   (study/)                    management and review
+                   sessions share scope,
+                   session and sub-nav state
+                   in one document; "Study
+                   Now"/"Study Selected" are
+                   in-page switches. + KaTeX/
+                   mhchem for card faces.
+      /capture/    Capture + Library           the sources → cards pipeline:
+                   (capture/)                  Quick Add / AI Generate
+                   beside the reader and
+                   imports. + fflate, EPUB/
+                   MOBI parsers, process-shim.
+      /insights/   Analytics + Quests          + dashboard-library.js for
+                   (insights/)                 the reading-time breakdown.
+      /settings/   Settings                    + fflate (Export/Import All
+                   (settings/)                 Data .zip).
+      /tracker/    the six Mark Tracker views  still stubs (dashboard-
+                   (tracker/)                  stubs.js) until the real
+                   tracker is ported.
 
-    Cross-page seams live in dashboard-core.js (VIEW_PAGES/PAGE_VIEWS, the
+    The backend serves the landing folder both at the domain root (canonical,
+    backend/app/main.py's "/" mount) and at /dashboard/ (legacy mount — kept
+    for old bookmarks and because community/index.html loads
+    /dashboard/shared/theme.js root-absolute). Every reference below is
+    RELATIVE (scripts, styles, lazy pdf.js via assetUrl(), and the cross-route
+    links the router builds), so the same files work under both prefixes and
+    a session never jumps between URL families. Static assets stay shared at
+    the landing root — route directories contain only their index.html.
+
+    The sidebar still lists all fourteen tabs; navigate() switches in-page
+    when the target view lives on the current route and does a real
+    navigation otherwise (hash selects the view, e.g. /study/#study).
+    Cross-page seams live in dashboard-core.js (VIEW_ROUTES/PAGE_VIEWS, the
     navigate()/renderView() redirects, the sessionStorage nav handoff,
     openDeckDetail()'s redirecting fallback) and dashboard-bootstrap.js
-    (handoff + per-page view-memory restore in init(), the pagehide flush/
-    snapshot, the once-per-session achievement toast). Every seam is gated on
-    window.SCIMA_PAGE / !isExtension, so the extension build — which still
-    loads all views in one dashboard.html — behaves exactly as before.
+    (handoff + per-route view-memory restore in init(), the pagehide
+    flush/snapshot, the once-per-session achievement toast). Every seam is
+    gated on window.SCIMA_PAGE / !isExtension, so the extension build —
+    which still loads all views in one dashboard.html — behaves exactly as
+    before.
 
     Load order within each page follows the same rules as the old build (and
     the extension's dashboard.html): process-shim.js before the epub parser
@@ -102,18 +127,19 @@
     <span class="cmd-key">⌘K</span> Command Palette
   </div>
 
-  <!-- Page identity for the multi-page router (dashboard-core.js reads
-       this before it evaluates PAGE_VIEWS). -->
-  <script>window.SCIMA_PAGE = { file: 'index.html', views: ['home'] };</script>
+  <!-- Route identity for the multi-page router (dashboard-core.js reads
+       this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is the
+       relative path from this page back to the landing folder. -->
+  <script>window.SCIMA_PAGE = { id: 'home', root: '', views: ['home'] };</script>
   <script src="shared/theme.js"></script>
   <script src="shared/shared.js"></script>
   <script src="shared/srs-core.js"></script>
   <script src="shared/srs.js"></script>
   <script src="shared/translate-shared.js"></script>
-  <script src="dashboard/dashboard-core.js"></script>
-  <script src="dashboard/dashboard-home.js"></script>
-  <script src="dashboard/dashboard-analytics.js"></script>
-  <script src="dashboard/dashboard-onboarding.js"></script>
-  <script src="dashboard/dashboard-bootstrap.js"></script>
+  <script src="app/dashboard-core.js"></script>
+  <script src="app/dashboard-home.js"></script>
+  <script src="app/dashboard-analytics.js"></script>
+  <script src="app/dashboard-onboarding.js"></script>
+  <script src="app/dashboard-bootstrap.js"></script>
 </body>
 </html>

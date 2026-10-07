@@ -10,7 +10,7 @@ from typing import Optional, Sequence
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import db, ratelimit
@@ -725,13 +725,17 @@ def create_deck(
 
 
 # ── Static Mounts ────────────────────────────────────────────────────
+# Registration order matters: Starlette matches routes and mounts in the
+# order they were added, so the catch-all "/" mount must stay LAST — every
+# API route above and the two specific mounts below win over it.
 
+STUDY_LANDING_DIR = "/home/scima/study/home/scima-standalone-landing"
+
+# Legacy URL family (/dashboard/…). Kept because existing bookmarks use it
+# and the community page loads /dashboard/shared/theme.js root-absolute.
 app.mount(
     "/dashboard",
-    StaticFiles(
-        directory="/home/scima/study/home/scima-standalone-landing",
-        html=True,
-    ),
+    StaticFiles(directory=STUDY_LANDING_DIR, html=True),
     name="dashboard",
 )
 
@@ -745,6 +749,16 @@ app.mount(
 )
 
 
-@app.get("/", include_in_schema=False)
-def root():
-    return RedirectResponse("/dashboard/")
+# Canonical URL family: the workflow routes straight off the domain root —
+# / (Home), /study/, /capture/, /insights/, /settings/, /tracker/. Each
+# route is a subdirectory of the landing folder with its own index.html,
+# served for the directory URL by StaticFiles(html=True); a slash-less
+# /study is 307-redirected to /study/ by Starlette. Every in-page reference
+# (scripts, styles, lazy pdf.js, cross-route links) is relative, so the
+# same files work under this mount and the /dashboard mount above without
+# either family leaking into the other.
+app.mount(
+    "/",
+    StaticFiles(directory=STUDY_LANDING_DIR, html=True),
+    name="site",
+)

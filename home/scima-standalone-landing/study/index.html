@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SCIMA Learning</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../app/dashboard.css">
+  <link rel="stylesheet" href="../lib/katex/katex.min.css">
+  <!--
+    SCIMA Learning — Study route: Decks + Study (multi-page route build;
+    see the landing index.html header for the full map). The two most
+    jumped-between views live in one document, so "Study Now" from a deck,
+    "Study Selected" from the card multiselect, and the back-and-forth
+    between a session and deck management are instant in-page switches —
+    studyScope/studyRefine/deckNav and the active studySession stay in one
+    shared state, exactly like the old SPA. Manifest notes: KaTeX + mhchem
+    render LaTeX on card faces and in previews; dashboard-home.js is loaded
+    for the `dragData` binding the decks drag-and-drop reorganization shares
+    with it; dashboard-library.js is NOT loaded — sourceTypeIcon() (the only
+    symbol decks/citation flows needed from it) now lives in
+    dashboard-core.js, and no Library view flow is reachable here. fflate and
+    the parser bundles stay out too (no zip export or file import on this
+    route); pdf.min.js is still lazy-loaded on demand via assetUrl() by the
+    PDF text extractor and the double-sided print export. Default view for a
+    bare /study/ URL is Decks (sidebar order); the Study tab is #study.
+  -->
+</head>
+<body>
+  <div id="stripe"></div>
+  <button id="info-btn" title="About this page" aria-label="Page help">i</button>
+  <div id="app">
+    <aside id="sidebar">
+      <div id="sidebar-header">
+        <div id="logo">
+          <div id="logo-icon">✦</div>
+          <div>
+            <div id="logo-name">SCIMA Learning</div>
+            <div id="logo-sub">Adaptive Learning</div>
+          </div>
+        </div>
+        <div id="xp-bar-wrap">
+          <span id="xp-level">Lv.1</span>
+          <div id="xp-track"><div id="xp-fill"></div></div>
+          <span id="xp-label">0/500</span>
+        </div>
+      </div>
+      <div id="pinned-decks"></div>
+      <nav id="nav"></nav>
+      <div id="sidebar-footer">
+        <div id="footer-stats"></div>
+      </div>
+    </aside>
+    <main id="main">
+      <div id="view-decks"     class="view"></div>
+      <div id="view-study"     class="view"></div>
+    </main>
+  </div>
+
+  <div id="modal-backdrop" class="hidden">
+    <div id="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
+      <div id="modal-header">
+        <span id="modal-title"></span>
+        <button id="modal-close" aria-label="Close dialog">×</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="cmd-backdrop" class="hidden">
+    <div id="cmd-box" role="dialog" aria-modal="true" aria-label="Command palette" tabindex="-1">
+      <div id="cmd-input-row">
+        <span class="cmd-icon">⌘</span>
+        <input id="cmd-input" placeholder="Quick action… (Esc to close)" aria-label="Search commands" role="combobox" aria-expanded="true" aria-controls="cmd-list" autocomplete="off">
+        <span class="cmd-esc">ESC</span>
+      </div>
+      <div id="cmd-list" role="listbox" aria-label="Commands"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div id="cmd-hint">
+    <span class="cmd-key">⌘K</span> Command Palette
+  </div>
+
+  <!-- Route identity for the multi-page router (dashboard-core.js reads
+       this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is the
+       relative path from this page back to the landing folder. -->
+  <script>window.SCIMA_PAGE = { id: 'study', root: '../', views: ['decks', 'study'] };</script>
+  <script src="../lib/katex/katex.min.js"></script>
+  <script src="../lib/katex/mhchem.min.js"></script>
+  <script src="../shared/theme.js"></script>
+  <script src="../shared/shared.js"></script>
+  <script src="../shared/srs-core.js"></script>
+  <script src="../shared/srs.js"></script>
+  <script src="../shared/translate-shared.js"></script>
+  <script src="../app/dashboard-core.js"></script>
+  <script src="../app/dashboard-blobstore.js"></script>
+  <script src="../app/dashboard-home.js"></script>
+  <script src="../app/dashboard-decks.js"></script>
+  <script src="../app/dashboard-study.js"></script>
+  <script src="../app/dashboard-analytics.js"></script>
+  <script src="../app/dashboard-onboarding.js"></script>
+  <script src="../app/dashboard-bootstrap.js"></script>
+</body>
+</html>
