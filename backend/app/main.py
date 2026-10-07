@@ -729,7 +729,12 @@ def create_deck(
 # order they were added, so the catch-all "/" mount must stay LAST — every
 # API route above and the two specific mounts below win over it.
 
-STUDY_LANDING_DIR = "/home/scima/study/home/scima-standalone-landing"
+# Repo-root-relative locations, derived from this file rather than hardcoded
+# absolute paths — the checkout can live anywhere (/home/scima/study,
+# /home/scima/scima-learning, a dev laptop…) and the mounts follow it.
+# main.py sits at <repo>/backend/app/main.py, so parents[2] is <repo>.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+STUDY_LANDING_DIR = REPO_ROOT / "home" / "scima-standalone-landing"
 
 # Legacy URL family (/dashboard/…). Kept because existing bookmarks use it
 # and the community page loads /dashboard/shared/theme.js root-absolute.
@@ -742,7 +747,7 @@ app.mount(
 app.mount(
     "/community",
     StaticFiles(
-        directory="/home/scima/study/community",
+        directory=REPO_ROOT / "community",
         html=True,
     ),
     name="community",
