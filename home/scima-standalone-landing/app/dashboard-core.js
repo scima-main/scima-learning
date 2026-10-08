@@ -664,7 +664,7 @@ async function callLocalLLM(messages, opts = {}) {
       body: JSON.stringify(body),
     });
   } catch (e) {
-    throw new Error(`Could not reach ${endpoint} — is the local server running?`);
+    throw new Error(aiReachError(endpoint));
   }
 
   if (!res.ok) {
@@ -682,6 +682,21 @@ async function callLocalLLM(messages, opts = {}) {
 // Pings the configured server so Settings can show a ✓/✕ without the user
 // having to run a whole generation first. Tries GET /v1/models (what LM
 // Studio/Ollama/llama.cpp all expose) to also surface the loaded model name.
+// fetch() against a local http endpoint fails identically (TypeError) whether
+// nothing is listening OR the browser vetoed the call, so the old "is the
+// server running?" wording misdiagnosed the far more common case on this
+// https deployment: CORS allow-lists, Private-Network-Access preflights, or
+// 127.0.0.1 meaning "this device" while the server runs on another machine.
+function aiReachError(endpoint) {
+  let extra = ' — is the local server running?';
+  try {
+    if (location.protocol === 'https:' && /^http:\/\//i.test(endpoint)) {
+      extra = '. If the server IS running, the browser blocked the call: an https page reaching a plain-http local server trips CORS allow-lists and Private-Network-Access preflights, and 127.0.0.1 means "the device running THIS browser", not the server\'s machine. Check the DevTools console for the exact policy error (CORS / private-network / mixed-content), enable CORS for this origin on the server (LM Studio: Developer tab → CORS; Ollama: OLLAMA_ORIGINS), or open the site from the machine the server runs on.';
+    }
+  } catch (e) {}
+  return `Could not reach ${endpoint}` + extra;
+}
+
 async function testAIConnection() {
   const endpoint = normalizeAIEndpoint(state.settings.aiEndpoint);
   if (!endpoint) return { ok: false, error: 'No server address set.' };
@@ -692,7 +707,7 @@ async function testAIConnection() {
     const model = state.settings.aiModel || data?.data?.[0]?.id || '';
     return { ok: true, model };
   } catch (e) {
-    return { ok: false, error: `Could not reach ${endpoint} — is the local server running?` };
+    return { ok: false, error: aiReachError(endpoint) };
   }
 }
 
@@ -1687,20 +1702,24 @@ function routeOfView(viewId) {
 }
 // In-page tab bar for pages hosting more than one view (Analytics⇄Quests)
 // — the UI face of "six tabs, six pages" while keeping merged views one tap
-// away. Single-view pages render an empty bar.
+// away. Reuses the same segmented .tab-bar/.tab-btn look as the in-view
+// selectors (Quests⇄Achievements), at half the viewport width (see
+// dashboard.css). Single-view pages render nothing.
 function renderPageTabs() {
-  const bar = document.getElementById('page-tabs');
-  if (!bar) return;
-  bar.innerHTML = '';
+  const host = document.getElementById('page-tabs');
+  if (!host) return;
+  host.innerHTML = '';
   if (PAGE_VIEWS.length < 2) return;
+  const bar = el('div', { class: 'tab-bar' });
   PAGE_VIEWS.forEach(v => {
     const meta = VIEW_TABS[v] || { icon: '', label: v };
     bar.appendChild(el('button', {
-      class: `page-tab${state.view === v ? ' active' : ''}`,
+      class: `tab-btn${state.view === v ? ' active' : ''}`,
       'data-view': v,
       onclick: () => navigate(v),
     }, el('span', { class: 'page-tab-icon' }, meta.icon), meta.label));
   });
+  host.appendChild(bar);
 }
 
 // ── Collapsible nav drawer ───────────────────────────────────────────

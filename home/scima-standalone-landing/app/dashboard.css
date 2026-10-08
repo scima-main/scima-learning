@@ -98,15 +98,13 @@ body::after {
 
 /* In-page tab bar on pages hosting two views (Decks⇄Capture,
    Analytics⇄Quests) — empty (and hidden) everywhere else. */
-#page-tabs { display: flex; gap: 6px; padding: 56px 32px 0; flex-wrap: wrap; }
+/* In-page page-switcher (Analytics⇄Quests): same segmented tray shape as the
+   in-view .tab-bar selectors, but half the viewport wide. The wrapper only
+   provides the top clearance under the floating ≡ / ⓘ buttons. */
+#page-tabs { padding: 56px 32px 0; }
 #page-tabs:empty { display: none; }
 #page-tabs:not(:empty) ~ .view { padding-top: 20px; }
-.page-tab { display: flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 99px;
-  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
-  font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
-  transition: color 0.15s, background-color 0.15s, border-color 0.15s; }
-.page-tab:hover { color: var(--text); }
-.page-tab.active { color: var(--blue); background: rgba(var(--blue-rgb),0.12); border-color: rgba(var(--blue-rgb),0.4); }
+#page-tabs .tab-bar { width: min(50vw, 100%); margin-bottom: 0; }
 .page-tab-icon { font-size: 13px; line-height: 1; }
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
@@ -222,6 +220,8 @@ body.nav-open .nav-drawer-toggle span:not(.nav-drawer-chevron) {
   .view { padding: 64px 14px 24px; }
   #page-tabs { padding: 56px 14px 0; }
   #page-tabs:not(:empty) ~ .view { padding-top: 16px; }
+  /* half the viewport is too narrow for icon+label on phones */
+  #page-tabs .tab-bar { width: 100%; }
 }
 
 
