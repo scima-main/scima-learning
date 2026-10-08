@@ -104,7 +104,7 @@ const TUTORIAL_STEPS = [
     waitFor: 'next',
     sidebarWalk: [
       { view: 'home', blurb: 'Home — your daily snapshot: what\u2019s due, streaks, and quick shortcuts into recent decks.' },
-      { view: 'decks', blurb: 'Decks — your flashcard decks and folders, plus Capture (Quick Add and AI Generate) on the same page.' },
+      { view: 'decks', blurb: 'Decks — your flashcard decks and folders; "+ New Deck" has an ✨ AI Capture tab that writes cards from pasted text.' },
       { view: 'study', blurb: 'Study — launches a review session across one deck, a folder, or everything due today.' },
       { view: 'library', blurb: 'Library — imported books and articles to read, highlight and cite into cards.' },
       { view: 'analytics', blurb: 'Analytics — retention, streak and study-time charts, with Quests and achievements on the same page.' },

@@ -1008,6 +1008,352 @@ function openRenameFolderModal(folderId) {
   });
 }
 
+// ── AI Capture pane — fourth tab of the Create Deck modal ────────────
+// The old standalone Capture view, relocated: generate cards from pasted
+// material (local OpenAI-compatible server, or any chat AI via Copy / Paste
+// mode) straight into the deck being created — or into an existing one via
+// the destination toggle. Quick Add was dropped with the Capture view:
+// manual single-card entry already lives in the deck detail's "+ Add Card".
+// Everything here talks to state/DOM/clipboard and a user-supplied local
+// server URL (fetch(), via generateCardsFromText() in dashboard-core.js).
+let _lastAIGenerateDeckId = null;
+
+/** Normalises a parsed/generated card into a full stored-card object. */
+function mkGeneratedCard(cc) {
+  return { id: uid('c'), front: cc.front, back: cc.back, hint: cc.hint || '', tags: cc.tags || [],
+    citation: null, frontImage: null, backImage: null, type: 'basic',
+    answerCount: cc.answerCount || 1, requiredAnswers: cc.requiredAnswers || cc.answerCount || 1,
+    ease: 2.5, interval: 0, reps: 0, lapses: 0, due: Date.now(), state: 'new', created: Date.now() };
+}
+
+function renderAICapture(wrap) {
+  wrap.innerHTML = '';
+
+  // Mode toggle: 'api' talks to a local OpenAI-compatible server directly;
+  // 'manual' builds the same prompt for the user to copy into any chat-based
+  // AI, then parses whatever they paste back. Persisted, same as aiJsonMode.
+  const mode = state.settings.aiCaptureMode === 'manual' ? 'manual' : 'api';
+  const modeBar = el('div', { class: 'tab-bar', style: 'margin-bottom:16px' });
+  [{ id: 'api', label: '🔌 Local Server' }, { id: 'manual', label: '📋 Copy / Paste' }].forEach(m => {
+    modeBar.appendChild(el('button', { class: `tab-btn${mode === m.id ? ' active' : ''}`, onclick: () => {
+      if (state.settings.aiCaptureMode === m.id) return;
+      state.settings.aiCaptureMode = m.id; scheduleSave();
+      renderAICapture(wrap);
+    } }, m.label));
+  });
+  wrap.appendChild(modeBar);
+
+  if (mode === 'api' && !normalizeAIEndpoint(state.settings.aiEndpoint)) {
+    wrap.appendChild(el('div', { class: 'empty-state', style: 'padding:24px;text-align:center' },
+      el('div', { class: 'empty-icon' }, '🔌'),
+      el('div', { class: 'empty-title' }, 'No AI server configured'),
+      el('div', { class: 'empty-sub' }, 'Add a local server address (e.g. LM Studio’s http://127.0.0.1:1234) in Settings, or switch to 📋 Copy / Paste above to use any chat AI instead.'),
+      btn('Go to Settings', 'primary', { onclick: () => { closeModal(); navigate('settings'); } })
+    ));
+    return;
+  }
+
+  // ── Destination: brand-new deck (default) or an existing one ──
+  let dest = 'new';
+  const newNameField = createField('New Deck Name', 'text', 'e.g. Biology 101 from notes');
+  const newSubjectWrap = el('div', { class: 'field' }, el('label', {}, 'Subject'));
+  const newSubjectSel = el('select', { class: 'u-input' });
+  Object.entries(getAllSubjects()).forEach(([key, s]) => {
+    const o = el('option', { value: key, class: 'u-bg' }, `${s.name} (${s.board})`);
+    if (key === DEFAULT_SUBJECT_KEY) o.selected = true;
+    newSubjectSel.appendChild(o);
+  });
+  newSubjectWrap.appendChild(newSubjectSel);
+  const newFields = el('div', { class: 'grid-2' }, newNameField, newSubjectWrap);
+  const existField = el('div', { class: 'field' }, el('label', {}, 'Add generated cards to'));
+  const deckSel = el('select', { class: 'u-input' });
+  state.decks.forEach(d => {
+    const o = el('option', { value: d.id, class: 'u-bg' }, `${d.emoji || '📚'} ${d.name}`);
+    if (d.id === (_lastAIGenerateDeckId || state.decks[0].id)) o.selected = true;
+    deckSel.appendChild(o);
+  });
+  existField.appendChild(deckSel);
+  const existWrap = el('div', { style: 'display:none' }, existField);
+  const destBar = el('div', { class: 'tab-bar', style: 'margin-bottom:10px' });
+  [{ id: 'new', label: '🆕 New deck' }, { id: 'exist', label: '📚 Existing deck', needDecks: true }].forEach(d => {
+    if (d.needDecks && !state.decks.length) return;
+    destBar.appendChild(el('button', { class: `tab-btn${dest === d.id ? ' active' : ''}`, onclick: e => {
+      dest = d.id;
+      destBar.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === e.currentTarget));
+      newFields.style.display = dest === 'new' ? '' : 'none';
+      existWrap.style.display = dest === 'exist' ? '' : 'none';
+      renderGenerated();
+    } }, d.label));
+  });
+
+  const textarea = el('textarea', { placeholder: 'Paste lecture notes, an article, a textbook excerpt…', rows: '7',
+    style: 'width:100%;padding:12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--text);font-size:13px;resize:vertical;font-family:inherit;box-sizing:border-box;outline:none' });
+
+  let sourceRow = null;
+  if (state.sources.length) {
+    const srcSel = el('select', { class: 'u-input', style: 'flex:1' });
+    srcSel.appendChild(el('option', { value: '', class: 'u-bg' }, 'Pull in a Library source…'));
+    state.sources.forEach(s => srcSel.appendChild(el('option', { value: s.id, class: 'u-bg' }, `${sourceTypeIcon(s)} ${s.name}`)));
+    sourceRow = el('div', { style: 'display:flex;gap:8px;margin-bottom:10px' },
+      srcSel,
+      btn('Insert', 'ghost', { small: true, onclick: () => {
+        const src = state.sources.find(s => s.id === srcSel.value);
+        if (!src) { showToast('Choose a source first'); return; }
+        textarea.value = (textarea.value.trim() ? textarea.value.trim() + '\n\n' : '') + src.content;
+        srcSel.value = '';
+      } })
+    );
+  }
+
+  const countField = el('div', { class: 'field' }, el('label', {}, 'Approx. number of cards (optional)'),
+    el('input', { type: 'number', class: 'u-input', min: '1', max: '50', placeholder: 'let the model decide' }));
+  const instructionsField = createField('Extra instructions (optional)', 'text', 'e.g. exam-style questions, focus on definitions…');
+
+  // Output format toggle: plain-text "Card1 / Front: ... / Back: ..." vs
+  // LM Studio/llama.cpp `response_format: json_schema`. Persisted in settings.
+  const modeHint = el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5' });
+  function renderModeHint() {
+    if (mode === 'manual') {
+      modeHint.textContent = state.settings.aiJsonMode
+        ? '🧩 JSON Schema mode: the copied prompt includes the schema as text and asks the model to reply with only matching JSON. Works well with capable chat AIs (ChatGPT, Claude.ai, Gemini); if the reply won’t parse, switch to Text and try again.'
+        : '📄 Text mode: the copied prompt asks for a simple Card1 / Front: / Back: template, which is parsed back out of whatever you paste. The most reliable option for any chat AI.';
+    } else {
+      modeHint.textContent = state.settings.aiJsonMode
+        ? '🧩 JSON Schema mode: the request sends a response_format json_schema so the server itself constrains the model’s output. Requires a server that supports Structured Output (LM Studio’s Structured Output toggle, recent llama.cpp). If your server ignores or rejects it, switch back to Text.'
+        : '📄 Text mode: the model is asked to reply in a simple Card1 / Front: / Back: template, which is parsed back out. Works with virtually any local model.';
+    }
+  }
+  renderModeHint();
+  const modeField = el('div', { class: 'field' },
+    el('label', {}, 'Output format'),
+    el('div', { class: 'tab-bar', style: 'display:inline-flex' },
+      (function () {
+        const textBtn = el('button', { class: `tab-btn${state.settings.aiJsonMode ? '' : ' active'}`, onclick: () => {
+          state.settings.aiJsonMode = false; scheduleSave();
+          textBtn.classList.add('active'); jsonBtn.classList.remove('active');
+          renderModeHint();
+        } }, 'Text');
+        var jsonBtn;
+        jsonBtn = el('button', { class: `tab-btn${state.settings.aiJsonMode ? ' active' : ''}`, onclick: () => {
+          state.settings.aiJsonMode = true; scheduleSave();
+          jsonBtn.classList.add('active'); textBtn.classList.remove('active');
+          renderModeHint();
+        } }, 'JSON Schema');
+        return [textBtn, jsonBtn];
+      })()
+    ),
+    modeHint
+  );
+
+  // Fine-tuned model toggle: swaps generateCardsFromText()/buildManualPromptText()
+  // over to the compact fine-tuned prompt. OFF by default; persisted.
+  // NB: `checked` must be set as a property, not an attribute — el() would
+  // stringify false into a present checked attribute, which HTML reads as
+  // checked (the old Capture view had this bug).
+  const ftToggle = el('input', { type: 'checkbox', style: 'width:auto;flex-shrink:0' });
+  ftToggle.checked = !!state.settings.aiFineTuned;
+  const ftBadge = el('span', { style: `font-size:10px;font-weight:800;letter-spacing:0.03em;padding:2px 8px;border-radius:20px;background:rgba(var(--blue-rgb),0.15);color:var(--blue);display:${state.settings.aiFineTuned ? 'inline-block' : 'none'}` }, 'FINE-TUNED MODE');
+  ftToggle.onchange = () => {
+    state.settings.aiFineTuned = ftToggle.checked;
+    scheduleSave();
+    ftBadge.style.display = ftToggle.checked ? 'inline-block' : 'none';
+    modeField.style.display = ftToggle.checked ? 'none' : '';
+  };
+  const ftField = el('div', { class: 'field' },
+    el('label', { style: 'display:flex;align-items:center;gap:8px;cursor:pointer' },
+      ftToggle,
+      el('span', {}, 'Use fine-tuned flashcard model'),
+      ftBadge
+    ),
+    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5' },
+      'Sends a short, fixed prompt instead of the full instructions above, for a model fine-tuned specifically on this flashcard task.')
+  );
+
+  const errEl = el('div', { class: 'error-msg', style: 'display:none' });
+  const rawDetails = el('details', { style: 'display:none;margin-top:10px' },
+    el('summary', { style: 'font-size:11px;color:var(--muted);cursor:pointer' }, 'Show the model’s raw reply'),
+    el('pre', { style: 'white-space:pre-wrap;font-size:11px;color:var(--muted);margin-top:6px;max-height:200px;overflow:auto' })
+  );
+
+  const generatedSection = el('div', { style: 'display:none;margin-top:16px' });
+  let generatedCards = [], selectedIdxs = [];
+
+  function commitCards(toAdd) {
+    toAdd.forEach(cc => { addXP(calcCardXP({ ease: 2.5, lapses: 0 }, 3)); return cc; });
+    checkAchievements();
+    scheduleSave();
+  }
+
+  function renderGenerated() {
+    generatedSection.innerHTML = '';
+    if (!generatedCards.length) { generatedSection.style.display = 'none'; return; }
+    generatedSection.style.display = '';
+    const n = selectedIdxs.length;
+    const addLabel = dest === 'new'
+      ? `✨ Create Deck with ${n} Card${n === 1 ? '' : 's'}`
+      : `Add ${n} Card${n === 1 ? '' : 's'}`;
+    const selBar = el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px' },
+      el('div', { style: 'font-weight:800;font-size:13px' }, `✨ ${n}/${generatedCards.length} selected`),
+      el('div', { style: 'display:flex;gap:8px' },
+        btn('All', 'ghost', { small: true, onclick: () => { selectedIdxs = generatedCards.map((_, i) => i); renderGenerated(); } }),
+        btn('None', 'ghost', { small: true, onclick: () => { selectedIdxs = []; renderGenerated(); } }),
+        btn(addLabel, 'primary', { small: true, onclick: () => {
+          const toAdd = generatedCards.filter((_, i) => selectedIdxs.includes(i));
+          if (!toAdd.length) { showToast('Select at least one card'); return; }
+          if (dest === 'new') {
+            const name = newNameField.querySelector('input').value.trim();
+            if (!name) { showToast('Name the new deck first'); newNameField.querySelector('input').focus(); return; }
+            const deck = { id: uid('d'), name, emoji: '✨', image: null, subject: newSubjectSel.value,
+              folderId: null, color: 'var(--blue)', cards: toAdd.map(mkGeneratedCard) };
+            state.decks.push(deck);
+            commitCards(toAdd);
+            _lastAIGenerateDeckId = deck.id;
+            closeModal(); renderView('decks');
+            showToast(`"${name}" created with ${toAdd.length} card${toAdd.length === 1 ? '' : 's'} ✨`);
+          } else {
+            const deck = state.decks.find(d => d.id === deckSel.value);
+            if (!deck) { showToast('Select a deck first'); return; }
+            toAdd.forEach(cc => deck.cards.push(mkGeneratedCard(cc)));
+            commitCards(toAdd);
+            _lastAIGenerateDeckId = deck.id;
+            showToast(`Added ${toAdd.length} card${toAdd.length === 1 ? '' : 's'}! 🎉`);
+            generatedCards = generatedCards.filter((_, i) => !selectedIdxs.includes(i));
+            selectedIdxs = [];
+            renderGenerated();
+          }
+        } })
+      )
+    );
+    const grid = el('div', { class: 'grid-2' });
+    generatedCards.forEach((cc, i) => {
+      const sel = selectedIdxs.includes(i);
+      grid.appendChild(el('div', {
+        style: `padding:12px 14px;border-radius:10px;cursor:pointer;border:1px solid ${sel ? 'var(--blue)' : 'var(--border)'};background:${sel ? 'rgba(var(--blue-rgb),0.1)' : 'rgba(255,255,255,0.03)'}`,
+        onclick: () => { if (sel) selectedIdxs = selectedIdxs.filter(x => x !== i); else selectedIdxs.push(i); renderGenerated(); }
+      },
+        el('div', { style: 'font-weight:700;font-size:13px;margin-bottom:4px' }, cc.front),
+        (cc.answerCount || 1) > 1
+          ? el('div', { style: 'font-size:12px;color:var(--muted)' }, ...getCardAnswers(cc).map(a => el('div', {}, `• ${a}`)))
+          : el('div', { style: 'font-size:12px;color:var(--muted)' }, cc.back),
+        (cc.answerCount || 1) > 1 ? el('div', { style: 'font-size:11px;color:var(--blue);margin-top:2px' }, `📋 all ${cc.answerCount} required`) : null,
+        cc.hint ? el('div', { style: 'font-size:11px;color:var(--muted);font-style:italic;margin-top:4px' }, `💡 ${cc.hint}`) : null,
+        (cc.tags && cc.tags.length) ? el('div', { style: 'display:flex;gap:4px;flex-wrap:wrap;margin-top:6px' }, ...cc.tags.map(t => mkTag(t))) : null,
+        el('div', { style: `font-size:11px;margin-top:6px;color:${sel ? 'var(--blue)' : 'var(--muted)'}` }, sel ? '✓ Selected' : 'Tap to select')
+      ));
+    });
+    generatedSection.append(selBar, grid);
+  }
+
+  let genControls;
+  if (mode === 'api') {
+    const genBtn = btn('✨ Generate Cards', 'primary', { full: true, onclick: async () => {
+      const text = textarea.value.trim();
+      if (!text) { showToast('Paste some text first'); return; }
+      errEl.style.display = 'none'; rawDetails.style.display = 'none';
+      genBtn.disabled = true; const prevLabel = genBtn.textContent; genBtn.textContent = '⏳ Generating…';
+      try {
+        const count = Number(countField.querySelector('input').value) || null;
+        const instructions = instructionsField.querySelector('input').value.trim();
+        const { cards, raw } = await generateCardsFromText(text, { count, instructions });
+        if (!cards.length) {
+          errEl.textContent = 'The model replied, but no cards could be parsed out of it — try again, or simplify/shorten the source text.';
+          errEl.style.display = '';
+          rawDetails.querySelector('pre').textContent = raw;
+          rawDetails.style.display = '';
+        } else {
+          generatedCards = cards; selectedIdxs = cards.map((_, i) => i);
+          renderGenerated();
+          showToast(`Generated ${cards.length} card${cards.length === 1 ? '' : 's'} ✨`);
+        }
+      } catch (e) {
+        errEl.textContent = e.message || 'Generation failed.';
+        errEl.style.display = '';
+      } finally {
+        genBtn.disabled = false; genBtn.textContent = prevLabel;
+      }
+    } });
+    genControls = genBtn;
+  } else {
+    // Manual "Copy / Paste" mode: build the exact same prompt
+    // generateCardsFromText() would've sent, hand it to the user to paste
+    // into any chat-based AI, then parse the reply with parseManualAIReply()
+    // — same parser + post-processing as the API path.
+    const promptFallback = el('textarea', { readonly: true, rows: '6',
+      style: 'display:none;width:100%;margin-top:8px;padding:10px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--text);font-size:11px;font-family:monospace;resize:vertical;box-sizing:border-box' });
+
+    const copyBtn = btn('📋 Copy Prompt', 'primary', { full: true, onclick: async () => {
+      const text = textarea.value.trim();
+      if (!text) { showToast('Paste some text first'); return; }
+      const count = Number(countField.querySelector('input').value) || null;
+      const instructions = instructionsField.querySelector('input').value.trim();
+      const prompt = buildManualPromptText(text, { count, instructions });
+      const ok = await copyTextToClipboard(prompt);
+      if (ok) {
+        promptFallback.style.display = 'none';
+        showToast('Prompt copied — paste it into ChatGPT, Claude, Gemini, etc. ✨');
+      } else {
+        promptFallback.value = prompt;
+        promptFallback.style.display = '';
+        promptFallback.select();
+        showToast('Couldn’t copy automatically — select the text below and copy it manually');
+      }
+    } });
+
+    const pasteArea = el('textarea', { placeholder: 'Paste the chat AI’s reply here…', rows: '6',
+      style: 'width:100%;padding:12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--text);font-size:13px;resize:vertical;font-family:inherit;box-sizing:border-box;outline:none' });
+
+    const importInput = el('input', { type: 'file', accept: '.txt,.json,.md', style: 'display:none', onchange: async e => {
+      const file = e.target.files?.[0]; if (!file) return;
+      try {
+        const text = await file.text();
+        pasteArea.value = (pasteArea.value.trim() ? pasteArea.value.trim() + '\n\n' : '') + text;
+        showToast('File loaded — review below, then Generate Cards');
+      } catch (err) { showToast('Couldn’t read that file'); }
+      e.target.value = '';
+    } });
+    const importRow = el('div', { style: 'display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap' },
+      btn('📁 Import .txt / .json', 'ghost', { small: true, onclick: () => importInput.click() }),
+      importInput,
+      el('div', { style: 'font-size:11px;color:var(--muted)' }, 'or paste the reply above directly')
+    );
+
+    const parseBtn = btn('✨ Generate Cards from Reply', 'primary', { full: true, onclick: () => {
+      const raw = pasteArea.value.trim();
+      if (!raw) { showToast('Paste the AI’s reply first'); return; }
+      errEl.style.display = 'none'; rawDetails.style.display = 'none';
+      const { cards } = parseManualAIReply(raw);
+      if (!cards.length) {
+        errEl.textContent = 'No cards could be parsed out of that — make sure you pasted the model’s full reply, or try the other Output Format.';
+        errEl.style.display = '';
+        rawDetails.querySelector('pre').textContent = raw;
+        rawDetails.style.display = '';
+      } else {
+        generatedCards = cards; selectedIdxs = cards.map((_, i) => i);
+        renderGenerated();
+        showToast(`Generated ${cards.length} card${cards.length === 1 ? '' : 's'} ✨`);
+      }
+    } });
+
+    genControls = el('div', {},
+      copyBtn, promptFallback,
+      el('div', { style: 'font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-top:18px;margin-bottom:6px' }, 'Then paste the reply'),
+      pasteArea,
+      importRow,
+      el('div', { style: 'margin-top:12px' }, parseBtn)
+    );
+  }
+
+  modeField.style.display = state.settings.aiFineTuned ? 'none' : '';
+
+  wrap.append(destBar, newFields, existWrap);
+  if (sourceRow) wrap.append(sourceRow);
+  wrap.append(textarea,
+    el('div', { class: 'grid-2', style: 'margin-top:10px' }, countField, instructionsField),
+    ftField,
+    modeField,
+    genControls, errEl, rawDetails, generatedSection);
+}
+
 function openCreateDeckModal(subjectKey, folderId) {
   openModal('Create New Deck', body => {
     // Tab bar
@@ -1015,7 +1361,8 @@ function openCreateDeckModal(subjectKey, folderId) {
     const tabCreate = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:var(--blue);color:#fff',onclick:()=>switchDeckTab('create')},'+ New Deck');
     const tabImport = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('import')},'⬆ Import JSON');
     const tabText   = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('text')},'📄 Import Text');
-    tabBar.append(tabCreate, tabImport, tabText);
+    const tabAI     = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('ai')},'✨ AI Capture');
+    tabBar.append(tabCreate, tabImport, tabText, tabAI);
     body.appendChild(tabBar);
 
     // --- Community deck browser link ---
@@ -1347,17 +1694,26 @@ function openCreateDeckModal(subjectKey, folderId) {
     });
 
     textPane.append(txtDeckNameField, delimWrap, txtDropZone, pasteLabel, pasteArea, txtStatus, previewWrap, txtImportBtn);
-    body.append(createPane, importPane, textPane);
+
+    // --- AI Capture pane (built lazily on first tab visit) ---
+    const aiPane = el('div',{style:'display:none'});
+    let aiBuilt = false;
+
+    body.append(createPane, importPane, textPane, aiPane);
 
     function switchDeckTab(t) {
       const activeStyle='background:var(--blue);color:#fff';
       const inactiveStyle='background:rgba(255,255,255,0.06);color:var(--muted)';
-      tabCreate.style.cssText=`flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;${t==='create'?activeStyle:inactiveStyle}`;
-      tabImport.style.cssText=`flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;${t==='import'?activeStyle:inactiveStyle}`;
-      tabText.style.cssText  =`flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;${t==='text'?activeStyle:inactiveStyle}`;
+      const tabStyle='flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;';
+      tabCreate.style.cssText=tabStyle+(t==='create'?activeStyle:inactiveStyle);
+      tabImport.style.cssText=tabStyle+(t==='import'?activeStyle:inactiveStyle);
+      tabText.style.cssText  =tabStyle+(t==='text'  ?activeStyle:inactiveStyle);
+      tabAI.style.cssText    =tabStyle+(t==='ai'    ?activeStyle:inactiveStyle);
       createPane.style.display=t==='create'?'':'none';
       importPane.style.display=t==='import'?'':'none';
       textPane.style.display  =t==='text'  ?'':'none';
+      aiPane.style.display    =t==='ai'    ?'':'none';
+      if (t==='ai' && !aiBuilt) { aiBuilt=true; renderAICapture(aiPane); }
     }
   });
 }

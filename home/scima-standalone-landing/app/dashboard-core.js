@@ -32,10 +32,12 @@
 // developing a specific feature, not intended to run for every user forever.
 const DEBUG = false;
 
-// Six nav tabs = six pages. Capture is merged into the Decks page and
-// Quests into the Analytics page; both merged views stay reachable through
-// the in-page tab bar (renderPageTabs() / VIEW_TABS below) and via #capture /
-// #quests deep links. The Mark Tracker's six stub tabs were removed with the
+// Six nav tabs = six pages. Quests is merged into the Analytics page (the
+// merged view stays reachable through the in-page tab bar and #quests deep
+// links). The old Capture view was retired: its AI generation flow lives in
+// the Create Deck modal's ✨ AI Capture tab, and manual single-card entry
+// already existed in the deck detail's "+ Add Card" (Quick Add was a
+// duplicate of it). The Mark Tracker's six stub tabs were removed with the
 // tracker route — they only ever rendered "isn't in this build yet".
 // Order here is just the *fallback* — the effective order/visibility a user
 // sees comes from state.settings.navOrder / hiddenTabs (customizable in
@@ -51,11 +53,10 @@ const NAV_ITEMS = [
 const NAV_ITEMS_DEFAULT_ORDER = NAV_ITEMS.map(n => n.id);
 
 // Per-view icon/label for the in-page tab bar on merged pages
-// (Decks⇄Capture, Analytics⇄Quests).
+// (Analytics⇄Quests).
 const VIEW_TABS = {
   home:      { icon: '🏠', label: 'Home'      },
   decks:     { icon: '📚', label: 'Decks'     },
-  capture:   { icon: '⚡', label: 'Capture'   },
   study:     { icon: '🧠', label: 'Study'     },
   library:   { icon: '📖', label: 'Library'   },
   analytics: { icon: '📊', label: 'Analytics' },
@@ -73,7 +74,7 @@ const VIEW_TABS = {
 //   /study/      Decks + Study               (the flashcard core — the most
 //                                             jumped-between pair, so they
 //                                             switch in-page, no reload)
-//   /capture/    Capture + Library           (the sources → cards pipeline)
+//   /capture/    redirect stub → /decks/     (Capture view retired)
 //   /insights/   Analytics + Quests
 //   /settings/   Settings
 //   /tracker/    the six Mark Tracker views
@@ -94,7 +95,6 @@ const VIEW_TABS = {
 const VIEW_ROUTES = {
   home: '',
   decks: 'decks',
-  capture: 'decks',      // Capture merged into the Decks page
   study: 'study',
   library: 'library',
   analytics: 'analytics',
@@ -136,12 +136,12 @@ const state = {
     algorithm: 'fsrs', autoSuspend: true, leechThreshold: 8,
     tts: false, dyslexia: false, highContrast: false, notifications: true, powerSaving: false,
     defineLang: 'en', showPinyin: true, singleWordDefinition: true,
-    // Local LLM card generation (Capture → ✨ AI Generate) — talks to an OpenAI-
+    // Local LLM card generation (the ✨ AI Capture tab (Create Deck modal)) — talks to an OpenAI-
     // compatible chat-completions server running on the user's own machine (LM
     // Studio, Ollama's OpenAI-compat endpoint, llama.cpp server, etc.), never a
     // hosted API, so there's no key to store. 1234 is LM Studio's default port.
     aiEndpoint: 'http://127.0.0.1:1234', aiModel: '', aiJsonMode: false,
-    // Fine-tuned model mode (Capture → AI Generate → "Use fine-tuned
+    // Fine-tuned model mode (the ✨ AI Capture tab → "Use fine-tuned
     // flashcard model" toggle). OFF by default. When ON, generateCardsFromText()
     // swaps the normal system+user prompt for the compact FT_PROMPT_TEMPLATE
     // below and (optionally) a separate model id, instead of the long
@@ -370,7 +370,7 @@ async function defineTerm(term, targetLang, opts = {}) {
   return { kind: 'translation', back: translated, hint: `Translated from ${LANGS[sourceLang] || sourceLang}` };
 }
 
-// ── Local LLM card generation (Capture → ✨ AI Generate) ──────────────
+// ── Local LLM card generation (the ✨ AI Capture tab (Create Deck modal)) ──────────────
 // Talks to whatever OpenAI-chat-completions-compatible server is running on
 // the user's own machine (state.settings.aiEndpoint, default LM Studio's
 // http://127.0.0.1:1234 — see dashboard-core.js's `state` above and the
@@ -575,7 +575,7 @@ Aim for fewer, higher-quality cards rather than exhaustive extraction. Do **NOT*
 `;
 }
 
-// ── Fine-tuned mode (Capture → AI Generate → "Use fine-tuned flashcard
+// ── Fine-tuned mode (the ✨ AI Capture tab → "Use fine-tuned flashcard
 // model" toggle, state.settings.aiFineTuned) ──────────────────────────────
 // A QLoRA-style fine-tune has (in principle) already learned the flashcard
 // task, so instead of the long hand-written system prompts above, this mode
@@ -781,7 +781,7 @@ async function generateCardsFromText(sourceText, opts = {}) {
   return { cards, raw };
 }
 
-// ── "Copy / Paste" mode (Capture → ✨ AI Generate, mode toggle) ───────────
+// ── "Copy / Paste" mode (the ✨ AI Capture tab (Create Deck modal), mode toggle) ───────────
 // The API-mode helpers above talk to a local OpenAI-compatible server. This
 // is the alternative for people who don't run one: build the exact same
 // prompt as a single block of text, let the user copy it into whatever
@@ -1672,7 +1672,7 @@ function navigate(viewId) {
   state.view = viewId;
   closeNav(); // picking a destination folds the drawer away again
   // The nav tab for the page stays lit while any of its views shows
-  // (Capture keeps "Decks" lit, Quests keeps "Analytics" lit).
+  // (Quests keeps "Analytics" lit while it shows.)
   const route = routeOfView(viewId);
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', routeOfView(b.dataset.view) === route));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${viewId}`));
@@ -1685,9 +1685,9 @@ function navigate(viewId) {
 function routeOfView(viewId) {
   return viewId in VIEW_ROUTES ? VIEW_ROUTES[viewId] : viewId;
 }
-// In-page tab bar for pages hosting more than one view (Decks⇄Capture,
-// Analytics⇄Quests) — the UI face of "six tabs, six pages" while keeping the
-// merged views one tap away. Single-view pages render an empty bar.
+// In-page tab bar for pages hosting more than one view (Analytics⇄Quests)
+// — the UI face of "six tabs, six pages" while keeping merged views one tap
+// away. Single-view pages render an empty bar.
 function renderPageTabs() {
   const bar = document.getElementById('page-tabs');
   if (!bar) return;
@@ -1743,7 +1743,7 @@ function closeNav() {
 // the fn exists; where it doesn't, renderView() below redirects to the page
 // that hosts the view instead of throwing.
 function viewRenderer(id) {
-  const FC_RENDERERS = { home: 'renderHome', decks: 'renderDecks', study: 'renderStudy', capture: 'renderCapture',
+  const FC_RENDERERS = { home: 'renderHome', decks: 'renderDecks', study: 'renderStudy',
     library: 'renderLibrary', analytics: 'renderAnalytics', quests: 'renderQuests', settings: 'renderSettings' };
   return FC_RENDERERS[id] ? window[FC_RENDERERS[id]] : null;
 }
@@ -1887,6 +1887,7 @@ const PAGE_HELP = {
     'Inside a deck: click a card to select it, Shift+click to select a range, Ctrl/Cmd+click to toggle individual cards, or click-and-drag across empty space to rubber-band select several at once.',
     'With cards selected, use "Move to Deck…" to move them into an existing deck or a brand-new one.',
     'Each deck shows how many cards are "mature" (well-learned) out of the total.',
+    '✦ AI Capture lives inside "+ New Deck": the ✨ AI Capture tab generates cards from pasted text (local LLM server or any chat AI via Copy / Paste) straight into the new deck — or into an existing one via its destination toggle.',
   ]},
   study: { icon:'🧠', title:'Study', intro:'Pick a scope and a mode, then start a review session.', tips:[
     'Recents gives one-click access to scopes you\u2019ve studied before — "All Decks" is always pinned first. Click the 📌 on any recent to pin it too, so it stays put instead of aging out.',
@@ -1894,11 +1895,6 @@ const PAGE_HELP = {
     'Modes: SRS Review (due cards, spaced repetition), Cram (all cards, no scheduling), Written Quiz (type your answer), Fill in the Gaps, Weakness (cards you struggle with), and Multiple Choice (pick the right answer from 4, basic cards only). A green Show Hint button in the corner works in any mode — using it halves that card\'s XP.',
     'During a card: click it (or Reveal) to see the answer, use Hint or Skip, then rate how well you knew it — Again / Hard / Good / Easy — which schedules when you\u2019ll see it next.',
     'Toggle "Show card images during study" if your cards have images and you\u2019d rather hide them.',
-  ]},
-  capture: { icon:'✏️', title:'Quick Add', intro:'Manually create a single flashcard without leaving this page.', tips:[
-    'Choose which deck the card belongs to, then fill in Front and Back (both required).',
-    'Optionally attach images, a hint, comma-separated tags, and a citation linking back to a Library source.',
-    'The form clears itself after each save (keeping the same deck selected) so you can add cards back-to-back.',
   ]},
   library: { icon:'📖', title:'Library', intro:'Import book, PDF, EPUB, or article source texts so you can cite them from your flashcards.', tips:[
     '"+ Add Source" imports a file; "Import" brings in previously exported Library data.',

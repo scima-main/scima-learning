@@ -10,10 +10,11 @@
   <link rel="stylesheet" href="../app/dashboard.css">
   <link rel="stylesheet" href="../lib/katex/katex.min.css">
   <!--
-    SCIMA Learning — Decks page: Decks + Capture (six-page build; see the
-    landing index.html header). Capture (Quick Add + AI Generate) merged in:
-    cards are authored where the decks live, and the tab bar / #capture
-    switch between the two views in-page. Manifest notes: KaTeX + mhchem
+    SCIMA Learning — Decks (six-page build; see the landing index.html
+    header). Single view: the old Capture view is retired — its AI
+    generation flow is the ✨ AI Capture tab of this page's "+ New Deck"
+    modal (renderAICapture in dashboard-decks.js), and manual single-card
+    entry is the deck detail's "+ Add Card". Manifest notes: KaTeX + mhchem
     render LaTeX in card previews/edits; dashboard-home.js is loaded for the
     `dragData` binding the drag-and-drop reorganization shares with it;
     dashboard-library.js is NOT needed — sourceTypeIcon() lives in
@@ -51,7 +52,6 @@
     <main id="main">
       <div id="page-tabs"></div>
       <div id="view-decks"     class="view"></div>
-      <div id="view-capture"   class="view"></div>
     </main>
   </div>
 
@@ -84,7 +84,7 @@
   <!-- Page identity for the multi-page router (app/dashboard-core.js
        reads this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is
        the relative path from this page back to the landing folder. -->
-  <script>window.SCIMA_PAGE = { id: 'decks', root: '../', views: ['decks', 'capture'] };</script>
+  <script>window.SCIMA_PAGE = { id: 'decks', root: '../', views: ['decks'] };</script>
   <script src="../lib/katex/katex.min.js"></script>
   <script src="../lib/katex/mhchem.min.js"></script>
   <script src="../shared/theme.js"></script>
@@ -96,7 +96,6 @@
   <script src="../app/dashboard-blobstore.js"></script>
   <script src="../app/dashboard-home.js"></script>
   <script src="../app/dashboard-decks.js"></script>
-  <script src="../app/dashboard-capture.js"></script>
   <script src="../app/dashboard-analytics.js"></script>
   <script src="../app/dashboard-onboarding.js"></script>
   <script src="../app/dashboard-bootstrap.js"></script>

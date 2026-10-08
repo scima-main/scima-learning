@@ -92,8 +92,6 @@ async function init() {
         if (mem.studyRefine) state.studyRefine = mem.studyRefine;
         if (mem.deckNav)     state.deckNav = mem.deckNav;
         if (mem.studySession && typeof studySession !== 'undefined' && !studySession) studySession = mem.studySession;
-        if (mem.lastQuickAddDeckId != null && typeof _lastQuickAddDeckId !== 'undefined') _lastQuickAddDeckId = mem.lastQuickAddDeckId;
-        if (mem.lastAIGenerateDeckId != null && typeof _lastAIGenerateDeckId !== 'undefined') _lastAIGenerateDeckId = mem.lastAIGenerateDeckId;
         if (mem.lastQuestsTab && typeof _lastQuestsTab !== 'undefined') _lastQuestsTab = mem.lastQuestsTab;
       }
     } catch (e) { console.warn('[SCIMA] page-memory restore failed — opening with defaults:', e); }
@@ -267,10 +265,6 @@ if (!isExtension && window.SCIMA_PAGE) {
         if (typeof studySession !== 'undefined' && studySession && studySession.active) mem.studySession = studySession;
       }
       if (PAGE_VIEWS.includes('decks')) mem.deckNav = state.deckNav;
-      if (PAGE_VIEWS.includes('capture')) {
-        if (typeof _lastQuickAddDeckId !== 'undefined') mem.lastQuickAddDeckId = _lastQuickAddDeckId;
-        if (typeof _lastAIGenerateDeckId !== 'undefined') mem.lastAIGenerateDeckId = _lastAIGenerateDeckId;
-      }
       if (PAGE_VIEWS.includes('quests') && typeof _lastQuestsTab !== 'undefined') mem.lastQuestsTab = _lastQuestsTab;
       const key = `scima_pagemem_${CURRENT_PAGE}`;
       try { sessionStorage.setItem(key, JSON.stringify(mem)); }

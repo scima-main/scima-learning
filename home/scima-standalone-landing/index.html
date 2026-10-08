@@ -23,7 +23,9 @@
     opacity-only; .power-saving and prefers-reduced-motion disable motion.
 
       /             Home                       (this page — lightest slice)
-      /decks/       Decks + Capture            + KaTeX/mhchem card previews
+      /decks/       Decks                      + KaTeX/mhchem card previews;
+                                               ✨ AI Capture lives in the
+                                               "+ New Deck" modal
       /study/       Study                      + KaTeX/mhchem card faces
       /library/     Library                    + fflate, EPUB/MOBI parsers,
                                                process-shim
@@ -32,7 +34,8 @@
       /settings/    Settings                   + fflate (Export/Import zip)
 
     Static redirect stubs keep old URLs working under both mount families:
-    /capture/ → /decks/#capture, /insights/ → /analytics/, /tracker/ → /.
+    /capture/ → /decks/ (view retired), /insights/ → /analytics/,
+    /tracker/ → /.
 
     The backend serves the landing folder both at the domain root (canonical,
     backend/app/main.py's "/" mount) and at /dashboard/ (legacy mount — kept

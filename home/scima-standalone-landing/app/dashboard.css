@@ -316,6 +316,12 @@ body.nav-open .nav-drawer-toggle span:not(.nav-drawer-chevron) {
 #modal-title { font-weight: 800; font-size: 16px; }
 #modal-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 22px; line-height: 1; padding: 0; }
 #modal-body  { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+/* Children must keep their natural height when the content overflows: as
+   column flex items they'd otherwise be flex-shrunk to fit, and any child
+   with overflow:hidden (e.g. the Create Deck modal's tab bar) has an
+   automatic minimum size of 0 — it collapses to a sliver instead of letting
+   the body scroll. */
+#modal-body > * { flex-shrink: 0; }
 
 /* Custom color picker (replaces native <input type=color> so we control position) */
 .cp-trigger { border-radius: 8px; border: 2px solid rgba(255,255,255,0.15); cursor: pointer; flex-shrink: 0; transition: transform 0.15s; }
