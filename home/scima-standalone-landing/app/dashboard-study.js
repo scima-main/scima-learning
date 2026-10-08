@@ -175,7 +175,7 @@ function renderStudyPicker(c) {
     }
   }
   if(refine.mode!=='all') refineRow.append(btn('✕ Clear','ghost',{small:true,onclick:()=>{ refine.mode='all'; scheduleSave(); renderView('study'); }}));
-  refineRow.append(el('span',{style:'font-size:11px;color:var(--muted);margin-left:auto'}, refine.mode==='all' ? `${scopedCards.length} cards` : `${refinedCards.length} of ${scopedCards.length} cards selected`));
+  refineRow.append(el('span',{style:'font-size:11px;color:var(--muted);margin-left:auto'}, refine.mode==='all' ? nOf(scopedCards.length,'card') : `${refinedCards.length} of ${nOf(scopedCards.length,'card')} selected`));
 
   if(state.settings.showStudyImages===undefined)state.settings.showStudyImages=true;
   const hasImages=refinedCards.some(c=>c.frontImage||c.backImage);
@@ -373,7 +373,7 @@ function openStudyScopeExplorer() {
         const tile=el('div',{class:'card'+(isChecked({type:'deck',id:d.id})?' explorer-selected':''),style:'padding:16px;cursor:pointer'},
           el('div',{style:'display:flex;align-items:center;gap:10px'},
             checkbox({type:'deck',id:d.id}), mkIcon(d.emoji,d.image,'26px','6px'),
-            el('div',{style:'flex:1;min-width:0'},el('div',{style:'font-weight:800;font-size:13px'},d.name),el('div',{class:'u-muted-11'},`${d.cards.length} cards${due>0?` · ${due} due`:''}`))
+            el('div',{style:'flex:1;min-width:0'},el('div',{style:'font-weight:800;font-size:13px'},d.name),el('div',{class:'u-muted-11'},`${nOf(d.cards.length,'card')}${due>0?` · ${due} due`:''}`))
           )
         );
         tile.addEventListener('click',e=>{ if(e.target.closest('.scope-checkbox')) return; toggle({type:'deck',id:d.id}); });
@@ -413,7 +413,7 @@ function openStudyScopeExplorer() {
           el('div',{class:'subject-tile-accent',style:`background:${s.defaultColor}`}),
           el('div',{class:'subject-tile-name',style:`color:${s.defaultColor}`},s.name),
           el('div',{class:'subject-tile-meta'},s.board),
-          el('div',{class:'subject-tile-counts'}, mkTag(`${subjectDecks.length} decks`,s.defaultColor), subjectFolders.length?mkTag(`${subjectFolders.length} folders`,'#A78BFA'):null, due>0?mkTag(`${due} due`,'var(--pink)'):null)
+          el('div',{class:'subject-tile-counts'}, mkTag(nOf(subjectDecks.length,'deck'),s.defaultColor), subjectFolders.length?mkTag(nOf(subjectFolders.length,'folder'),'#A78BFA'):null, due>0?mkTag(`${due} due`,'var(--pink)'):null)
         );
         tile.addEventListener('click',e=>{ if(e.target.closest('.scope-checkbox')) return; nav={view:'subject',subjectKey:sk}; renderBody(); });
         grid.appendChild(tile);
@@ -440,7 +440,7 @@ function openStudyScopeExplorer() {
     const scopes=[...selection.values()];
     const cardCount = getScopeSetCards(scopes.length?scopes:[{type:'all',id:null}]).length;
     footer.append(
-      el('div',{style:'font-size:12px;font-weight:700;color:var(--muted)'}, scopes.length ? `${scopes.length} selected · ${cardCount} cards` : `Nothing selected — defaults to All Decks (${cardCount} cards)`),
+      el('div',{style:'font-size:12px;font-weight:700;color:var(--muted)'}, scopes.length ? `${scopes.length} selected · ${nOf(cardCount,'card')}` : `Nothing selected — defaults to All Decks (${nOf(cardCount,'card')})`),
       el('div',{style:'margin-left:auto;display:flex;gap:8px'},
         btn('Clear','ghost',{small:true,onclick:()=>{ selection.clear(); refreshAll(); }}),
         btn('Cancel','ghost',{onclick:closeOverlay}),

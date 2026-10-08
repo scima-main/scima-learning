@@ -101,8 +101,8 @@ function renderDecksHome(c) {
       el('div',{class:'subject-tile-name',style:`color:${s.defaultColor}`},s.name),
       el('div',{class:'subject-tile-meta'},s.board),
       el('div',{class:'subject-tile-counts'},
-        mkTag(`${subjectDecks.length} decks`,s.defaultColor),
-        subjectFolders.length ? mkTag(`${subjectFolders.length} folders`,'#A78BFA') : null,
+        mkTag(nOf(subjectDecks.length,'deck'),s.defaultColor),
+        subjectFolders.length ? mkTag(nOf(subjectFolders.length,'folder'),'#A78BFA') : null,
         due>0 ? mkTag(`${due} due`,'var(--pink)') : null
       )
     ));
@@ -124,7 +124,7 @@ function renderSubjectView(c, subjectKey) {
   const topBar = el('div',{style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px'},
     el('div',{},
       el('div',{style:`font-weight:900;font-size:20px;color:${s.defaultColor}`},s.name),
-      el('div',{class:'u-muted-12'},`${allDecks.length} decks total`)
+      el('div',{class:'u-muted-12'},`${nOf(allDecks.length,'deck')} total`)
     ),
     el('div',{style:'display:flex;gap:8px'},
       btn('+ New Folder','ghost',{onclick:()=>openCreateFolderModal(subjectKey,null)}),
@@ -203,7 +203,7 @@ function renderFolderView(c, folderId) {
   const subFolders = state.folders.filter(f=>f.parentId===folderId);
   const folderDecks = state.decks.filter(d=>d.folderId===folderId);
   const topBar = el('div',{style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px'},
-    el('div',{},el('div',{style:'font-size:22px;font-weight:900'},`📁 ${folder.name}`),el('div',{class:'u-muted-12'},`${folderDecks.length} decks`)),
+    el('div',{},el('div',{style:'font-size:22px;font-weight:900'},`📁 ${folder.name}`),el('div',{class:'u-muted-12'},`${nOf(folderDecks.length,'deck')}`)),
     el('div',{style:'display:flex;gap:8px'},
       btn('+ Subfolder','ghost',{onclick:()=>openCreateFolderModal(folder.subjectKey,folderId)}),
       btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal(folder.subjectKey,folderId)}),
@@ -278,7 +278,7 @@ function renderDeckCard(deck, grid) {
       )
     ),
     el('div',{class:'deck-name'},deck.name),
-    el('div',{class:'deck-meta'},`${deck.cards.length} cards`),
+    el('div',{class:'deck-meta'},`${nOf(deck.cards.length,'card')}`),
     el('div',{class:'deck-tags'},
       mkTag(getAllSubjects()[sk]?.short||sk,getAllSubjects()[sk]?.defaultColor||'#888'),
       mkTag(`${mult.toFixed(2)}× XP`,mult>=1.5?'var(--pink)':'#22c55e'),
@@ -871,7 +871,7 @@ ${pagesHtml}
     printTab.document.open();
     printTab.document.write(html);
     printTab.document.close();
-    showToast(`Print preview ready — ${cards.length} cards, ${totalSheets} sheet${totalSheets!==1?'s':''} \uD83D\uDDA8\uFE0F`);
+    showToast(`Print preview ready — ${nOf(cards.length,'card')}, ${totalSheets} sheet${totalSheets!==1?'s':''} \uD83D\uDDA8\uFE0F`);
   } else {
     showToast('Popup blocked — allow popups for this page in Chrome', 5000);
   }
@@ -977,7 +977,7 @@ function openCreateFolderModal(subjectKey, parentId) {
         });
       });
       scheduleSave(); checkAchievements(); closeModal(); renderView('decks');
-      showToast(`Folder "${d.folder.name}" imported — ${d.decks?.length||0} decks ✓`);
+      showToast(`Folder "${d.folder.name}" imported — ${nOf(d.decks?.length||0,'deck')} ✓`);
     });
     body.append(createPane, importPane);
 
@@ -1449,7 +1449,7 @@ function openCreateDeckModal(subjectKey, folderId) {
         }))
       });
       scheduleSave(); checkAchievements(); closeModal(); renderView('decks');
-      showToast(`"${d.deck.name}" imported — ${d.deck.cards?.length||0} cards ✓`);
+      showToast(`"${d.deck.name}" imported — ${nOf(d.deck.cards?.length||0,'card')} ✓`);
     });
 
 
@@ -1690,7 +1690,7 @@ function openCreateDeckModal(subjectKey, folderId) {
       };
       state.decks.push(newDeck);
       scheduleSave(); checkAchievements(); closeModal(); renderView('decks');
-      showToast(`"${name}" imported — ${parsedTextCards.length} cards 📄`);
+      showToast(`"${name}" imported — ${nOf(parsedTextCards.length,'card')} 📄`);
     });
 
     textPane.append(txtDeckNameField, delimWrap, txtDropZone, pasteLabel, pasteArea, txtStatus, previewWrap, txtImportBtn);
@@ -1749,7 +1749,7 @@ function openDeckDetail(deckId) {
     el('div',{style:'display:flex;align-items:center;gap:12px;margin-bottom:20px'},
       btn('← Back','ghost',{small:true,onclick:()=>renderView('decks')}),
       mkIcon(deck.emoji,deck.image,'36px','8px'),
-      el('div',{},el('div',{style:'font-weight:900;font-size:18px'},deck.name),el('div',{class:'u-muted-12'},`${deck.cards.length} cards`)),
+      el('div',{},el('div',{style:'font-weight:900;font-size:18px'},deck.name),el('div',{class:'u-muted-12'},`${nOf(deck.cards.length,'card')}`)),
       el('div',{style:'margin-left:auto;display:flex;gap:8px;align-items:center'},pinToggleBtn,searchInput,(()=>{ const b=btn('+ Add Card','primary',{onclick:()=>openCardModal(deckId,null)}); b.id='tutorial-target-add-card'; return b; })())
     )
   );
@@ -3379,7 +3379,7 @@ function openCitationPicker(onSelect) {
     state.sources.forEach(src => {
       body.appendChild(el('div',{class:'source-item card',style:'margin-bottom:8px;cursor:pointer',onclick:()=>openCitationRangeModal(src,onSelect)},
         el('div',{class:'source-icon'},sourceTypeIcon(src)),
-        el('div',{},el('div',{class:'source-name'},src.name),el('div',{class:'source-meta'},`${src.content.length.toLocaleString()} chars · ${src.chapters?.length||0} chapters`))
+        el('div',{},el('div',{class:'source-name'},src.name),el('div',{class:'source-meta'},`${nOf(src.content.length,'char')} · ${nOf(src.chapters?.length||0,'chapter')}`))
       ));
     });
   });

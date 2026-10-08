@@ -47,7 +47,7 @@ function renderHome(c) {
         el('button',{class:`btn btn-ghost btn-sm pin-toggle${deck.pinned?' pinned':''}`,'data-deck':deck.id,title:deck.pinned?'Unpin from sidebar':'Pin to sidebar',onclick:e=>{e.stopPropagation();togglePinDeck(deck.id);}},'📌')
       ),
       el('div',{class:'deck-name'},deck.name),
-      el('div',{class:'deck-meta'},`${deck.cards.length} cards${folder?' · '+folder.name:''}`),
+      el('div',{class:'deck-meta'},`${nOf(deck.cards.length,'card')}${folder?' · '+folder.name:''}`),
       el('div',{class:'deck-tags'},
         mkTag(getAllSubjects()[sk]?.short||sk, getAllSubjects()[sk]?.defaultColor||'#888'),
         mkTag(`${mult.toFixed(2)}× XP`, mult>=1.5?'var(--pink)':'#22c55e'),
@@ -71,7 +71,7 @@ function renderHome(c) {
     el('div',{style:'margin-bottom:28px'},
       el('div',{style:'font-size:13px;color:var(--muted);margin-bottom:4px'},'Good day, Scholar 👋'),
       el('h1',{style:'font-size:28px;font-weight:900;letter-spacing:-0.03em;line-height:1.1;margin-bottom:8px'},'Ready to forge some ',gradText('memories'),'?'),
-      el('p',{style:'font-size:14px;color:var(--muted)'},'You have ',el('span',{style:'color:var(--pink);font-weight:700'},`${due} cards due`),` across ${state.decks.length} deck${state.decks.length!==1?'s':''}`)
+      el('p',{style:'font-size:14px;color:var(--muted)'},'You have ',el('span',{style:'color:var(--pink);font-weight:700'},`${nOf(due,'card')} due`),` across ${state.decks.length} deck${state.decks.length!==1?'s':''}`)
     ),
     statsGrid,
     goalCard,

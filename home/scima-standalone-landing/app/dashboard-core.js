@@ -323,6 +323,13 @@ async function blobUrlsToDataUrls(html) {
   }));
   return html.replace(blobRe, m => map[m] || m);
 }
+/** Count + noun with correct pluralisation, locale-formatted:
+    nOf(1,'card') → "1 card", nOf(1200,'card') → "1,200 cards";
+    irregulars via third arg: nOf(2,'entry','entries'). */
+function nOf(count, singular, plural) {
+  const n = Number(count) || 0;
+  return `${n.toLocaleString()} ${n === 1 ? singular : (plural || singular + 's')}`;
+}
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // LANGS / translateText / fetchPinyin now live in translate-shared.js, loaded via

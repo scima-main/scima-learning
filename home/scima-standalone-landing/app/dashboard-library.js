@@ -418,7 +418,7 @@ function renderLibrary(c) {
         el('div',{style:'flex:1;min-width:0'},
           el('div',{class:'source-name',style:'display:flex;align-items:center;flex-wrap:wrap;gap:2px'},src.name, subjBadge),
           el('div',{class:'source-meta',style:'display:flex;align-items:center;flex-wrap:wrap'},
-            `${src.content.length.toLocaleString()} chars \u00b7 ${src.chapters?.length||0} chapter${(src.chapters?.length||0)!==1?'s':''} \u00b7 ${cited} card${cited!==1?'s':''} cited`,
+            `${nOf(src.content.length,'char')} \u00b7 ${src.chapters?.length||0} chapter${(src.chapters?.length||0)!==1?'s':''} \u00b7 ${cited} card${cited!==1?'s':''} cited`,
             readingTimeLabel
           )
         ),
@@ -779,7 +779,7 @@ function openAddSourceModal(defaultFolderId) {
                 const u8=new Uint8Array(buf2);let b64='';const BCHUNK=8192;for(let _i=0;_i<u8.length;_i+=BCHUNK)b64+=String.fromCharCode(...u8.subarray(_i,_i+BCHUNK));b64=btoa(b64);
                 zone._pdfDataUrl='data:application/pdf;base64,'+b64;
               }
-              statusEl.textContent=`✓ Extracted ${content.length.toLocaleString()} characters${chapters.length?` · ${chapters.length} chapter${chapters.length!==1?'s':''} found`:''}`; statusEl.className='success-badge'; statusEl.style.display='';
+              statusEl.textContent=`✓ Extracted ${nOf(content.length,'character')}${chapters.length?` · ${chapters.length} chapter${chapters.length!==1?'s':''} found`:''}`; statusEl.className='success-badge'; statusEl.style.display='';
             }catch(err){ statusEl.style.display='none'; errEl.textContent='Could not read file: '+(err?.message||String(err)); errEl.style.display=''; }
           }}),
           el('div',{style:'font-size:36px'},'📂'),el('div',{class:'pdf-zone-name',style:'font-size:13px;font-weight:700'},'Click to choose file'),
@@ -1571,7 +1571,7 @@ function openLibraryReader(sourceId) {
       el('span',{style:'font-size:18px'},sourceTypeIcon(source)),
       el('div',{style:'min-width:0'},
         el('div',{style:'font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'},source.name),
-        el('div',{style:'font-size:11px;color:var(--muted);margin-top:1px'},`${source.content.length.toLocaleString()} chars · ${IS_PDF?'Select text on the right to create flashcards':'Select text to create flashcards'}`)
+        el('div',{style:'font-size:11px;color:var(--muted);margin-top:1px'},`${nOf(source.content.length,'char')} · ${IS_PDF?'Select text on the right to create flashcards':'Select text to create flashcards'}`)
       )
     ),
     el('div',{style:'display:flex;align-items:center;gap:6px;flex-shrink:0'},
@@ -1762,7 +1762,7 @@ function openLibraryReader(sourceId) {
           el('button', {
             style: 'padding:8px 20px;border-radius:8px;background:rgba(255,255,255,0.07);border:1px solid var(--border);color:var(--text);cursor:pointer;font-size:12px',
             onclick: () => appendTextChunk()
-          }, `Load more (${remaining.toLocaleString()} chars remaining)`)
+          }, `Load more (${nOf(remaining,'char')} remaining)`)
         );
         wrapper.appendChild(loadMore);
       }

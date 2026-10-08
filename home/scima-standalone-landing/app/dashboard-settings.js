@@ -125,7 +125,7 @@ function renderSettings(c) {
 
   const dataCard=el('div',{class:'card',style:'padding:20px;margin-top:16px'},
     el('div',{style:'font-weight:800;margin-bottom:6px'},'💾 Data Management'),
-    el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:14px'},`${state.decks.length} decks · ${state.decks.flatMap(d=>d.cards).length} cards · ${state.sources.length} sources · ${state.folders.length} folders`)
+    el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:14px'},`${nOf(state.decks.length,'deck')} · ${nOf(state.decks.flatMap(d=>d.cards).length,'card')} · ${nOf(state.sources.length,'source')} · ${nOf(state.folders.length,'folder')}`)
   );
   const btnRow=el('div',{style:'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px'});
 
