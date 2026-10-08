@@ -10,7 +10,7 @@ from typing import Optional, Sequence
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import db, ratelimit
@@ -789,3 +789,25 @@ app.mount(
     StaticFiles(directory=STUDY_LANDING_DIR, html=True),
     name="site",
 )
+
+
+# ── Fallback: unrecognized paths go Home ─────────────────────────────
+# Anything no route and no static mount recognizes sends a browser back to
+# Home ("/#home" — the hash selects the view; the /dashboard/ family stays
+# inside its own family). Two deliberate exceptions keep 404s honest:
+#   * /api/* stays a JSON 404 — API clients parse it;
+#   * requests whose last path segment has a dot look like assets
+#     (.js/.css/.woff2/…), and a redirect would put an HTML body inside a
+#     <script> or <link> tag — a far more confusing failure than a 404.
+# Registered as an int-keyed handler so only 404s are intercepted; every
+# other HTTPException keeps Starlette's default rendering.
+@app.exception_handler(404)
+async def redirect_unknown_to_home(request: Request, exc: HTTPException):
+    path = request.url.path
+    if path.startswith("/api/"):
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    last = path.rstrip("/").rsplit("/", 1)[-1]
+    if "." in last:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    family = "/dashboard" if path.startswith("/dashboard/") else ""
+    return RedirectResponse(f"{family}/#home", status_code=302)
