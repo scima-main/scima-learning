@@ -74,9 +74,11 @@ body::after {
 #stripe { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 999;
   background: linear-gradient(90deg, var(--blue) 20%, var(--pink) 42%, #FFF 50%, var(--pink) 58%, var(--blue) 80%); }
 
-/* Page-help button — stays fixed in the top-left of the content area (clear of the
-   sidebar) across every view, since #main scrolls internally rather than the body. */
-#info-btn { position: fixed; top: 14px; left: 58px; z-index: 950;
+/* Page-help button — stacked UNDER the ≡ mark in the top-left gutter, so the
+   whole top row stays free for the sticky page-switcher float. Content
+   clearance for the two-button column comes from the
+   `#page-tabs:empty ~ .view` rule below. */
+#info-btn { position: fixed; top: 58px; left: 17px; z-index: 950;
   width: 30px; height: 30px; border-radius: 50%;
   background: var(--surface); border: 1px solid var(--border); color: var(--blue);
   font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-weight: 700; font-size: 15px;
@@ -105,6 +107,10 @@ body::after {
 #page-tabs { padding: 56px 60px 0; }
 #page-tabs:empty { display: none; }
 #page-tabs:not(:empty) ~ .view { padding-top: 20px; }
+/* Single-view pages have no tray, so the view itself must clear the stacked
+   ≡ / ⓘ button column (14 + 36 + 8 + 30 + 16 ≈ 104). Pages with a tray get
+   their clearance from the tray instead. */
+#page-tabs:empty ~ .view { padding-top: 104px; }
 #page-tabs .tab-bar { width: auto; margin-bottom: 0; }
 .page-tab-icon { font-size: 13px; line-height: 1; }
 
@@ -115,7 +121,7 @@ body::after {
    is what sells "floating over the scroll" instead of "part of the page".
    z-index 900: above content, below the nav backdrop (1040) and modals
    (1100), so an open drawer or dialog dims/covers it like everything else. */
-#page-tabs-float { position: fixed; top: 58px; left: 60px; right: 60px; z-index: 900;
+#page-tabs-float { position: fixed; top: 14px; left: 60px; right: 60px; z-index: 900;
   opacity: 0; visibility: hidden; transform: translateY(-8px);
   transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s; }
 #page-tabs-float.show { opacity: 1; visibility: visible; transform: none;
