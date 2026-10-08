@@ -220,13 +220,18 @@ body.nav-open .nav-drawer-toggle span:not(.nav-drawer-chevron) {
 /* Small circular ⓘ used for contextual explainers: study-mode cards, the
    Study picker header, Settings → SRS Algorithm. Same visual family as the
    page-level ⓘ button, sized down. */
-.help-btn { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border);
+/* Both selectors carry the full theme so EVERY generation of these buttons
+   renders correctly against EVERY generation of this stylesheet: early JS
+   emitted class="mode-help-btn" only (no inline styles), current JS emits
+   "help-btn mode-help-btn" plus inline visuals — with the visuals here too,
+   no JS/CSS combination can fall back to the browser-default button. */
+.help-btn, .mode-help-btn { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border);
   background: var(--surface); color: var(--blue);
   font-family: Georgia, 'Times New Roman', serif; font-style: italic;
   font-weight: 700; font-size: 12px; line-height: 1; display: inline-flex; align-items: center;
   justify-content: center; cursor: pointer; opacity: 0.75; flex-shrink: 0;
   transition: opacity 0.15s, transform 0.15s, box-shadow 0.15s; }
-.help-btn:hover { opacity: 1; transform: scale(1.1); box-shadow: 0 4px 12px rgba(0,0,0,0.35); }
+.help-btn:hover, .mode-help-btn:hover { opacity: 1; transform: scale(1.1); box-shadow: 0 4px 12px rgba(0,0,0,0.35); }
 /* …pinned to a mode card's corner: */
 .mode-help-btn { position: absolute; top: 10px; right: 10px; }
 
