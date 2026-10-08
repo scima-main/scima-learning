@@ -756,7 +756,7 @@ def create_deck(
 # /home/scima/scima-learning, a dev laptop…) and the mounts follow it.
 # main.py sits at <repo>/backend/app/main.py, so parents[2] is <repo>.
 REPO_ROOT = Path(__file__).resolve().parents[2]
-STUDY_LANDING_DIR = REPO_ROOT / "home" / "scima-standalone-landing"
+STUDY_LANDING_DIR = REPO_ROOT / "home"
 
 # Legacy URL family (/dashboard/…). Kept because existing bookmarks use it
 # and the community page loads /dashboard/shared/theme.js root-absolute.

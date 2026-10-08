@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SCIMA Learning</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../app/dashboard.css">
+  <!--
+    SCIMA Learning — About (six… seven-page build; see the landing
+    index.html header). Renders the landing folder's ABOUT.md under the
+    standard view header: app/dashboard-about.js fetches the file relative
+    to the page (SCIMA_PAGE.root + document.baseURI, so both URL families
+    work) and renders an escape-first markdown subset (headings, lists,
+    quotes, fences, inline code/bold/italics, links, rules) with the
+    .md-body typography. Lightest route after Home: no KaTeX, no parsers,
+    no decks module.
+  -->
+</head>
+<body>
+  <div id="stripe"></div>
+  <button id="logo-icon" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="sidebar" title="Menu">≡</button>
+  <button id="info-btn" title="About this page" aria-label="Page help">i</button>
+  <div id="nav-backdrop"></div>
+  <aside id="sidebar" aria-hidden="true" tabindex="-1">
+    <div id="sidebar-header">
+      <div id="logo">
+        <div>
+          <div id="logo-name">SCIMA Learning</div>
+          <div id="logo-sub">Adaptive Learning</div>
+        </div>
+      </div>
+      <div id="xp-bar-wrap">
+        <span id="xp-level">Lv.1</span>
+        <div id="xp-track"><div id="xp-fill"></div></div>
+        <span id="xp-label">0/500</span>
+      </div>
+    </div>
+    <div id="pinned-decks"></div>
+    <nav id="nav"></nav>
+    <div id="sidebar-footer">
+      <div id="footer-stats"></div>
+    </div>
+  </aside>
+  <div id="app">
+    <main id="main">
+      <div id="page-tabs"></div>
+      <div id="page-tabs-float" aria-hidden="true"></div>
+      <div id="view-about"     class="view"></div>
+    </main>
+  </div>
+
+  <div id="modal-backdrop" class="hidden">
+    <div id="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
+      <div id="modal-header">
+        <span id="modal-title"></span>
+        <button id="modal-close" aria-label="Close dialog">×</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="cmd-backdrop" class="hidden">
+    <div id="cmd-box" role="dialog" aria-modal="true" aria-label="Command palette" tabindex="-1">
+      <div id="cmd-input-row">
+        <span class="cmd-icon">⌘</span>
+        <input id="cmd-input" placeholder="Quick action… (Esc to close)" aria-label="Search commands" role="combobox" aria-expanded="true" aria-controls="cmd-list" autocomplete="off">
+        <span class="cmd-esc">ESC</span>
+      </div>
+      <div id="cmd-list" role="listbox" aria-label="Commands"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div id="cmd-hint">
+    <span class="cmd-key">⌘K</span> Command Palette
+  </div>
+
+  <!-- Page identity for the multi-page router (app/dashboard-core.js
+       reads this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is
+       the relative path from this page back to the landing folder. -->
+  <script>window.SCIMA_PAGE = { id: 'about', root: '../', views: ['about'] };</script>
+  <script src="../shared/theme.js"></script>
+  <script src="../shared/shared.js"></script>
+  <script src="../shared/srs-core.js"></script>
+  <script src="../shared/srs.js"></script>
+  <script src="../shared/translate-shared.js"></script>
+  <script src="../app/dashboard-core.js"></script>
+  <script src="../app/dashboard-analytics.js"></script>
+  <script src="../app/dashboard-onboarding.js"></script>
+  <script src="../app/dashboard-about.js"></script>
+  <script src="../app/dashboard-bootstrap.js"></script>
+</body>
+</html>

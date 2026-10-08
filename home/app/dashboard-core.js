@@ -49,6 +49,7 @@ const NAV_ITEMS = [
   { id: 'library',   icon: '📖', label: 'Library'   },
   { id: 'analytics', icon: '📊', label: 'Analytics' },
   { id: 'settings',  icon: '⚙️', label: 'Settings'  },
+  { id: 'about',     icon: '❓', label: 'About'     },
 ];
 const NAV_ITEMS_DEFAULT_ORDER = NAV_ITEMS.map(n => n.id);
 
@@ -62,6 +63,7 @@ const VIEW_TABS = {
   analytics: { icon: '📊', label: 'Analytics' },
   quests:    { icon: '🎯', label: 'Quests'    },
   settings:  { icon: '⚙️', label: 'Settings'  },
+  about:     { icon: '❓', label: 'About'     },
 };
 
 // ── Multi-page site router constants ─────────────────────────────────
@@ -100,6 +102,7 @@ const VIEW_ROUTES = {
   analytics: 'analytics',
   quests: 'analytics',   // Quests merged into the Analytics page
   settings: 'settings',
+  about: 'about',
 };
 // Stable per-route id — keys the sessionStorage page-memory slot, so the
 // same logical page shares its memory under both URL families. Falls back
@@ -1797,7 +1800,8 @@ function closeNav() {
 // that hosts the view instead of throwing.
 function viewRenderer(id) {
   const FC_RENDERERS = { home: 'renderHome', decks: 'renderDecks', study: 'renderStudy',
-    library: 'renderLibrary', analytics: 'renderAnalytics', quests: 'renderQuests', settings: 'renderSettings' };
+    library: 'renderLibrary', analytics: 'renderAnalytics', quests: 'renderQuests', settings: 'renderSettings',
+    about: 'renderAbout' };
   return FC_RENDERERS[id] ? window[FC_RENDERERS[id]] : null;
 }
 function renderView(id) {
@@ -1970,6 +1974,10 @@ const PAGE_HELP = {
     'Study & Accessibility: set your Smart Definition language, pinyin display, dyslexia-friendly mode, high contrast, and where a book resumes when reopened.',
     'Further down: daily review goal, new cards per day, leech threshold, theme/appearance presets, and sidebar navigation order.',
     'Data Management: "Export All Data" downloads a complete .zip backup — every deck/card, folder, source (including bundled PDFs and illustrated EPUBs), review history, achievements, tracker data, streak, and recent study scopes. "Import" reads that .zip (or an older .json export) back in, either merging with or replacing your current data.',
+  ]},
+  about: { icon:'❓', title:'About', intro:'What SCIMA Learning is — rendered live from the ABOUT.md file at the site root.', tips:[
+    'The markdown is fetched and rendered on every load, so this page always matches the deployed file — no rebuild needed to update it.',
+    'Supported markdown: headings, paragraphs, bullet/numbered lists, blockquotes, code fences, inline code, bold, italics, links, and --- rules.',
   ]},
 };
 // Themed circular ⓘ for contextual explainers (study-mode cards, the Study

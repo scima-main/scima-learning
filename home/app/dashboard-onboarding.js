@@ -109,6 +109,7 @@ const TUTORIAL_STEPS = [
       { view: 'library', blurb: 'Library — imported books and articles to read, highlight and cite into cards.' },
       { view: 'analytics', blurb: 'Analytics — retention, streak and study-time charts, with Quests and achievements on the same page.' },
       { view: 'settings', blurb: 'Settings — algorithm, theme, accessibility, data import/export, and navigation customization.' },
+      { view: 'about', blurb: 'About — what this app is, rendered live from the ABOUT.md file at the site root.' },
     ],
   },
   {
