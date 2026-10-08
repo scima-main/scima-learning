@@ -107,10 +107,14 @@ body::after {
 #page-tabs { padding: 14px 60px 0; }
 #page-tabs:empty { display: none; }
 #page-tabs:not(:empty) ~ .view { padding-top: 20px; }
-/* Single-view pages have no tray, so the view itself must clear the stacked
-   ≡ / ⓘ button column (14 + 36 + 8 + 30 + 16 ≈ 104). Pages with a tray get
-   their clearance from the tray instead. */
-#page-tabs:empty ~ .view { padding-top: 104px; }
+/* Single-view pages have no tray, so the view starts right at the top row;
+   pages with a tray start just below it. Either way the view's header block
+   sits SNUG BESIDE the stacked ≡ / ⓘ column instead of below it: the first
+   child (title, or the header wrapper) and a sibling subtitle are indented
+   past the buttons, and everything after them flows at the normal gutter. */
+#page-tabs:empty ~ .view { padding-top: 14px; }
+#page-tabs ~ .view > :first-child { margin-top: 8px; margin-left: 28px; }
+#page-tabs ~ .view > .section-sub { margin-left: 28px; }
 #page-tabs .tab-bar { width: auto; margin-bottom: 0; }
 .page-tab-icon { font-size: 13px; line-height: 1; }
 
@@ -244,6 +248,9 @@ body.nav-open .nav-drawer-toggle span:not(.nav-drawer-chevron) {
   #page-tabs-float { left: 14px; right: 14px; }
   .view { padding: 64px 14px 24px; }
   #page-tabs { padding: 56px 0 0; }
+  /* narrower gutter: indent the header past the button column (14+36+8) */
+  #page-tabs ~ .view > :first-child { margin-left: 44px; }
+  #page-tabs ~ .view > .section-sub { margin-left: 44px; }
   #page-tabs:not(:empty) ~ .view { padding-top: 16px; }
 }
 
