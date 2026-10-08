@@ -1590,7 +1590,14 @@ function togglePinDeck(deckId) {
   showToast(deck.pinned
     ? `📌 Pinned "${deck.name}" — it stays at the top of your menu`
     : `Unpinned "${deck.name}" from the menu`);
-  if (state.view === 'decks') renderView('decks'); // pin button lives on deck cards too — refresh its icon there
+  // Flip every visible pin button for this deck in place (home cards, deck
+  // grid, deck-detail header — all carry data-deck), so the highlight and
+  // tooltip update the instant you click. A full renderView('decks') here
+  // would also destroy an open deck-detail view just to refresh one icon.
+  document.querySelectorAll(`.pin-toggle[data-deck="${deckId}"]`).forEach(b => {
+    b.classList.toggle('pinned', deck.pinned);
+    b.title = deck.pinned ? 'Unpin from sidebar' : 'Pin to sidebar';
+  });
 }
 
 // ── Cross-page navigation seam (multi-page site build) ───────────────
@@ -1947,6 +1954,32 @@ const PAGE_HELP = {
     'Data Management: "Export All Data" downloads a complete .zip backup — every deck/card, folder, source (including bundled PDFs and illustrated EPUBs), review history, achievements, tracker data, streak, and recent study scopes. "Import" reads that .zip (or an older .json export) back in, either merging with or replacing your current data.',
   ]},
 };
+// FSRS vs SM-2 explainer — opened from the ⓘ beside Settings → SRS Algorithm
+// and from the Study picker's header. Describes THIS build's schedulers
+// (shared/srs-core.js), not the textbook algorithms.
+function openAlgorithmHelp() {
+  openModal('🧠 FSRS vs SM-2 — how reviews get scheduled', body => {
+    body.appendChild(el('div', { style: 'font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:6px' },
+      'Both schedulers pick the next review date the same way: an ease factor (1.3–3.5) multiplies the current interval — Hard ×(ease−0.5), Good ×ease, Easy ×ease×1.3, kept strictly ordered and at least a day each — and Again always means “redo it now” plus one lapse. They differ in how the ease itself learns from your ratings:'));
+    [
+      ['🔄 FSRS — the default, recommended', [
+        'Ease moves by fixed steps per rating: Again −0.30, Hard −0.15, Good ±0, Easy +0.15.',
+        'Smooth and symmetric: a card you keep rating Good holds its ease indefinitely; misses decay it gently, wins grow it slowly.',
+        'Review count keeps climbing across lapses, so your stats read as one continuous history.']],
+      ['📜 SM-2 — the SuperMemo classic', [
+        'The original SM-2 ease formula, fed by your rating as a 2–5 quality score: Easy +0.10, Good ±0, Hard −0.14, Again −0.32.',
+        'On a lapse the repetition count resets to 0 — classic SM-2 relearns the card from scratch.',
+        'A touch punchier at both ends than FSRS: kinder to Easy, harsher on Again.']],
+    ].forEach(([title, tips]) => {
+      body.appendChild(el('div', { style: 'font-weight:800;font-size:13px;margin:12px 0 6px' }, title));
+      const list = el('ul', { style: 'padding-left:18px;display:flex;flex-direction:column;gap:8px;margin:0' });
+      tips.forEach(t => list.appendChild(el('li', { style: 'font-size:13px;line-height:1.6' }, t)));
+      body.appendChild(list);
+    });
+    body.appendChild(el('div', { style: 'font-size:12px;color:var(--muted);line-height:1.6;margin-top:14px' },
+      'Whichever you pick applies to every rating from now on — already-scheduled due dates are never recomputed. Both share the same leech rule: past the lapse threshold (Settings) a card is flagged and can be auto-suspended.'));
+  });
+}
 function openPageHelp() {
   const info = PAGE_HELP[state.view] || PAGE_HELP.home;
   openModal(`${info.icon} ${info.title}`, body => {

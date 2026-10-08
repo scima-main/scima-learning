@@ -44,7 +44,7 @@ function renderHome(c) {
     deckGrid.appendChild(el('div', { class:`card deck-card${deckDue>0?' glow':''}` },
       el('div',{style:'display:flex;justify-content:space-between;align-items:flex-start'},
         mkIcon(deck.emoji,deck.image,'36px','8px'),
-        el('button',{class:`btn btn-ghost btn-sm pin-toggle${deck.pinned?' pinned':''}`,title:deck.pinned?'Unpin from sidebar':'Pin to sidebar',onclick:e=>{e.stopPropagation();togglePinDeck(deck.id);}},'📌')
+        el('button',{class:`btn btn-ghost btn-sm pin-toggle${deck.pinned?' pinned':''}`,'data-deck':deck.id,title:deck.pinned?'Unpin from sidebar':'Pin to sidebar',onclick:e=>{e.stopPropagation();togglePinDeck(deck.id);}},'📌')
       ),
       el('div',{class:'deck-name'},deck.name),
       el('div',{class:'deck-meta'},`${deck.cards.length} cards${folder?' · '+folder.name:''}`),
