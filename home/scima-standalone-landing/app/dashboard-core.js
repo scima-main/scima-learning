@@ -1587,6 +1587,9 @@ function togglePinDeck(deckId) {
   if (!deck) return;
   deck.pinned = !deck.pinned;
   scheduleSave(); renderSidebar();
+  showToast(deck.pinned
+    ? `📌 Pinned "${deck.name}" — it stays at the top of your menu`
+    : `Unpinned "${deck.name}" from the menu`);
   if (state.view === 'decks') renderView('decks'); // pin button lives on deck cards too — refresh its icon there
 }
 

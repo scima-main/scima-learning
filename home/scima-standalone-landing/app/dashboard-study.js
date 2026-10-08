@@ -206,6 +206,42 @@ function renderStudyPicker(c) {
   });
   timerRow.append(timedChk,el('label',{for:'quiz-timed',style:'font-size:12px;font-weight:700;color:var(--text);cursor:pointer'},'⏱️ Timed'),el('label',{for:'timed-quiz-seconds',style:'font-size:12px;font-weight:700;color:var(--muted)'},'Seconds per card:'),timerInput,el('span',{style:'font-size:11px;color:var(--muted);margin-left:auto'},'Applies to Written Quiz · auto-submits when time runs out'));
 
+
+// "How it works" copy for the six study modes — opened from the ⓘ button in
+// each mode card's top-right corner, complementing the card's one-line desc.
+const MODE_HELP = {
+  review: { icon:'🔄', title:'SRS Review', blurb:'The default spaced-repetition loop: only what\u2019s due, scheduled by your algorithm.', tips:[
+    'The queue is exactly the due cards in scope, plus new cards up to your daily New Cards cap (Settings).',
+    'Reveal the answer, then rate Again / Hard / Good / Easy — FSRS or SM-2 (your Settings choice) turns that rating into the card\u2019s next review date and ease.',
+    'XP per card scales with ease and the subject multiplier; using Show Hint halves it.']},
+  cram: { icon:'💨', title:'Cram Mode', blurb:'Every card in scope, random order, due or not.', tips:[
+    'No due-date filtering and no new-card cap: the whole refined scope goes into the queue, shuffled.',
+    'Ratings still update the real schedule and award XP — cramming doubles as a catch-up session, it just doesn\u2019t wait for cards to come due.']},
+  quiz: { icon:'✍️', title:'Written Quiz', blurb:'Type the answer from memory; it\u2019s marked for you.', tips:[
+    'Instead of flipping, you type the answer; it\u2019s marked against the card\u2019s accepted answers using the session\u2019s Match mode (fuzzy tolerates case/whitespace/latex-readable forms, exact doesn\u2019t).',
+    '⌘/Ctrl+Enter submits. With ⏱️ Timed ticked, each card auto-submits when its per-card countdown runs out (counts as a timeout if empty).',
+    'The session summary gains typing stats: WPM, keystrokes/second, backspaces, timeouts.']},
+  gaps: { icon:'🧩', title:'Fill in the Gaps', blurb:'A key word from the answer is blanked in its sentence — recall it in context.', tips:[
+    'One content word (stopwords skipped) is hidden from the back text and shown as a blank inside the full sentence.',
+    'Type the word or pick from the candidate chips; near-misses score as "close" and appear in the session\u2019s gap stats.']},
+  weakness: { icon:'⚠️', title:'Weakness', blurb:'Only the cards you struggle with enter the queue.', tips:[
+    'Scope narrows to cards with at least one lapse or an ease below 2.3 — the ones the SRS is still fighting over.',
+    'Rating them well raises ease and lengthens intervals, so cards graduate out of this pool as they strengthen.']},
+  multi: { icon:'☑️', title:'Multiple Choice', blurb:'One correct answer plus three distractors from the session.', tips:[
+    'Options are the card\u2019s own answer plus three backs drawn from the other basic cards in the session, shuffled.',
+    'Only basic cards qualify (they\u2019re the only type with a single plain answer to offer), and the scope needs at least four of them — that\u2019s why Start gates harder here.']},
+};
+function openModeHelp(id) {
+  const h = MODE_HELP[id];
+  if (!h) return;
+  openModal(`${h.icon} ${h.title} — how it works`, body => {
+    body.appendChild(el('div',{style:'font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px'}, h.blurb));
+    const list = el('ul',{style:'padding-left:18px;display:flex;flex-direction:column;gap:10px;margin:0'});
+    h.tips.forEach(t => list.appendChild(el('li',{style:'font-size:13px;line-height:1.6'}, t)));
+    body.appendChild(list);
+  });
+}
+
   const modeGrid = el('div',{class:'grid-3'});
   MODES.forEach(m => {
     // Multiple Choice needs a question card plus 3 distractors, all drawn
@@ -217,7 +253,9 @@ function renderStudyPicker(c) {
       : refinedCards.length>0;
     const startBtn=btn('Start','primary',{full:true,disabled:!hasCards,onclick:()=>startStudySession(state.studyScope,m.id)});
     if(m.id==='review') startBtn.id='tutorial-target-study-start';
-    modeGrid.appendChild(el('div',{class:`card${hasCards?' glow':''}`,style:`padding:20px;opacity:${hasCards?1:0.5}`},
+    modeGrid.appendChild(el('div',{class:`card${hasCards?' glow':''}`,style:`position:relative;padding:20px;opacity:${hasCards?1:0.5}`},
+      el('button',{class:'mode-help-btn',title:`How ${m.label} works`,'aria-label':`How ${m.label} works`,
+        onclick:e=>{ e.stopPropagation(); openModeHelp(m.id); }},'i'),
       el('div',{style:'font-size:28px;margin-bottom:8px'},m.icon),
       el('div',{style:'font-weight:800;font-size:14px;margin-bottom:4px'},m.label),
       el('div',{style:'font-size:11px;color:var(--muted);margin-bottom:14px'},m.desc),

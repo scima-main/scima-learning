@@ -215,10 +215,22 @@ body.nav-open .nav-drawer-toggle span:not(.nav-drawer-chevron) {
 .pinned-deck-row:hover .pinned-deck-study { opacity: 1; }
 .pinned-deck-study:hover { color: var(--blue); }
 
+/* Per-mode "how it works" button, top-right corner of each study-mode card —
+   the modal it opens complements the card's one-line description. */
+.mode-help-btn { position: absolute; top: 10px; right: 10px; width: 22px; height: 22px;
+  border-radius: 50%; border: 1px solid var(--border); background: var(--surface);
+  color: var(--blue); font-family: Georgia, 'Times New Roman', serif; font-style: italic;
+  font-weight: 700; font-size: 12px; line-height: 1; display: flex; align-items: center;
+  justify-content: center; cursor: pointer; opacity: 0.7;
+  transition: opacity 0.15s, transform 0.15s, box-shadow 0.15s; }
+.mode-help-btn:hover { opacity: 1; transform: scale(1.1); box-shadow: 0 4px 12px rgba(0,0,0,0.35); }
+
 /* Pin/unpin toggle on deck cards */
 .pin-toggle { padding: 4px 7px !important; opacity: 0.45; filter: grayscale(1); transition: all 0.15s; }
 .pin-toggle:hover { opacity: 1; filter: grayscale(0.4); }
-.pin-toggle.pinned { opacity: 1; filter: none; background: rgba(var(--blue-rgb),0.12) !important; }
+.pin-toggle.pinned { opacity: 1; filter: none; color: var(--blue);
+  background: rgba(var(--blue-rgb),0.28) !important;
+  box-shadow: 0 0 0 1px rgba(var(--blue-rgb),0.55) inset; }
 
 /* Hidden-tabs drawer — collapsed by default at the bottom of the nav list */
 .nav-drawer-toggle { display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 12px; margin-top: 6px;
@@ -399,7 +411,9 @@ body.nav-open .nav-drawer-toggle span:not(.nav-drawer-chevron) {
 .cmd-item-hint { font-size: 10px; color: var(--muted); }
 
 /* Toast */
-#toast { position: fixed; bottom: 24px; right: 90px; z-index: 3000; background: var(--surface);
+/* Stacks ABOVE the ⌘K hint pill (bottom: 20px, right: 20px) instead of
+   overlapping it — both live in the bottom-right corner. */
+#toast { position: fixed; bottom: 66px; right: 20px; z-index: 3000; background: var(--surface);
   border: 1px solid rgba(var(--blue-rgb),0.3); color: var(--text); padding: 12px 20px; border-radius: 12px;
   font-size: 13px; font-weight: 700; box-shadow: 0 4px 20px rgba(0,0,0,0.5); animation: toast-in 0.25s ease;
   display: flex; align-items: center; gap: 12px; }
@@ -409,8 +423,12 @@ body.nav-open .nav-drawer-toggle span:not(.nav-drawer-chevron) {
   transition: opacity 0.15s; }
 .toast-action-btn:hover { opacity: 0.85; }
 
-/* Cmd hint — solid, no blur */
-#cmd-hint { position: fixed; bottom: 20px; right: 20px; background: rgba(var(--surface-rgb),0.95);
+/* Cmd hint — solid, no blur. z-index 950 (same tier as the ⓘ / ≡ buttons):
+   without it, `z-index: auto` loses to #main's stacking context (z-index: 1),
+   so view cards that reach the bottom-right corner (Analytics especially)
+   paint straight over the pill. Still below the nav backdrop (1040) so an
+   open drawer dims it like everything else. */
+#cmd-hint { position: fixed; bottom: 20px; right: 20px; z-index: 950; background: rgba(var(--surface-rgb),0.95);
   border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
   padding: 8px 14px; font-size: 11px; color: var(--muted); cursor: pointer;
   display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
