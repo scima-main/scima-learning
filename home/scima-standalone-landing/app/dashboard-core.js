@@ -1706,20 +1706,26 @@ function routeOfView(viewId) {
 // selectors (Quests⇄Achievements), at half the viewport width (see
 // dashboard.css). Single-view pages render nothing.
 function renderPageTabs() {
-  const host = document.getElementById('page-tabs');
-  if (!host) return;
-  host.innerHTML = '';
+  // Rendered into two hosts: the in-flow tray (#page-tabs) and a fixed clone
+  // (#page-tabs-float) that fades in when the in-flow one scrolls out of
+  // sight — see the IntersectionObserver wiring further below. Single-view
+  // pages leave both hosts empty (and hidden).
+  const hosts = [document.getElementById('page-tabs'), document.getElementById('page-tabs-float')];
+  hosts.forEach(h => { if (h) h.innerHTML = ''; });
   if (PAGE_VIEWS.length < 2) return;
-  const bar = el('div', { class: 'tab-bar' });
-  PAGE_VIEWS.forEach(v => {
-    const meta = VIEW_TABS[v] || { icon: '', label: v };
-    bar.appendChild(el('button', {
-      class: `tab-btn${state.view === v ? ' active' : ''}`,
-      'data-view': v,
-      onclick: () => navigate(v),
-    }, el('span', { class: 'page-tab-icon' }, meta.icon), meta.label));
+  hosts.forEach(host => {
+    if (!host) return;
+    const bar = el('div', { class: 'tab-bar' });
+    PAGE_VIEWS.forEach(v => {
+      const meta = VIEW_TABS[v] || { icon: '', label: v };
+      bar.appendChild(el('button', {
+        class: `tab-btn${state.view === v ? ' active' : ''}`,
+        'data-view': v,
+        onclick: () => navigate(v),
+      }, el('span', { class: 'page-tab-icon' }, meta.icon), meta.label));
+    });
+    host.appendChild(bar);
   });
-  host.appendChild(bar);
 }
 
 // ── Collapsible nav drawer ───────────────────────────────────────────
@@ -1955,6 +1961,24 @@ document.getElementById('sidebar').setAttribute('aria-hidden', 'true');
 document.getElementById('logo-icon').setAttribute('aria-expanded', 'false');
 document.getElementById('logo-icon').addEventListener('click', () => { navOpen ? closeNav() : openNav(); });
 document.getElementById('nav-backdrop').addEventListener('click', closeNav);
+
+// ── Sticky page-switcher float ───────────────────────────────────────
+// #main is the scroll container, so the observer roots there: once the
+// in-flow tray leaves the scrollport the fixed clone fades in; scrolling
+// back until the tray is in sight fades the clone out again. The clone is
+// aria-hidden in the shell — assistive tech keeps using the in-flow tray,
+// which is always in the accessibility tree regardless of scroll position.
+(function () {
+  const inline = document.getElementById('page-tabs');
+  const float = document.getElementById('page-tabs-float');
+  const scroller = document.getElementById('main');
+  if (!inline || !float || !scroller || typeof IntersectionObserver === 'undefined') return;
+  const io = new IntersectionObserver(entries => {
+    const e = entries[entries.length - 1];
+    float.classList.toggle('show', !e.isIntersecting && float.children.length > 0);
+  }, { root: scroller, threshold: 0 });
+  io.observe(inline);
+})();
 
 let _cmdReturnFocus = null;
 function closeCmd() {

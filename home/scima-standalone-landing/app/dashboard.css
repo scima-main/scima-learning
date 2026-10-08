@@ -108,6 +108,23 @@ body::after {
 #page-tabs .tab-bar { width: auto; margin-bottom: 0; }
 .page-tab-icon { font-size: 13px; line-height: 1; }
 
+/* Fixed clone of the page-switcher tray. Rests invisible above the content;
+   when the in-flow tray scrolls out of #main, core.js adds .show and it fades
+   / drops into place just under the ≡ / ⓘ button row, inheriting the same
+   60px side insets as the in-flow tray. The translucent blurred background
+   is what sells "floating over the scroll" instead of "part of the page".
+   z-index 900: above content, below the nav backdrop (1040) and modals
+   (1100), so an open drawer or dialog dims/covers it like everything else. */
+#page-tabs-float { position: fixed; top: 58px; left: 60px; right: 60px; z-index: 900;
+  opacity: 0; visibility: hidden; transform: translateY(-8px);
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s; }
+#page-tabs-float.show { opacity: 1; visibility: visible; transform: none;
+  transition: opacity 0.2s ease, transform 0.2s ease; }
+#page-tabs-float .tab-bar { margin-bottom: 0;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
+
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes shake  { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
 @keyframes toast-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
@@ -152,7 +169,7 @@ body.nav-open .foot-stat .fs-lab,
 body.nav-open .nav-drawer-toggle span:not(.nav-drawer-chevron) {
   opacity: 1; transition: opacity 0.2s ease 0.1s; }
 @media (prefers-reduced-motion: reduce) {
-  #sidebar, #nav-backdrop, #logo-icon { transition: none !important; }
+  #sidebar, #nav-backdrop, #logo-icon, #page-tabs-float { transition: none !important; }
 }
 #sidebar-header { padding: 16px 16px 14px 62px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 #logo { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -218,6 +235,7 @@ body.nav-open .nav-drawer-toggle span:not(.nav-drawer-chevron) {
    sits in a 44px-square button (matches #logo-icon's 36px mark + a bit of
    breathing room), plus the sidebar's own 1px border. */
 @media (max-width: 720px) {
+  #page-tabs-float { left: 14px; right: 14px; }
   .view { padding: 64px 14px 24px; }
   #page-tabs { padding: 56px 0 0; }
   #page-tabs:not(:empty) ~ .view { padding-top: 16px; }
