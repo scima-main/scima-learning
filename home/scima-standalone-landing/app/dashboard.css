@@ -102,7 +102,7 @@ body::after {
    the viewport. The wrapper therefore carries no horizontal padding, only
    the top clearance under the floating ≡ / ⓘ buttons. Empty (and hidden)
    on single-view pages. */
-#page-tabs { padding: 56px 32px 0; }
+#page-tabs { padding: 56px 60px 0; }
 #page-tabs:empty { display: none; }
 #page-tabs:not(:empty) ~ .view { padding-top: 20px; }
 #page-tabs .tab-bar { width: auto; margin-bottom: 0; }
