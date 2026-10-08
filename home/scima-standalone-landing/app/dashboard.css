@@ -99,12 +99,12 @@ body::after {
 /* In-page tab bar on pages hosting two views (Decks⇄Capture,
    Analytics⇄Quests) — empty (and hidden) everywhere else. */
 /* In-page page-switcher (Analytics⇄Quests): same segmented tray shape as the
-   in-view .tab-bar selectors, but half the viewport wide. The wrapper only
+   in-view .tab-bar selectors. The wrapper only
    provides the top clearance under the floating ≡ / ⓘ buttons. */
 #page-tabs { padding: 56px 32px 0; }
 #page-tabs:empty { display: none; }
 #page-tabs:not(:empty) ~ .view { padding-top: 20px; }
-#page-tabs .tab-bar { width: min(50vw, 100%); margin-bottom: 0; }
+#page-tabs .tab-bar { width: 100%; margin-bottom: 0; }
 .page-tab-icon { font-size: 13px; line-height: 1; }
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
