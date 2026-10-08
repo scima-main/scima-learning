@@ -109,6 +109,28 @@ async def enforce_max_body_size(request: Request, call_next):
 
 # ── Startup ──────────────────────────────────────────────────────────
 
+# ── Static-asset revalidation ────────────────────────────────────────
+# Starlette's StaticFiles sends no Cache-Control header, so browsers invent
+# a heuristic freshness window from Last-Modified and can keep serving
+# days-old JS/CSS after a deploy (users then see phantom old UI — e.g. the
+# retired pill-shaped page tabs — while the files on disk are current).
+# no-cache forces a revalidation on every use; ETags still make unchanged
+# files cost only a 304, so this is freshness, not extra bandwidth.
+STATIC_REVALIDATE = (".html", ".js", ".css")
+
+
+@app.middleware("http")
+async def revalidate_static(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if request.method in ("GET", "HEAD") and (
+        path.endswith(STATIC_REVALIDATE) or path.endswith("/")
+    ):
+        if "cache-control" not in response.headers:
+            response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.on_event("startup")
 def startup():
     db.init_db()

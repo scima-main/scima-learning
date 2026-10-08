@@ -96,13 +96,12 @@ body::after {
 .view { display: none; padding: 64px 32px 32px; animation: fadeIn 0.25s ease; }
 .view.active { display: block; }
 
-/* In-page tab bar on pages hosting two views (Decks⇄Capture,
-   Analytics⇄Quests) — empty (and hidden) everywhere else. */
 /* In-page page-switcher (Analytics⇄Quests): same segmented tray shape as the
    in-view .tab-bar selectors (Quests⇄Achievements), but full-bleed — the bar
    spans the whole viewport width so each of its two buttons is exactly half
    the viewport. The wrapper therefore carries no horizontal padding, only
-   the top clearance under the floating ≡ / ⓘ buttons. */
+   the top clearance under the floating ≡ / ⓘ buttons. Empty (and hidden)
+   on single-view pages. */
 #page-tabs { padding: 56px 0 0; }
 #page-tabs:empty { display: none; }
 #page-tabs:not(:empty) ~ .view { padding-top: 20px; }
