@@ -10,28 +10,26 @@
   <link rel="stylesheet" href="../app/dashboard.css">
   <link rel="stylesheet" href="../lib/katex/katex.min.css">
   <!--
-    SCIMA Learning — Decks (six-page build; see the landing index.html header
-    for the map). Kept as its own page (separate from Study) per the IA:
-    deck management is browsing/editing-heavy and doesn't need the study
-    session machinery loaded. Manifest notes: KaTeX + mhchem render LaTeX in
-    card previews/edits; dashboard-home.js is loaded for the `dragData`
-    binding the drag-and-drop reorganization shares with it;
-    dashboard-library.js is NOT loaded — sourceTypeIcon() (the only symbol
-    the citation pickers needed from it) lives in dashboard-core.js now.
+    SCIMA Learning — Decks page: Decks + Capture (six-page build; see the
+    landing index.html header). Capture (Quick Add + AI Generate) merged in:
+    cards are authored where the decks live, and the tab bar / #capture
+    switch between the two views in-page. Manifest notes: KaTeX + mhchem
+    render LaTeX in card previews/edits; dashboard-home.js is loaded for the
+    `dragData` binding the drag-and-drop reorganization shares with it;
+    dashboard-library.js is NOT needed — sourceTypeIcon() lives in
+    dashboard-core.js and the citation pickers/viewer in dashboard-decks.js.
     fflate and the parser bundles stay out (no zip export or file import
-    here); pdf.min.js is still lazy-loaded on demand via assetUrl() by the
-    PDF text extractor and the double-sided print export.
+    here); pdf.min.js is still lazy-loaded on demand via assetUrl().
   -->
 </head>
 <body>
   <div id="stripe"></div>
-  <button id="nav-pill" aria-label="Open navigation menu" aria-expanded="false" aria-controls="sidebar" title="Menu">☰</button>
+  <button id="logo-icon" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="sidebar" title="Menu">≡</button>
   <button id="info-btn" title="About this page" aria-label="Page help">i</button>
   <div id="nav-backdrop"></div>
   <aside id="sidebar" aria-hidden="true" tabindex="-1">
     <div id="sidebar-header">
       <div id="logo">
-        <div id="logo-icon">✦</div>
         <div>
           <div id="logo-name">SCIMA Learning</div>
           <div id="logo-sub">Adaptive Learning</div>
@@ -53,6 +51,7 @@
     <main id="main">
       <div id="page-tabs"></div>
       <div id="view-decks"     class="view"></div>
+      <div id="view-capture"   class="view"></div>
     </main>
   </div>
 
@@ -85,7 +84,7 @@
   <!-- Page identity for the multi-page router (app/dashboard-core.js
        reads this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is
        the relative path from this page back to the landing folder. -->
-  <script>window.SCIMA_PAGE = { id: 'decks', root: '../', views: ['decks'] };</script>
+  <script>window.SCIMA_PAGE = { id: 'decks', root: '../', views: ['decks', 'capture'] };</script>
   <script src="../lib/katex/katex.min.js"></script>
   <script src="../lib/katex/mhchem.min.js"></script>
   <script src="../shared/theme.js"></script>
@@ -97,6 +96,7 @@
   <script src="../app/dashboard-blobstore.js"></script>
   <script src="../app/dashboard-home.js"></script>
   <script src="../app/dashboard-decks.js"></script>
+  <script src="../app/dashboard-capture.js"></script>
   <script src="../app/dashboard-analytics.js"></script>
   <script src="../app/dashboard-onboarding.js"></script>
   <script src="../app/dashboard-bootstrap.js"></script>

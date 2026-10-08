@@ -9,15 +9,14 @@
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../app/dashboard.css">
   <!--
-    SCIMA Learning — Settings (six-page build; see the landing index.html
-    header). Manifest notes: fflate + dashboard-decks.js power Data
-    Management — exportAllDataZip() and the .zip/.json import (which writes
-    PDF chunks and HTML chapters back through the blobstore helpers decks.js
-    owns). dashboard-onboarding.js (in the common tail) provides "Replay
-    tutorial". Theme scheduling uses bootstrap's tickThemeSchedule()/
-    fetchGeoForSchedule(), as before. This page's script order keeps
-    dashboard-settings.js after dashboard-onboarding.js, mirroring the old
-    single-page order. The Navigation section lists the six nav tabs.
+    SCIMA Learning — Analytics page: Analytics + Quests (six-page build; see
+    the landing index.html header). Quests merged in: one nav entry, two
+    in-page tabs; the switch — including the "View" button on the
+    claimable-achievements toast — is an instant in-page render.
+    dashboard-library.js is loaded for getReadingTimeBySubject() /
+    fmtReadingTime() (the reading-time breakdown renderAnalytics() shows);
+    none of its import/reader flows are reachable here, so the parser
+    bundles, fflate and dashboard-decks.js stay out.
   -->
 </head>
 <body>
@@ -48,7 +47,8 @@
   <div id="app">
     <main id="main">
       <div id="page-tabs"></div>
-      <div id="view-settings"  class="view"></div>
+      <div id="view-analytics" class="view"></div>
+      <div id="view-quests"    class="view"></div>
     </main>
   </div>
 
@@ -81,8 +81,7 @@
   <!-- Page identity for the multi-page router (app/dashboard-core.js
        reads this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is
        the relative path from this page back to the landing folder. -->
-  <script>window.SCIMA_PAGE = { id: 'settings', root: '../', views: ['settings'] };</script>
-  <script src="../lib/fflate.umd.js"></script>
+  <script>window.SCIMA_PAGE = { id: 'analytics', root: '../', views: ['analytics', 'quests'] };</script>
   <script src="../shared/theme.js"></script>
   <script src="../shared/shared.js"></script>
   <script src="../shared/srs-core.js"></script>
@@ -90,10 +89,9 @@
   <script src="../shared/translate-shared.js"></script>
   <script src="../app/dashboard-core.js"></script>
   <script src="../app/dashboard-blobstore.js"></script>
-  <script src="../app/dashboard-decks.js"></script>
+  <script src="../app/dashboard-library.js"></script>
   <script src="../app/dashboard-analytics.js"></script>
   <script src="../app/dashboard-onboarding.js"></script>
-  <script src="../app/dashboard-settings.js"></script>
   <script src="../app/dashboard-bootstrap.js"></script>
 </body>
 </html>

@@ -32,33 +32,31 @@
 // developing a specific feature, not intended to run for every user forever.
 const DEBUG = false;
 
-// All navigable sidebar tabs. Order here is just the *fallback* — the
-// One entry per PAGE (the site is six pages; merged pages surface their
-// sub-views through the in-page tab bar, see renderPageTabs()/VIEW_TABS).
+// Six nav tabs = six pages. Capture is merged into the Decks page and
+// Quests into the Analytics page; both merged views stay reachable through
+// the in-page tab bar (renderPageTabs() / VIEW_TABS below) and via #capture /
+// #quests deep links. The Mark Tracker's six stub tabs were removed with the
+// tracker route — they only ever rendered "isn't in this build yet".
 // Order here is just the *fallback* — the effective order/visibility a user
 // sees comes from state.settings.navOrder / hiddenTabs (customizable in
-// Settings → Navigation, see getOrderedNavItems()/getVisibleNavItems() below).
-// The Mark Tracker's six stub tabs were removed along with the tracker
-// route: they only ever rendered "isn't in this build yet" placeholders.
+// Settings → Navigation, see getOrderedNavItems()/getVisibleNavItems()).
 const NAV_ITEMS = [
-  { id: 'home',      icon: '🏠', label: 'Home'     },
-  { id: 'decks',     icon: '📚', label: 'Decks'    },
-  { id: 'study',     icon: '🧠', label: 'Study'    },
-  { id: 'library',   icon: '📖', label: 'Library'  },   // page also hosts Capture
-  { id: 'analytics', icon: '📊', label: 'Insights' },   // page also hosts Quests
-  { id: 'settings',  icon: '⚙️', label: 'Settings' },
+  { id: 'home',      icon: '🏠', label: 'Home'      },
+  { id: 'decks',     icon: '📚', label: 'Decks'     },
+  { id: 'study',     icon: '🧠', label: 'Study'     },
+  { id: 'library',   icon: '📖', label: 'Library'   },
+  { id: 'analytics', icon: '📊', label: 'Analytics' },
+  { id: 'settings',  icon: '⚙️', label: 'Settings'  },
 ];
 const NAV_ITEMS_DEFAULT_ORDER = NAV_ITEMS.map(n => n.id);
 
-// Per-view icon/label, used by the nav pill drawer entries' in-page tab bar
-// (merged pages: Library⇄Capture, Analytics⇄Quests) and by the command
-// palette's per-view affordances. Views, not pages: a page's tab bar lists
-// the views it hosts.
+// Per-view icon/label for the in-page tab bar on merged pages
+// (Decks⇄Capture, Analytics⇄Quests).
 const VIEW_TABS = {
   home:      { icon: '🏠', label: 'Home'      },
   decks:     { icon: '📚', label: 'Decks'     },
-  study:     { icon: '🧠', label: 'Study'     },
   capture:   { icon: '⚡', label: 'Capture'   },
+  study:     { icon: '🧠', label: 'Study'     },
   library:   { icon: '📖', label: 'Library'   },
   analytics: { icon: '📊', label: 'Analytics' },
   quests:    { icon: '🎯', label: 'Quests'    },
@@ -66,38 +64,41 @@ const VIEW_TABS = {
 };
 
 // ── Multi-page site router constants ─────────────────────────────────
-// Site build: the dashboard is six pages — one directory per destination,
-// each with an index.html carrying only the script slice its views need
-// (see the landing folder's index.html header for the full manifest map):
+// Site build: the dashboard is split across workflow routes — one directory
+// per destination, each with an index.html carrying only the script slice
+// its views need (see the landing folder's index.html header for the full
+// route/manifest map):
 //
-//   /            Home
-//   /decks/      Decks
-//   /study/      Study
-//   /library/    Library + Capture        (the sources → cards pipeline;
-//                                          /capture/ redirects here)
+//   /            Home                        (landing index.html)
+//   /study/      Decks + Study               (the flashcard core — the most
+//                                             jumped-between pair, so they
+//                                             switch in-page, no reload)
+//   /capture/    Capture + Library           (the sources → cards pipeline)
 //   /insights/   Analytics + Quests
 //   /settings/   Settings
+//   /tracker/    the six Mark Tracker views
 //
-// Merged pages switch between their views in-page (tab bar under the
-// header, hash in the URL); everything else is a real navigation.
-// Routes are plain directories inside the landing folder, so they work
-// under ANY mount prefix with zero extra config: the FastAPI backend serves
-// the folder both at the domain root and (legacy) at /dashboard/, and every
-// URL this router builds is relative — /study/ and /dashboard/study/ both
-// work, and a user never gets bounced between the two URL families.
+// Routes are plain directories inside the landing folder, so they work under
+// ANY mount prefix with zero extra config: the FastAPI backend serves the
+// folder both at the domain root and (legacy) at /dashboard/, and every URL
+// this router builds is relative — /study/ and /dashboard/study/ both work,
+// and a user never gets bounced between the two URL families.
 // Each page declares itself via a tiny inline script that runs before this
 // file:  window.SCIMA_PAGE = { id, root, views }  where `root` is the
 // relative path from the page back to the landing folder ('' at the landing
-// root, '../' inside a route directory) and `views` are the view ids it
-// hosts (also the tab bar's contents, in order; views[0] is the default).
+// root, '../' inside a route directory) and `views` are the nav ids it hosts.
+// Extension build: dashboard.html has no SCIMA_PAGE declaration, so
+// PAGE_VIEWS falls back to *every* nav id and ROOT_REL to '' — every
+// navigate() stays an in-page view switch and none of the cross-page
+// machinery below ever runs, exactly like before the split.
 const VIEW_ROUTES = {
   home: '',
   decks: 'decks',
+  capture: 'decks',      // Capture merged into the Decks page
   study: 'study',
-  capture: 'library',
   library: 'library',
-  analytics: 'insights',
-  quests: 'insights',
+  analytics: 'analytics',
+  quests: 'analytics',   // Quests merged into the Analytics page
   settings: 'settings',
 };
 // Stable per-route id — keys the sessionStorage page-memory slot, so the
@@ -114,8 +115,8 @@ const ROOT_REL = (typeof window !== 'undefined' && typeof window.SCIMA_PAGE?.roo
   ? window.SCIMA_PAGE.root
   : '';
 // Views hosted by the current page. Without a SCIMA_PAGE declaration (e.g.
-// the extension's single-document build) fall back to *every* view, so
-// navigate()/renderView() below never leave the page.
+// a single-document build like the extension's dashboard.html) fall back to
+// *every* view, so navigate()/renderView() never leave the page.
 const PAGE_VIEWS = (typeof window !== 'undefined' && window.SCIMA_PAGE
     && Array.isArray(window.SCIMA_PAGE.views) && window.SCIMA_PAGE.views.length)
   ? window.SCIMA_PAGE.views
@@ -1658,8 +1659,8 @@ function openDeckDetail(deckId) {
 
 function navigate(viewId) {
   if (viewId !== 'study' && typeof clearQuizTimer === 'function') clearQuizTimer();
-  // Retired/unknown ids (e.g. the removed Mark Tracker tabs, or a stale
-  // saved navOrder entry) are a no-op rather than a blank render.
+  // Retired/unknown ids (the removed Mark Tracker tabs, stale saved
+  // navOrder entries) are a no-op rather than a blank render.
   if (!(viewId in VIEW_ROUTES) && !PAGE_VIEWS.includes(viewId)) return;
   // Site build: views live on separate route pages — a view not hosted here
   // is a real navigation. Single-document builds: PAGE_VIEWS holds every
@@ -1670,8 +1671,8 @@ function navigate(viewId) {
   }
   state.view = viewId;
   closeNav(); // picking a destination folds the drawer away again
-  // Nav entry for the page stays lit while any of its views is showing
-  // (Quests keeps "Insights" active, Capture keeps "Library" active).
+  // The nav tab for the page stays lit while any of its views shows
+  // (Capture keeps "Decks" lit, Quests keeps "Analytics" lit).
   const route = routeOfView(viewId);
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', routeOfView(b.dataset.view) === route));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${viewId}`));
@@ -1684,9 +1685,9 @@ function navigate(viewId) {
 function routeOfView(viewId) {
   return viewId in VIEW_ROUTES ? VIEW_ROUTES[viewId] : viewId;
 }
-// In-page tab bar for pages that host more than one view (Library⇄Capture,
-// Analytics⇄Quests) — the UI face of "six pages, not eight tabs". Single-view
-// pages render an empty bar: their only chrome is the nav pill.
+// In-page tab bar for pages hosting more than one view (Decks⇄Capture,
+// Analytics⇄Quests) — the UI face of "six tabs, six pages" while keeping the
+// merged views one tap away. Single-view pages render an empty bar.
 function renderPageTabs() {
   const bar = document.getElementById('page-tabs');
   if (!bar) return;
@@ -1703,15 +1704,17 @@ function renderPageTabs() {
 }
 
 // ── Collapsible nav drawer ───────────────────────────────────────────
-// The old always-docked sidebar is now an overlay drawer: at rest the whole
-// navigation is a single floating pill (#nav-pill, top-left, styled like the
-// ⓘ help button); opening it slides the panel in over a dim backdrop that
-// follows the modal pattern (fixed inset dim, click-outside closes, Esc
-// closes, focus returns to the opener). The animation is transform/opacity
-// only — compositor-friendly, no layout reflow of the content behind it —
-// and visibility:hidden parks the closed drawer out of the tab order.
-// .power-saving and prefers-reduced-motion switch the transitions off (see
-// dashboard.css); the drawer still works, it just appears instantly.
+// The docked sidebar is gone: navigation lives in an overlay drawer whose
+// toggle is the logo mark itself (#logo-icon, ✦ replaced by ≡). Closed, the
+// mark is a floating circle top-left (same visual language as the ⓘ help
+// button, with hover/active touch states); opening slides the drawer in
+// from the left over a dim backdrop (the modal pattern: click-outside or
+// Esc closes, focus returns to the toggle) and the mark settles into the
+// drawer header, where it doubles as the close button. The slide is
+// transform-only and the labels fade via opacity — compositor-friendly, no
+// reflow of the content behind — and .power-saving / prefers-reduced-motion
+// switch the motion off (see dashboard.css). visibility:hidden parks the
+// closed drawer out of the tab order.
 let navOpen = false;
 let _navReturnFocus = null;
 function openNav() {
@@ -1721,7 +1724,7 @@ function openNav() {
   document.body.classList.add('nav-open');
   const sb = document.getElementById('sidebar');
   sb.setAttribute('aria-hidden', 'false');
-  document.getElementById('nav-pill').setAttribute('aria-expanded', 'true');
+  document.getElementById('logo-icon').setAttribute('aria-expanded', 'true');
   sb.focus();
 }
 function closeNav() {
@@ -1729,16 +1732,16 @@ function closeNav() {
   navOpen = false;
   document.body.classList.remove('nav-open');
   document.getElementById('sidebar').setAttribute('aria-hidden', 'true');
-  document.getElementById('nav-pill').setAttribute('aria-expanded', 'false');
+  document.getElementById('logo-icon').setAttribute('aria-expanded', 'false');
   _navReturnFocus?.focus?.();
   _navReturnFocus = null;
 }
 // Resolves a view's render fn by name off window. The old renderView() built
-// an object literal referencing every render fn eagerly — fine when every
-// module is always loaded, but a ReferenceError on a page whose slice doesn't
-// define them all. Same result as before wherever the fn exists; where it
-// doesn't, renderView() below redirects to the page that hosts the view
-// instead of throwing.
+// an object literal referencing all sixteen render fns eagerly — fine when
+// every module is always loaded (extension), but a ReferenceError on a site
+// page whose slice doesn't define them all. Same result as before wherever
+// the fn exists; where it doesn't, renderView() below redirects to the page
+// that hosts the view instead of throwing.
 function viewRenderer(id) {
   const FC_RENDERERS = { home: 'renderHome', decks: 'renderDecks', study: 'renderStudy', capture: 'renderCapture',
     library: 'renderLibrary', analytics: 'renderAnalytics', quests: 'renderQuests', settings: 'renderSettings' };
@@ -1789,8 +1792,6 @@ function renderSidebar() {
   getVisibleNavItems().forEach((n, idx) => {
     const shortcutNum = idx < 9 ? idx + 1 : null;
     const btn = el('button', {
-      // Active when the CURRENT PAGE matches, so a merged page's nav entry
-      // stays lit across its views (Quests → "Insights", Capture → "Library").
       class: `nav-btn${routeOfView(state.view) === routeOfView(n.id) ? ' active' : ''}`,
       'data-view': n.id,
       draggable: 'true',
@@ -1932,12 +1933,12 @@ function openPageHelp() {
   });
 }
 document.getElementById('info-btn').addEventListener('click', openPageHelp);
-// Nav drawer wiring (openNav/closeNav above): the pill toggles, clicking the
-// dim backdrop closes — same interaction shape as the modal backdrop.
-// Initial ARIA state mirrors the shell markup (closed drawer).
+// Nav drawer wiring (openNav/closeNav above): the ≡ logo mark toggles, the
+// dim backdrop closes on click-outside — same shape as the modal backdrop.
+// Initial ARIA state mirrors the shell markup (drawer closed).
 document.getElementById('sidebar').setAttribute('aria-hidden', 'true');
-document.getElementById('nav-pill').setAttribute('aria-expanded', 'false');
-document.getElementById('nav-pill').addEventListener('click', () => { navOpen ? closeNav() : openNav(); });
+document.getElementById('logo-icon').setAttribute('aria-expanded', 'false');
+document.getElementById('logo-icon').addEventListener('click', () => { navOpen ? closeNav() : openNav(); });
 document.getElementById('nav-backdrop').addEventListener('click', closeNav);
 
 let _cmdReturnFocus = null;

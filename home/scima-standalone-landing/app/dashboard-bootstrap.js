@@ -110,10 +110,9 @@ async function init() {
   }
 
   const hash=location.hash.replace('#','');
+  // Hash selects a VIEW — which may be a sub-view of the current page
+  // (#capture on Decks, #quests on Analytics), not just a nav entry.
   if(hash&&(hash in VIEW_ROUTES)){
-    // Hash selects a VIEW (which may be a sub-view of this page, e.g.
-    // #capture on the Library page), not a nav entry — merged pages host
-    // more views than they have nav pills.
     if (PAGE_VIEWS.includes(hash)) {
       state.view=hash;
     } else if (isSitePage) {

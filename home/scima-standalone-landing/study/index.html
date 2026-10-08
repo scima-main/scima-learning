@@ -10,25 +10,23 @@
   <link rel="stylesheet" href="../app/dashboard.css">
   <link rel="stylesheet" href="../lib/katex/katex.min.css">
   <!--
-    SCIMA Learning — Study (six-page build; see the landing index.html header
-    for the map). Own page per the IA (decks and study stay separate).
-    Manifest notes: dashboard-decks.js is loaded because sessions call its
-    openCitationViewer() (the 📖 Source badge on cited cards) and because the
-    shared `studySession` binding lives at its bottom; KaTeX + mhchem render
-    LaTeX on card faces. The active session is carried across page swaps by
-    bootstrap's pagehide snapshot / init() restore (sessionStorage), matching
-    the SPA's in-memory lifetime.
+    SCIMA Learning — Study (six-page build; see the landing index.html
+    header). Manifest notes: dashboard-decks.js is loaded because sessions
+    call its openCitationViewer() (the 📖 Source badge on cited cards) and
+    because the shared `studySession` binding lives at its bottom; KaTeX +
+    mhchem render LaTeX on card faces. The active session is carried across
+    page swaps by bootstrap's pagehide snapshot / init() restore
+    (sessionStorage), matching the SPA's in-memory lifetime.
   -->
 </head>
 <body>
   <div id="stripe"></div>
-  <button id="nav-pill" aria-label="Open navigation menu" aria-expanded="false" aria-controls="sidebar" title="Menu">☰</button>
+  <button id="logo-icon" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="sidebar" title="Menu">≡</button>
   <button id="info-btn" title="About this page" aria-label="Page help">i</button>
   <div id="nav-backdrop"></div>
   <aside id="sidebar" aria-hidden="true" tabindex="-1">
     <div id="sidebar-header">
       <div id="logo">
-        <div id="logo-icon">✦</div>
         <div>
           <div id="logo-name">SCIMA Learning</div>
           <div id="logo-sub">Adaptive Learning</div>

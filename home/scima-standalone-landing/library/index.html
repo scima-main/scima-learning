@@ -9,30 +9,25 @@
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../app/dashboard.css">
   <!--
-    SCIMA Learning — Library page: Library + Capture (six-page build; see the
-    landing index.html header for the map). The sources → cards pipeline in
-    one document: import/read/cite in Library, then Quick Add / AI Generate
-    in Capture, switching via the in-page tab bar (or #capture / #library).
-    Old /capture/ URLs redirect here. Manifest notes: this is the only page
-    that imports files, so it carries process-shim.js (must precede the epub
-    bundle — it polyfills the Node `process` global the bundled
-    path-resolution code expects), fflate (Library "Import" .zip and
-    exportSourceWithBookmarks), and the EPUB/MOBI parser bundles.
-    dashboard-decks.js provides the citation pickers/viewer, the chunked-blob
-    helpers and openCreateDeckModal() these flows call. pdf.min.js is still
-    lazy-loaded on demand via assetUrl(). KaTeX is NOT loaded — capture
-    previews are plain text and the reader shows source HTML as authored.
+    SCIMA Learning — Library (six-page build; see the landing index.html
+    header). The only page that imports files, so it carries process-shim.js
+    (must precede the epub bundle — it polyfills the Node `process` global
+    the bundled path-resolution code expects), fflate (Library "Import" .zip
+    and exportSourceWithBookmarks), and the EPUB/MOBI parser bundles.
+    dashboard-decks.js provides the chunked-blob helpers and
+    openCreateDeckModal() these flows call. pdf.min.js is still lazy-loaded
+    on demand via assetUrl(). KaTeX is NOT loaded — the reader shows source
+    HTML as authored; created cards get their LaTeX rendered on Decks/Study.
   -->
 </head>
 <body>
   <div id="stripe"></div>
-  <button id="nav-pill" aria-label="Open navigation menu" aria-expanded="false" aria-controls="sidebar" title="Menu">☰</button>
+  <button id="logo-icon" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="sidebar" title="Menu">≡</button>
   <button id="info-btn" title="About this page" aria-label="Page help">i</button>
   <div id="nav-backdrop"></div>
   <aside id="sidebar" aria-hidden="true" tabindex="-1">
     <div id="sidebar-header">
       <div id="logo">
-        <div id="logo-icon">✦</div>
         <div>
           <div id="logo-name">SCIMA Learning</div>
           <div id="logo-sub">Adaptive Learning</div>
@@ -54,7 +49,6 @@
     <main id="main">
       <div id="page-tabs"></div>
       <div id="view-library"   class="view"></div>
-      <div id="view-capture"   class="view"></div>
     </main>
   </div>
 
@@ -87,7 +81,7 @@
   <!-- Page identity for the multi-page router (app/dashboard-core.js
        reads this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is
        the relative path from this page back to the landing folder. -->
-  <script>window.SCIMA_PAGE = { id: 'library', root: '../', views: ['library', 'capture'] };</script>
+  <script>window.SCIMA_PAGE = { id: 'library', root: '../', views: ['library'] };</script>
   <script src="../lib/process-shim.js"></script>
   <script src="../lib/fflate.umd.js"></script>
   <script src="../lib/epub-parser.bundle.js"></script>
@@ -101,7 +95,6 @@
   <script src="../app/dashboard-blobstore.js"></script>
   <script src="../app/dashboard-decks.js"></script>
   <script src="../app/dashboard-library.js"></script>
-  <script src="../app/dashboard-capture.js"></script>
   <script src="../app/dashboard-analytics.js"></script>
   <script src="../app/dashboard-onboarding.js"></script>
   <script src="../app/dashboard-bootstrap.js"></script>

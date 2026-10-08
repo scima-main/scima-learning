@@ -11,10 +11,9 @@
    after this file.
 
    SITE PORT NOTES: ported verbatim, no changes. Purely state/DOM overlay
-   logic — no chrome.* APIs anywhere in this file. The sidebar-tour step
-   still references 'tracker-overview' as one of its stops; that's fine —
-   it'll show the tracker stub's "isn't in this build yet" placeholder like
-   any other not-yet-ported tab, same as clicking it directly would. */
+   logic — no chrome.* APIs anywhere in this file. The nav-walk step opens
+   the nav drawer while it runs (its spotlight targets live inside it) and
+   closes it again afterwards — see _renderTutorialStep(). */
 
 const TUTORIAL_VERSION = 1;
 
@@ -105,16 +104,16 @@ const TUTORIAL_STEPS = [
     waitFor: 'next',
     sidebarWalk: [
       { view: 'home', blurb: 'Home — your daily snapshot: what\u2019s due, streaks, and quick shortcuts into recent decks.' },
-      { view: 'decks', blurb: 'Decks — where your flashcard decks and folders live, organized by subject.' },
+      { view: 'decks', blurb: 'Decks — your flashcard decks and folders, plus Capture (Quick Add and AI Generate) on the same page.' },
       { view: 'study', blurb: 'Study — launches a review session across one deck, a folder, or everything due today.' },
-      { view: 'library', blurb: 'Library — imported books and articles to read and cite, with Capture (Quick Add and AI Generate) on the same page.' },
-      { view: 'analytics', blurb: 'Insights — retention, streak and study-time charts, with Quests and achievements on the same page.' },
+      { view: 'library', blurb: 'Library — imported books and articles to read, highlight and cite into cards.' },
+      { view: 'analytics', blurb: 'Analytics — retention, streak and study-time charts, with Quests and achievements on the same page.' },
       { view: 'settings', blurb: 'Settings — algorithm, theme, accessibility, data import/export, and navigation customization.' },
     ],
   },
   {
     title: 'Keyboard shortcuts',
-    body: 'The \u2630 pill top-left opens your nav (the backdrop dims everything else; Esc or a tap outside closes it). \u2318/Ctrl+K opens the command palette. Alt+Shift+1\u20136 jumps straight to a nav tab. Esc closes any dialog. \u2318/Ctrl+Enter submits a typed quiz answer.\nCtrl+Shift+F opens this dashboard. Ctrl+Shift+Z creates a flashcard with the text selected, while Ctrl+Shift+X defines the selected text.',
+    body: '\u2318/Ctrl+K opens the command palette. Alt+Shift+1\u20139 jumps straight to a sidebar tab. Esc closes any dialog. \u2318/Ctrl+Enter submits a typed quiz answer.\nCtrl+Shift+F opens this dashboard. Ctrl+Shift+Z creates a flashcard with the text selected, while Ctrl+Shift+X defines the selected text.',
     waitFor: 'next',
   },
   {
@@ -224,9 +223,8 @@ function _renderTutorialStep() {
   const step = TUTORIAL_STEPS[_tut.stepIdx];
   if (!step) { endTutorial(); return; }
   step.beforeShow?.();
-  // The nav-walk step spotlights entries that live inside the nav drawer, so
-  // the drawer has to be open for it; every other step gets the viewport to
-  // itself (a closed drawer also keeps its dim backdrop out of the way).
+  // The nav-walk step spotlights tabs that live inside the nav drawer, so
+  // the drawer opens for it; every other step gets the viewport to itself.
   if (step.sidebarWalk) openNav(); else closeNav();
 
   // Composite "sidebar tour" step auto-advances through its own sub-list on Next.

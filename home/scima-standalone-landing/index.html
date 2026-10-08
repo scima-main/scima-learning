@@ -9,42 +9,39 @@
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="app/dashboard.css">
   <!--
-    SCIMA Learning — Home. Six-page build.
+    SCIMA Learning — Home. Six pages, six nav tabs.
 
-    The dashboard is six pages; the nav pill opens a drawer listing exactly
-    these six destinations, and merged pages switch between their views with
-    an in-page tab bar (no reload):
+    The eight flashcard tabs became six pages by merging Capture into the
+    Decks page and Quests into the Analytics page (each merged pair switches
+    in-page via a tab bar and #capture / #quests deep links); the Mark
+    Tracker's six stub tabs/views/route were removed outright. The nav is a
+    collapsible drawer: at rest the ≡ logo mark (the old ✦ tile, now a
+    floating circle with hover/active touch states) is the only chrome;
+    opening slides the drawer in from the left over a dim backdrop (modal
+    pattern: click-outside / Esc closes, focus returns to the mark) while
+    the drawer's labels fade in. Slide is transform-only, fades are
+    opacity-only; .power-saving and prefers-reduced-motion disable motion.
 
-      /            Home                        (this page — lightest slice)
-      /decks/      Decks                       + KaTeX/mhchem for card previews
-      /study/      Study                       + KaTeX/mhchem for card faces
-      /library/    Library + Capture           the sources → cards pipeline;
-                   (library/)                  + fflate, EPUB/MOBI parsers,
-                   process-shim. /capture/ redirects here (#capture).
-      /insights/   Analytics + Quests          + dashboard-library.js for the
-                   (insights/)                 reading-time breakdown.
-      /settings/   Settings                    + fflate (Export/Import All
-                   (settings/)                 Data .zip).
+      /             Home                       (this page — lightest slice)
+      /decks/       Decks + Capture            + KaTeX/mhchem card previews
+      /study/       Study                      + KaTeX/mhchem card faces
+      /library/     Library                    + fflate, EPUB/MOBI parsers,
+                                               process-shim
+      /analytics/   Analytics + Quests         + dashboard-library.js for the
+                                               reading-time breakdown
+      /settings/    Settings                   + fflate (Export/Import zip)
 
-    The Mark Tracker's six stub tabs/views are gone (they only ever rendered
-    "isn't in this build yet" placeholders); /tracker/ redirects home. The
-    old eight-page flat layout and the pre-route dashboard/ module directory
-    are gone too — modules now live in app/.
-
-    Navigation is a collapsible drawer: at rest a single ☰ pill top-left
-    (styled like the ⓘ help button); opening it slides the panel over a dim
-    backdrop (modal pattern: click-outside or Esc closes, focus returns to
-    the pill). The slide is transform/opacity-only so the content behind
-    never reflows; .power-saving and prefers-reduced-motion disable it.
+    Static redirect stubs keep old URLs working under both mount families:
+    /capture/ → /decks/#capture, /insights/ → /analytics/, /tracker/ → /.
 
     The backend serves the landing folder both at the domain root (canonical,
     backend/app/main.py's "/" mount) and at /dashboard/ (legacy mount — kept
     for old bookmarks and because community/index.html loads
     /dashboard/shared/theme.js root-absolute). Every reference below is
     RELATIVE (scripts, styles, lazy pdf.js via assetUrl(), cross-route links),
-    so the same files work under both prefixes and a session never jumps
-    between URL families. Shared assets stay at the landing root; route
-    directories contain only their index.html (or a redirect stub).
+    so the same files work under both prefixes. Shared assets stay at the
+    landing root; route directories contain only their index.html (or a
+    redirect stub).
 
     Cross-page seams live in app/dashboard-core.js (VIEW_ROUTES/PAGE_VIEWS,
     navigate()/renderView() redirects, the sessionStorage nav handoff,
@@ -63,13 +60,12 @@
 </head>
 <body>
   <div id="stripe"></div>
-  <button id="nav-pill" aria-label="Open navigation menu" aria-expanded="false" aria-controls="sidebar" title="Menu">☰</button>
+  <button id="logo-icon" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="sidebar" title="Menu">≡</button>
   <button id="info-btn" title="About this page" aria-label="Page help">i</button>
   <div id="nav-backdrop"></div>
   <aside id="sidebar" aria-hidden="true" tabindex="-1">
     <div id="sidebar-header">
       <div id="logo">
-        <div id="logo-icon">✦</div>
         <div>
           <div id="logo-name">SCIMA Learning</div>
           <div id="logo-sub">Adaptive Learning</div>
