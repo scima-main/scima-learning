@@ -50,7 +50,7 @@ function renderSettings(c) {
   const algoSel=el('select',{class:'u-input',onchange:e=>{ state.settings.algorithm=e.target.value; scheduleSave(); }});
   [['fsrs','FSRS (Recommended)'],['sm2','SM-2 (Classic)']].forEach(([v,t])=>{ const o=el('option',{value:v,class:'u-bg'},t); if(state.settings.algorithm===v)o.selected=true; algoSel.appendChild(o); });
   aiCard.append(
-    el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},el('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px'},el('div',{style:'font-size:13px;font-weight:600'},'SRS Algorithm'),el('button',{class:'help-btn',title:'FSRS vs SM-2 — how reviews get scheduled','aria-label':'FSRS vs SM-2 — how reviews get scheduled',onclick:()=>openAlgorithmHelp()},'i')),algoSel),
+    el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},el('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px'},el('div',{style:'font-size:13px;font-weight:600'},'SRS Algorithm'),makeHelpBtn('FSRS vs SM-2 — how reviews get scheduled', ()=>openAlgorithmHelp(), false)),algoSel),
     makeToggle('Auto-suspend leeches','Suspend cards after too many lapses','autoSuspend'),
     makeToggle('Text-to-Speech','Read cards aloud during study','tts'),
     makeToggle('Push Notifications','Daily review reminders','notifications'),

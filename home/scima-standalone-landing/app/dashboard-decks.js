@@ -267,7 +267,7 @@ function renderDeckCard(deck, grid) {
   const deckDue = getDueCards(deck.cards).length;
   const sk = deck.subject||DEFAULT_SUBJECT_KEY;
   const mult = subjectXPMultiplier(state.trackerState?.subjects, sk);
-  const pinBtn = el('button',{class:`btn btn-ghost btn-sm pin-toggle${deck.pinned?' pinned':''}`,title:deck.pinned?'Unpin from sidebar':'Pin to sidebar',onclick:e=>{e.stopPropagation();togglePinDeck(deck.id);}},'📌');
+  const pinBtn = el('button',{class:`btn btn-ghost btn-sm pin-toggle${deck.pinned?' pinned':''}`,'data-deck':deck.id,title:deck.pinned?'Unpin from sidebar':'Pin to sidebar',onclick:e=>{e.stopPropagation();togglePinDeck(deck.id);}},'📌');
   const cardEl = el('div',{class:`card deck-card${deckDue>0?' glow':''}`},
     el('div',{style:'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px'},
       mkIcon(deck.emoji,deck.image,'36px','8px'),
@@ -1740,6 +1740,7 @@ function openDeckDetail(deckId) {
 
   const pinToggleBtn = el('button', {
     class: `btn btn-ghost btn-sm pin-toggle${deck.pinned?' pinned':''}`,
+    'data-deck': deck.id,
     title: deck.pinned ? 'Unpin from sidebar' : 'Pin to sidebar',
     onclick: () => { togglePinDeck(deckId); pinToggleBtn.classList.toggle('pinned', state.decks.find(d=>d.id===deckId)?.pinned); }
   }, '📌');

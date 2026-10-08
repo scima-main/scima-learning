@@ -254,8 +254,7 @@ function openModeHelp(id) {
     const startBtn=btn('Start','primary',{full:true,disabled:!hasCards,onclick:()=>startStudySession(state.studyScope,m.id)});
     if(m.id==='review') startBtn.id='tutorial-target-study-start';
     modeGrid.appendChild(el('div',{class:`card${hasCards?' glow':''}`,style:`position:relative;padding:20px;opacity:${hasCards?1:0.5}`},
-      el('button',{class:'help-btn mode-help-btn',title:`How ${m.label} works`,'aria-label':`How ${m.label} works`,
-        onclick:e=>{ e.stopPropagation(); openModeHelp(m.id); }},'i'),
+      makeHelpBtn(`How ${m.label} works`, e=>{ e.stopPropagation(); openModeHelp(m.id); }, true),
       el('div',{style:'font-size:28px;margin-bottom:8px'},m.icon),
       el('div',{style:'font-weight:800;font-size:14px;margin-bottom:4px'},m.label),
       el('div',{style:'font-size:11px;color:var(--muted);margin-bottom:14px'},m.desc),
@@ -266,7 +265,7 @@ function openModeHelp(id) {
   c.append(
     el('div',{style:'display:flex;align-items:flex-start;justify-content:space-between;gap:12px'},
       el('div',{},el('div',{class:'section-title'},'Study Mode'),el('div',{class:'section-sub'},'Pick a scope and mode to begin')),
-      el('button',{class:'help-btn',title:'How scheduling works (FSRS vs SM-2)','aria-label':'How scheduling works (FSRS vs SM-2)',onclick:()=>openAlgorithmHelp()},'i')),
+      makeHelpBtn('How scheduling works (FSRS vs SM-2)', ()=>openAlgorithmHelp(), false)),
     el('div',{class:'u-section-label'},'Recents'),
     recentsRow,
     scopeSummaryBar,

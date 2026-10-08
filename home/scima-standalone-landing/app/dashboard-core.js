@@ -1594,10 +1594,21 @@ function togglePinDeck(deckId) {
   // grid, deck-detail header — all carry data-deck), so the highlight and
   // tooltip update the instant you click. A full renderView('decks') here
   // would also destroy an open deck-detail view just to refresh one icon.
-  document.querySelectorAll(`.pin-toggle[data-deck="${deckId}"]`).forEach(b => {
-    b.classList.toggle('pinned', deck.pinned);
-    b.title = deck.pinned ? 'Unpin from sidebar' : 'Pin to sidebar';
-  });
+  const pinBtns = document.querySelectorAll(`.pin-toggle[data-deck="${deckId}"]`);
+  if (pinBtns.length) {
+    pinBtns.forEach(b => {
+      b.classList.toggle('pinned', deck.pinned);
+      b.title = deck.pinned ? 'Unpin from sidebar' : 'Pin to sidebar';
+    });
+  } else if (state.view === 'home') {
+    // No data-deck buttons in this page bundle (partial deploy): re-render
+    // the view so the highlight still flips immediately.
+    renderView('home');
+  } else if (state.view === 'decks' && !document.getElementById('card-grid')) {
+    // Same fallback on Decks — but never clobber an open deck-detail view
+    // (its card grid is in the DOM) just to refresh a pin icon.
+    renderView('decks');
+  }
 }
 
 // ── Cross-page navigation seam (multi-page site build) ───────────────
@@ -1954,6 +1965,31 @@ const PAGE_HELP = {
     'Data Management: "Export All Data" downloads a complete .zip backup — every deck/card, folder, source (including bundled PDFs and illustrated EPUBs), review history, achievements, tracker data, streak, and recent study scopes. "Import" reads that .zip (or an older .json export) back in, either merging with or replacing your current data.',
   ]},
 };
+// Themed circular ⓘ for contextual explainers (study-mode cards, the Study
+// picker header, Settings → SRS Algorithm). All visuals are INLINE so the
+// button keeps its theme even if a stylesheet merge/ordering loss drops the
+// .help-btn rules; the classes remain as hooks (and .mode-help-btn still
+// positions it in a card corner when the stylesheet is intact — the inline
+// position below covers the case where it isn't). Hover/touch feedback is
+// wired here too, for the same reason.
+function makeHelpBtn(title, onclick, pinnedToCorner) {
+  const b = el('button', {
+    class: 'help-btn' + (pinnedToCorner ? ' mode-help-btn' : ''),
+    title, 'aria-label': title,
+    style: (pinnedToCorner ? 'position:absolute;top:10px;right:10px;' : '') +
+      'width:22px;height:22px;border-radius:50%;border:1px solid var(--border);' +
+      'background:var(--surface);color:var(--blue);' +
+      'font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:700;' +
+      'font-size:12px;line-height:1;display:inline-flex;align-items:center;' +
+      'justify-content:center;cursor:pointer;opacity:0.75;flex-shrink:0;padding:0;' +
+      'transition:opacity 0.15s,transform 0.15s,box-shadow 0.15s;',
+    onclick,
+  }, 'i');
+  b.addEventListener('mouseenter', () => { b.style.opacity = '1'; b.style.transform = 'scale(1.1)'; b.style.boxShadow = '0 4px 12px rgba(0,0,0,0.35)'; });
+  b.addEventListener('mouseleave', () => { b.style.opacity = '0.75'; b.style.transform = ''; b.style.boxShadow = ''; });
+  return b;
+}
+
 // FSRS vs SM-2 explainer — opened from the ⓘ beside Settings → SRS Algorithm
 // and from the Study picker's header. Describes THIS build's schedulers
 // (shared/srs-core.js), not the textbook algorithms.
