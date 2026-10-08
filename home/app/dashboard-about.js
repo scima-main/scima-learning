@@ -70,7 +70,7 @@ function aboutMarkdown() {
 function renderAbout(c) {
   c.append(
     el('div', { class: 'section-title' }, 'About'),
-    el('div', { class: 'section-sub', style: 'margin-bottom:0' }, 'What SCIMA Learning is, straight from ABOUT.md.')
+    el('div', { class: 'section-sub', style: 'margin-bottom:0' }, 'haii, it\'s me, SCIMA! :3')
   );
   const body = el('div', { class: 'md-body card', style: 'padding:24px 28px;margin-top:20px' });
   body.innerHTML = '<p>Loading…</p>';
