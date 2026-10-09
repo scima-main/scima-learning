@@ -15,6 +15,13 @@ The SQLite database itself carries no payloads (rows reference files), so
 nothing in `decks` rows changes. Completion is recorded as
 db_meta 'payload_schema' = 'share-v1'.
 
+This command additionally repairs the deck_tags -> decks_fts sync
+triggers in place (DROP + CREATE from db.DECK_TAGS_TRIGGER_SQL). The
+triggers shipped with schema v5 read old column values back out of the
+external-content FTS table, which crashed every tagged-deck upload with
+"no such column: T.tags". The repair is idempotent and touches no table
+data.
+
 IMPORTANT: this deliberately does NOT touch db_meta 'schema_version' —
 db.init_db() drops and recreates all tables when that value changes, and
 this is a payload-only migration.
@@ -118,6 +125,64 @@ def _record_done(dry_run: bool) -> None:
         conn.close()
 
 
+def _repair_fts_triggers(dry_run: bool) -> None:
+    """Recreate the deck_tags FTS sync triggers from db.DECK_TAGS_TRIGGER_SQL.
+
+    The triggers shipped with schema v5 built their FTS5 'delete' command
+    by SELECTing the old row back out of decks_fts; because decks_fts is
+    an external-content table backed by `decks` (which has no `tags`
+    column), every tag INSERT/DELETE raised "no such column: T.tags" and
+    rolled back the whole tagged-deck upload.
+
+    DROP + CREATE is idempotent, touches no table data, and needs no FTS
+    rebuild: while the bug was live no tagged deck could ever commit, so
+    no stale tag tokens can exist in the index.
+    """
+    if not db.DB_PATH.is_file():
+        print("fts triggers: no database file — nothing to repair")
+        return
+
+    conn = sqlite3.connect(str(db.DB_PATH))
+    try:
+        has_fts = conn.execute(
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type IN ('table', 'view') AND name = 'decks_fts'"
+        ).fetchone()
+
+        if not has_fts:
+            print("fts triggers: decks_fts not present — skipping repair")
+            return
+
+        existing = sorted(
+            name
+            for (name,) in conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type = 'trigger' "
+                "AND name IN ('deck_tags_ai', 'deck_tags_ad')"
+            )
+        )
+
+        if dry_run:
+            print(
+                "fts triggers: WOULD recreate deck_tags_ai, deck_tags_ad "
+                f"with fixed SQL (present now: {', '.join(existing) or 'none'})"
+            )
+            return
+
+        conn.executescript(
+            "DROP TRIGGER IF EXISTS deck_tags_ai;\n"
+            "DROP TRIGGER IF EXISTS deck_tags_ad;\n"
+            + db.DECK_TAGS_TRIGGER_SQL
+        )
+        conn.commit()
+        print(
+            "fts triggers: deck_tags_ai, deck_tags_ad recreated with fixed SQL "
+            f"(were: {', '.join(existing) or 'none'})"
+        )
+    finally:
+        conn.close()
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         prog="python -m app.migrate_db",
@@ -194,6 +259,10 @@ def main(argv=None) -> int:
         print(f"db_meta: {PAYLOAD_SCHEMA_KEY} = {PAYLOAD_SCHEMA_VALUE}")
     if not args.dry_run and migrated:
         print(f"originals backed up in: {backup_dir}")
+
+    print()
+    _repair_fts_triggers(args.dry_run)
+
     if failed:
         return 1
     return 0

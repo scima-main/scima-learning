@@ -10,6 +10,146 @@ DB_PATH = DATA_DIR / "scima.db"
 SCHEMA_VERSION = "5"
 
 
+# Fixed definitions of the deck_tags -> decks_fts sync triggers.
+#
+# The versions originally shipped in the schema-v5 script built their
+# FTS5 'delete' command by SELECTing the old row back out of decks_fts.
+# decks_fts is an external-content FTS5 table (content='decks'), so
+# reading any of its columns reconstructs values from `decks` — and
+# `decks` has no `tags` column. Every tag INSERT/DELETE therefore
+# failed with "no such column: T.tags" and rolled back the whole
+# tagged-deck upload.
+#
+# These triggers instead recompute the previous tags string from
+# deck_tags itself. That yields exactly the same set of tokens the FTS
+# row was written with (GROUP_CONCAT order may differ, but the FTS5
+# 'delete' command removes a rowid from each listed token's postings,
+# so token order is irrelevant), keeping the delete index-exact.
+#
+# migrate_db.py reuses this constant to repair existing databases in
+# place: init_db only recreates triggers after a schema_version bump,
+# which would drop and wipe the registry.
+DECK_TAGS_TRIGGER_SQL = """
+/*
+ * When a tag is added or removed, rebuild the corresponding FTS row
+ * so tags remain searchable. The old tags value fed to the FTS5
+ * 'delete' command is recomputed from deck_tags — never read back
+ * from decks_fts (see DECK_TAGS_TRIGGER_SQL note in db.py).
+ */
+
+CREATE TRIGGER deck_tags_ai
+AFTER INSERT ON deck_tags
+BEGIN
+    INSERT INTO decks_fts(
+        decks_fts,
+        rowid,
+        name,
+        subject,
+        author,
+        tags,
+        description
+    )
+    SELECT
+        'delete',
+        d.rowid,
+        d.name,
+        d.subject,
+        d.author,
+        COALESCE(
+            (
+                SELECT GROUP_CONCAT(tag, ' ')
+                FROM deck_tags
+                WHERE deck_id = d.id
+                  AND tag <> new.tag
+            ),
+            ''
+        ),
+        d.description
+    FROM decks d
+    WHERE d.id = new.deck_id;
+
+    INSERT INTO decks_fts(
+        rowid,
+        name,
+        subject,
+        author,
+        tags,
+        description
+    )
+    SELECT
+        d.rowid,
+        d.name,
+        d.subject,
+        d.author,
+        COALESCE(
+            (
+                SELECT GROUP_CONCAT(tag, ' ')
+                FROM deck_tags
+                WHERE deck_id = d.id
+            ),
+            ''
+        ),
+        d.description
+    FROM decks d
+    WHERE d.id = new.deck_id;
+END;
+
+
+CREATE TRIGGER deck_tags_ad
+AFTER DELETE ON deck_tags
+BEGIN
+    INSERT INTO decks_fts(
+        decks_fts,
+        rowid,
+        name,
+        subject,
+        author,
+        tags,
+        description
+    )
+    SELECT
+        'delete',
+        d.rowid,
+        d.name,
+        d.subject,
+        d.author,
+        (
+            SELECT COALESCE(GROUP_CONCAT(tag, ' ') || ' ', '')
+            FROM deck_tags
+            WHERE deck_id = d.id
+        ) || old.tag,
+        d.description
+    FROM decks d
+    WHERE d.id = old.deck_id;
+
+    INSERT INTO decks_fts(
+        rowid,
+        name,
+        subject,
+        author,
+        tags,
+        description
+    )
+    SELECT
+        d.rowid,
+        d.name,
+        d.subject,
+        d.author,
+        COALESCE(
+            (
+                SELECT GROUP_CONCAT(tag, ' ')
+                FROM deck_tags
+                WHERE deck_id = d.id
+            ),
+            ''
+        ),
+        d.description
+    FROM decks d
+    WHERE d.id = old.deck_id;
+END;
+"""
+
+
 def init_db() -> None:
     DATA_DIR.mkdir(
         parents=True,
@@ -237,114 +377,8 @@ def init_db() -> None:
                 END;
 
 
-                /*
-                 * When a tag is added or removed, rebuild the
-                 * corresponding FTS row so tags remain searchable.
-                 */
-
-                CREATE TRIGGER deck_tags_ai
-                AFTER INSERT ON deck_tags
-                BEGIN
-                    INSERT INTO decks_fts(
-                        decks_fts,
-                        rowid,
-                        name,
-                        subject,
-                        author,
-                        tags,
-                        description
-                    )
-                    SELECT
-                        'delete',
-                        f.rowid,
-                        f.name,
-                        f.subject,
-                        f.author,
-                        f.tags,
-                        f.description
-                    FROM decks_fts f
-                    JOIN decks d
-                        ON d.rowid = f.rowid
-                    WHERE d.id = new.deck_id;
-
-                    INSERT INTO decks_fts(
-                        rowid,
-                        name,
-                        subject,
-                        author,
-                        tags,
-                        description
-                    )
-                    SELECT
-                        d.rowid,
-                        d.name,
-                        d.subject,
-                        d.author,
-                        COALESCE(
-                            (
-                                SELECT GROUP_CONCAT(tag, ' ')
-                                FROM deck_tags
-                                WHERE deck_id = d.id
-                            ),
-                            ''
-                        ),
-                        d.description
-                    FROM decks d
-                    WHERE d.id = new.deck_id;
-                END;
-
-
-                CREATE TRIGGER deck_tags_ad
-                AFTER DELETE ON deck_tags
-                BEGIN
-                    INSERT INTO decks_fts(
-                        decks_fts,
-                        rowid,
-                        name,
-                        subject,
-                        author,
-                        tags,
-                        description
-                    )
-                    SELECT
-                        'delete',
-                        f.rowid,
-                        f.name,
-                        f.subject,
-                        f.author,
-                        f.tags,
-                        f.description
-                    FROM decks_fts f
-                    JOIN decks d
-                        ON d.rowid = f.rowid
-                    WHERE d.id = old.deck_id;
-
-                    INSERT INTO decks_fts(
-                        rowid,
-                        name,
-                        subject,
-                        author,
-                        tags,
-                        description
-                    )
-                    SELECT
-                        d.rowid,
-                        d.name,
-                        d.subject,
-                        d.author,
-                        COALESCE(
-                            (
-                                SELECT GROUP_CONCAT(tag, ' ')
-                                FROM deck_tags
-                                WHERE deck_id = d.id
-                            ),
-                            ''
-                        ),
-                        d.description
-                    FROM decks d
-                    WHERE d.id = old.deck_id;
-                END;
                 """
+                + DECK_TAGS_TRIGGER_SQL
             )
 
             conn.execute(

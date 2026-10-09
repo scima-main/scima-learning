@@ -59,7 +59,9 @@ def client(tmp_path, monkeypatch):
     ratelimit_module.reset()
 
     from app.main import app
-    with TestClient(app) as c:
+    # base_url host must be in TrustedHostMiddleware's allowed list,
+    # otherwise every request 400s ("Invalid HTTP host").
+    with TestClient(app, base_url="http://localhost") as c:
         yield c
 
     ratelimit_module.reset()
@@ -75,7 +77,7 @@ def test_health(client):
 def test_empty_list(client):
     r = client.get("/api/v1/decks")
     assert r.status_code == 200
-    assert r.json() == {"items": [], "total": 0, "page": 1, "pageSize": 20}
+    assert r.json() == {"items": [], "total": 0, "limit": 50, "offset": 0}
 
 
 def test_create_and_fetch_deck(client):
@@ -84,21 +86,34 @@ def test_create_and_fetch_deck(client):
     assert r.status_code == 201
     created = r.json()
     assert created["id"].startswith("sd_")
-    assert created["sourceDeckId"] == "d_1787394145845_sdcnm"
     assert created["name"] == "Spanish Basics"
+    assert created["emoji"] == "📖"
+    assert created["subject"] == "language"
+    assert created["author"] == "jdoe"
+    assert created["description"] == "Beginner Spanish"
     assert created["cardCount"] == 1
-    assert created["deckVersion"] == 1
     assert set(created["tags"]) == {"spanish", "language"}
-    assert created["export"]["deck"]["cards"][0]["back"] == "Hola"
+    assert created["downloads"] == 0
 
     deck_id = created["id"]
     r2 = client.get(f"/api/v1/decks/{deck_id}")
     assert r2.status_code == 200
-    assert r2.json()["export"] == created["export"]
+    assert r2.json() == created
 
     r3 = client.get("/api/v1/decks")
     assert r3.json()["total"] == 1
     assert r3.json()["items"][0]["id"] == deck_id
+
+    # The export endpoint round-trips a stamped share/deck envelope and keeps
+    # the source deck id as provenance inside the payload.
+    r4 = client.get(f"/api/v1/decks/{deck_id}/export")
+    assert r4.status_code == 200
+    export = r4.json()
+    assert export["$schema"] == "scima"
+    assert export["schema"] == "share"
+    assert export["kind"] == "deck"
+    assert export["deck"]["id"] == "d_1787394145845_sdcnm"
+    assert export["deck"]["cards"][0]["back"] == "Hola"
 
 
 def test_fork_style_reupload_creates_new_entry(client):
@@ -106,8 +121,6 @@ def test_fork_style_reupload_creates_new_entry(client):
     r1 = client.post("/api/v1/decks", json=body)
     r2 = client.post("/api/v1/decks", json=body)
     assert r1.json()["id"] != r2.json()["id"]
-    assert r1.json()["deckVersion"] == 1
-    assert r2.json()["deckVersion"] == 1
     assert client.get("/api/v1/decks").json()["total"] == 2
 
 
@@ -123,13 +136,135 @@ def test_search(client):
     assert r_miss.json()["total"] == 0
 
 
-def test_tags_and_categories(client):
+def test_tagged_upload_and_tag_search(client):
+    """Regression: tag inserts used to crash inside the deck_tags_ai FTS
+    trigger ("no such column: T.tags"), 500ing every tagged upload."""
+    body = {**SAMPLE_EXPORT, "meta": {"description": "", "author": "", "tags": ["spanish", "beginner"]}}
+    r = client.post("/api/v1/decks", json=body)
+    assert r.status_code == 201
+    assert set(r.json()["tags"]) == {"spanish", "beginner"}
+
+    r = client.get("/api/v1/search", params={"q": "spanish"})
+    assert r.status_code == 200
+    assert r.json()["total"] == 1
+    assert r.json()["items"][0]["name"] == "Spanish Basics"
+
+    assert client.get("/api/v1/search", params={"q": "beginner"}).json()["total"] == 1
+    assert client.get("/api/v1/search", params={"q": "french"}).json()["total"] == 0
+
+    # The tag filter path (deck_tags subselect) agrees with FTS.
+    r = client.get("/api/v1/decks", params={"tag": "spanish"})
+    assert r.json()["total"] == 1
+
+
+def test_fts_consistent_after_tag_delete(client):
+    """deck_tags_ad must rebuild the FTS row from deck_tags (never read it
+    back from decks_fts), leaving no stale tokens behind. Tags chosen so
+    they don't collide with the deck name/subject — MATCH hits can then
+    only come from the tags column."""
+    from app import db as db_module
+
+    body = {**SAMPLE_EXPORT, "meta": {"description": "", "author": "", "tags": ["flashcards", "drills"]}}
+    client.post("/api/v1/decks", json=body)
+    assert client.get("/api/v1/search", params={"q": "drills"}).json()["total"] == 1
+
+    with db_module.db_session() as conn:
+        conn.execute("DELETE FROM deck_tags WHERE tag = 'drills'")
+
+    assert client.get("/api/v1/search", params={"q": "drills"}).json()["total"] == 0
+    assert client.get("/api/v1/search", params={"q": "flashcards"}).json()["total"] == 1
+
+    # Deleting the last tag must not corrupt the index either ('optimize'
+    # merges segments and would surface any inconsistency).
+    with db_module.db_session() as conn:
+        conn.execute("DELETE FROM deck_tags WHERE tag = 'flashcards'")
+        conn.execute("INSERT INTO decks_fts(decks_fts) VALUES('optimize')")
+
+    assert client.get("/api/v1/search", params={"q": "flashcards"}).json()["total"] == 0
+    # The deck itself remains searchable by name.
+    assert client.get("/api/v1/search", params={"q": "Spanish"}).json()["total"] == 1
+
+
+def test_tag_and_subject_filters(client):
+    """The old /tags and /categories aggregate endpoints are gone (the
+    community page derives chips from deck summaries); tag/subject
+    filtering lives on the /decks list endpoint."""
     body = {**SAMPLE_EXPORT, "meta": {"description": "", "author": "", "tags": ["spanish", "beginner"]}}
     client.post("/api/v1/decks", json=body)
-    tags = client.get("/api/v1/tags").json()["tags"]
-    assert {"name": "spanish", "count": 1} in tags
-    cats = client.get("/api/v1/categories").json()["categories"]
-    assert {"name": "language", "count": 1} in cats
+
+    r = client.get("/api/v1/decks", params={"tag": "spanish"})
+    assert r.status_code == 200
+    assert r.json()["total"] == 1
+    assert "spanish" in r.json()["items"][0]["tags"]
+
+    assert client.get("/api/v1/decks", params={"tag": "french"}).json()["total"] == 0
+
+    r = client.get("/api/v1/decks", params={"subject": "language"})
+    assert r.json()["total"] == 1
+    assert client.get("/api/v1/decks", params={"subject": "maths"}).json()["total"] == 0
+
+
+def test_migrate_db_repairs_buggy_fts_triggers(client, tmp_path):
+    """migrate_db._repair_fts_triggers must fix a database created with the
+    old v5 triggers (the ones that read old values back out of decks_fts
+    and crashed with 'no such column: T.tags' on any tag write)."""
+    import sqlite3
+
+    from app import db as db_module
+    from app import migrate_db
+
+    # `client` fixture has already monkeypatched db paths + run init_db.
+    # Reinstall the historical buggy trigger to simulate an old database.
+    buggy_trigger = """
+        CREATE TRIGGER deck_tags_ai
+        AFTER INSERT ON deck_tags
+        BEGIN
+            INSERT INTO decks_fts(
+                decks_fts, rowid, name, subject, author, tags, description
+            )
+            SELECT 'delete', f.rowid, f.name, f.subject, f.author, f.tags, f.description
+            FROM decks_fts f
+            JOIN decks d ON d.rowid = f.rowid
+            WHERE d.id = new.deck_id;
+        END;
+    """
+    conn = sqlite3.connect(str(db_module.DB_PATH))
+    try:
+        conn.execute("DROP TRIGGER deck_tags_ai")
+        conn.executescript(buggy_trigger)
+        conn.execute(
+            "INSERT INTO decks (id, name, description, subject, card_count, "
+            "file_path, created_at, updated_at) "
+            "VALUES ('sd_old', 'Old Deck', '', 'misc', 0, 'x.json', '', '')"
+        )
+        conn.commit()
+
+        # The old trigger breaks any tag write...
+        with pytest.raises(sqlite3.OperationalError, match="no such column: T.tags"):
+            conn.execute("INSERT INTO deck_tags (deck_id, tag) VALUES ('sd_old', 'broken')")
+        conn.rollback()
+    finally:
+        conn.close()
+
+    # Dry run changes nothing.
+    migrate_db._repair_fts_triggers(dry_run=True)
+    conn = sqlite3.connect(str(db_module.DB_PATH))
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            conn.execute("INSERT INTO deck_tags (deck_id, tag) VALUES ('sd_old', 'broken')")
+        conn.rollback()
+    finally:
+        conn.close()
+
+    # Real run repairs it; tag writes and FTS queries work afterwards.
+    migrate_db._repair_fts_triggers(dry_run=False)
+    with db_module.db_session() as conn:
+        conn.execute("INSERT INTO deck_tags (deck_id, tag) VALUES ('sd_old', 'fixed')")
+    assert client.get("/api/v1/search", params={"q": "fixed"}).json()["total"] == 1
+
+    # Running the repair twice is a no-op (idempotent).
+    migrate_db._repair_fts_triggers(dry_run=False)
+    assert client.get("/api/v1/search", params={"q": "fixed"}).json()["total"] == 1
 
 
 def test_get_missing_deck_404(client):
@@ -179,24 +314,26 @@ def test_get_deck_rate_limit(client):
     assert r_over.status_code == 429
 
 
-def test_download_deck_rate_limit(client):
-    """30 / minute / IP on GET /api/v1/decks/{id}?download=true, distinct
-    from the 120/minute plain-fetch bucket, and increments downloads only
-    on the download=true path."""
+def test_export_deck_rate_limit(client):
+    """30 / minute / IP on GET /api/v1/decks/{id}/export, distinct from the
+    120/minute summary-fetch bucket, and only the export path increments
+    the downloads counter."""
     body = {**SAMPLE_EXPORT, "meta": {"description": "", "author": "", "tags": []}}
     deck_id = client.post("/api/v1/decks", json=body).json()["id"]
 
-    # Plain metadata fetches should NOT move the downloads counter.
+    # Plain summary fetches should NOT move the downloads counter.
     for _ in range(3):
         client.get(f"/api/v1/decks/{deck_id}")
     assert client.get(f"/api/v1/decks/{deck_id}").json()["downloads"] == 0
 
-    for i in range(30):
-        r = client.get(f"/api/v1/decks/{deck_id}", params={"download": "true"})
+    for _ in range(30):
+        r = client.get(f"/api/v1/decks/{deck_id}/export")
         assert r.status_code == 200
-        assert r.json()["downloads"] == i + 1
-    r_over = client.get(f"/api/v1/decks/{deck_id}", params={"download": "true"})
+    assert client.get(f"/api/v1/decks/{deck_id}").json()["downloads"] == 30
+
+    r_over = client.get(f"/api/v1/decks/{deck_id}/export")
     assert r_over.status_code == 429
+    assert "Retry-After" in r_over.headers
 
 
 def test_search_query_too_long(client):
@@ -260,13 +397,20 @@ def test_request_body_too_large_rejected(client):
 
 
 def test_deck_internal_fields_not_promoted_to_metadata(client):
-    """pinned/ease/interval/etc are stored verbatim in the file but must
-    never leak into the community metadata response."""
+    """pinned/ease/interval/etc must never leak into community metadata —
+    and since uploads are normalized to the typed share payload
+    (DeckData/CardItem), they no longer survive into the stored export
+    either. Real card content still round-trips."""
     body = {**SAMPLE_EXPORT, "meta": {"description": "", "author": "", "tags": []}}
     r = client.post("/api/v1/decks", json=body)
     created = r.json()
-    for study_state_field in ("pinned", "ease", "interval", "due", "state", "reps", "lapses"):
+    study_state_fields = ("pinned", "ease", "interval", "due", "state", "reps", "lapses")
+    for study_state_field in study_state_fields:
         assert study_state_field not in created
-    # but it IS preserved untouched in the stored export
-    assert created["export"]["deck"]["pinned"] is False
-    assert created["export"]["deck"]["cards"][0]["ease"] == 2.5
+
+    export = client.get(f"/api/v1/decks/{created['id']}/export").json()
+    for study_state_field in study_state_fields:
+        assert study_state_field not in export["deck"]
+        assert study_state_field not in export["deck"]["cards"][0]
+    assert export["deck"]["cards"][0]["front"] == "Hello"
+    assert export["deck"]["cards"][0]["back"] == "Hola"
