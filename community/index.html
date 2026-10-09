@@ -406,6 +406,10 @@
      app.js), so we load its theme.js directly rather than keeping a
      second copy of the palette here — one source of truth for both. -->
 <script src="/dashboard/shared/theme.js"></script>
+<!-- Three-schema interchange module (skeletal/share/full + classifier) —
+     same source of truth the dashboard loads; app.js guards every use so
+     uploads still work if this 404s mid-deploy. -->
+<script src="/dashboard/shared/scima-schema.js"></script>
 <script src="app.js"></script>
 
 </body>

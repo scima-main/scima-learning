@@ -1332,7 +1332,49 @@ async function processUploadFile(file) {
       );
     }
 
-    if (
+    /*
+     * Three-schema check (shared/scima-schema.js, loaded from the
+     * dashboard): accept stamped envelopes and every recognized legacy
+     * generation, normalize skeletal short-key cards (f/b/h/t) to long
+     * keys, and reject anything unrecognized instead of guessing. The
+     * typeof guard keeps uploads working if the module failed to load,
+     * falling back to the original shape check.
+     */
+    if (typeof scimaClassify === 'function') {
+      const cls = scimaClassify(parsed);
+      const normDeck = scimaToFullDeck(parsed);
+
+      if (
+        !cls ||
+        !normDeck ||
+        (cls.kind !== 'deck' && cls.kind !== 'cards')
+      ) {
+        throw uploadError(
+          'The selected file is not a recognized SCIMA deck export.'
+        );
+      }
+
+      // A bare/skeletal card list is wrapped into a share deck envelope so
+      // everything downstream (validateUpload, sanitiseDeck, the request
+      // body) sees one canonical shape. Header-less card lists carry no
+      // deck name — fall back to the file's base name.
+      if (typeof normDeck.name !== 'string' || !normDeck.name.trim()) {
+        normDeck.name = file.name.replace(/\.[^.]+$/, '') || 'Imported deck';
+      }
+
+      parsed = cls.kind === 'cards'
+        ? scimaStamp(
+          {
+            version: 2,
+            exportedAt: new Date().toISOString(),
+            deck: normDeck,
+            citedSources: [],
+          },
+          'share',
+          'deck'
+        )
+        : { ...parsed, deck: normDeck };
+    } else if (
       !parsed ||
       !parsed.deck ||
       !Array.isArray(
@@ -1663,8 +1705,17 @@ document
           },
         };
 
+        /*
+         * Stamp the share/deck envelope so the backend stores an
+         * interchange-format payload. Guarded: the backend fills the
+         * envelope in itself if this module failed to load.
+         */
         const created =
-          await api.createDeck(body);
+          await api.createDeck(
+            typeof scimaStamp === 'function'
+              ? scimaStamp(body, 'share', 'deck')
+              : body
+          );
 
         showUploadStatus(
           null,

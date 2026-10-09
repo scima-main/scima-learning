@@ -260,6 +260,12 @@ let saveTimer = null;
 // exactly the same payload the debounce would have.
 function buildMFPayload() {
   return {
+    // Full-schema envelope (shared/scima-schema.js) — storage and account
+    // exports are the 'full' grade. Guarded constant so this file still runs
+    // in builds that don't load scima-schema.js.
+    $schema: 'scima', schema: 'full',
+    schemaVersion: (typeof SCIMA_SCHEMA_VERSION !== 'undefined' ? SCIMA_SCHEMA_VERSION : 1),
+    kind: 'account',
     decks: state.decks, folders: state.folders, sources: state.sources,
     libraryFolders: state.libraryFolders||[],
     streak: state.streak, lastStreakDate: state.lastStreakDate, reviewHistory: state.reviewHistory,
@@ -490,31 +496,31 @@ const AI_CARD_JSON_SCHEMA = {
         items: {
           type: 'object',
           properties: {
-            front: {
+            f: {
               type: 'string',
-              description: 'Short question testing one idea.'
+              description: 'Front: short question testing one idea.'
             },
-            back: {
+            b: {
               type: 'string',
-              description: 'Concise answer supported by the source. If the question has several distinct required answers (a list), separate them with \\n, one per line, no bullets.'
+              description: 'Back: concise answer supported by the source. If the question has several distinct required answers (a list), separate them with \\n, one per line, no bullets.'
             },
-            hint: {
+            h: {
               type: 'string',
-              description: 'Optional recall clue, otherwise empty.'
+              description: 'Hint: optional recall clue, otherwise empty string.'
             },
-            tags: {
+            t: {
               type: 'array',
               items: {
                 type: 'string'
               },
-              description: 'Short topic labels.'
+              description: 'Tags: short topic labels, empty array if none.'
             }
           },
           required: [
-            'front',
-            'back',
-            'hint',
-            'tags'
+            'f',
+            'b',
+            'h',
+            't'
           ],
           additionalProperties: false
         }

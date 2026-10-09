@@ -13,7 +13,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import db, ratelimit
+from . import db, ratelimit, scimaschema
 from .schemas import (
     DeckListResponse,
     DeckSearchResponse,
@@ -627,6 +627,11 @@ def export_deck(
                 detail="export file is corrupt or unreadable",
             )
 
+        # Backwards compatibility: files written before the three-schema
+        # envelope are normalized to a stamped share payload on read
+        # (idempotent; app.migrate_db stamps them at rest).
+        export_data, _, _ = scimaschema.normalize_export(export_data)
+
         conn.execute(
             """
             UPDATE decks
@@ -662,9 +667,18 @@ def create_deck(
         )
     )
 
-    export_payload = body.model_dump(
-        mode="json",
-        by_alias=True,
+    # Storage grade: stamped share/deck envelope (app/scimaschema.py). The
+    # DeckUploadRequest validator has already verified any envelope that
+    # arrived, expanded skeletal short-key cards, and filled legacy
+    # defaults — stamping here is what lands on disk and round-trips
+    # through /export.
+    export_payload = scimaschema.stamp(
+        body.model_dump(
+            mode="json",
+            by_alias=True,
+        ),
+        "share",
+        "deck",
     )
 
     write_export_atomic(

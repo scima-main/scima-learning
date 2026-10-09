@@ -1,5 +1,7 @@
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from . import scimaschema
 
 # ── Limits ───────────────────────────────────────────────────────────
 
@@ -163,11 +165,66 @@ class DeckMeta(BaseModel):
 
 
 class DeckUploadRequest(BaseModel):
-    version: int
-    exportedAt: str
+    # ── Interchange envelope (shared/scima-schema.js + app/scimaschema.py) ──
+    # Uploads may arrive stamped (any grade) or unstamped (legacy version:2
+    # exports). The before-validator verifies the envelope keys ($schema/
+    # schema/schemaVersion/kind), converts skeletal short-key cards (f/b/h/t…)
+    # to long keys, then pops the envelope — create_deck re-stamps the stored
+    # payload as share/deck via scimaschema.stamp(). Unknown envelope values
+    # are rejected with a 422 instead of being guessed at. (Envelope keys are
+    # deliberately NOT model fields: re-deriving Field aliases through
+    # FastAPI's body-model machinery warns/misbehaves across pydantic
+    # versions, and the validator below is the single place that cares.)
+    version: int = 2
+    exportedAt: str = ""
     deck: DeckData
     citedSources: list[str] = Field(default_factory=list)
     meta: DeckMeta = Field(default_factory=DeckMeta)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_envelope(cls, data):
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+
+        dollar = data.pop("$schema", None)
+        if dollar is not None and dollar != "scima":
+            raise ValueError("unsupported $schema (expected 'scima')")
+        grade = data.pop("schema", None)
+        if grade is not None and grade not in scimaschema.SCHEMAS:
+            raise ValueError(
+                f"unsupported schema '{grade}' "
+                f"(expected one of {', '.join(scimaschema.SCHEMAS)})"
+            )
+        data.pop("schemaVersion", None)  # informational; storage stamps its own
+        kind = data.pop("kind", None)
+        if kind is not None and kind not in ("deck", "cards"):
+            raise ValueError(
+                f"unsupported kind '{kind}' for deck upload (expected deck or cards)"
+            )
+
+        # A skeletal/share *cards* payload (no deck wrapper) is accepted and
+        # wrapped — same leniency the dashboard's deck-import pane has.
+        if not isinstance(data.get("deck"), dict) and isinstance(data.get("cards"), list):
+            cls_info = scimaschema.classify(data)
+            if cls_info is None or cls_info["kind"] != "cards":
+                raise ValueError("payload is not a recognized SCIMA deck or card list")
+            data["deck"] = {"name": data.pop("name", None) or "untitled",
+                            "cards": data.pop("cards")}
+
+        # Expand skeletal short keys before CardItem validation drops them.
+        deck = data.get("deck")
+        if isinstance(deck, dict) and isinstance(deck.get("cards"), list):
+            data["deck"] = {**deck, "cards": scimaschema.cards_to_long(deck["cards"])}
+
+        # Defaults cover legacy bodies that predate the envelope.
+        if data.get("version") is None:
+            data["version"] = 2
+        if not data.get("exportedAt"):
+            from datetime import datetime, timezone
+            data["exportedAt"] = datetime.now(timezone.utc).isoformat()
+        return data
 
 # ── Catalogue Schemas ────────────────────────────────────────────────
 

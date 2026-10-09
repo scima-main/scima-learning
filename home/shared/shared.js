@@ -1292,10 +1292,10 @@ function parseAIJSONCards(raw) {
     // `q`/`a` is the compact schema fine-tuned mode is expected to return
     // (see FT_OUTPUT_SCHEMA_NOTE, dashboard-core.js); front/back/question/
     // answer keep working exactly as before for normal mode.
-    const front = asString(item.front ?? item.question ?? item.q);
-    const back = asString(item.back ?? item.answer ?? item.a);
+    const front = asString(item.front ?? item.question ?? item.q ?? item.f);
+    const back = asString(item.back ?? item.answer ?? item.a ?? item.b);
     if (!front || !back) continue; // drop partial cards rather than keep them half-empty
-    cards.push({ front, back, hint: asString(item.hint), tags: asTags(item.tags) });
+    cards.push({ front, back, hint: asString(item.hint ?? item.h), tags: asTags(item.tags ?? item.t) });
   }
   return cards;
 }

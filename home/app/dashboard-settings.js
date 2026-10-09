@@ -143,7 +143,7 @@ function renderSettings(c) {
         return {...c,citation:{...c.citation,sourceName:src?.name||null,chapterTitle:chap?.title||null,excerpt:excerpt||null}};
       })}));
     }
-    a.href='data:application/json,'+encodeURIComponent(JSON.stringify({version:2,decks:resolveDecks(state.decks),folders:state.folders,citedSources},null,2));
+    a.href='data:application/json,'+encodeURIComponent(JSON.stringify(scimaStamp({version:2,decks:resolveDecks(state.decks).map(d=>scimaDeckToShare(d)),folders:state.folders,citedSources},'share','collection'),null,2));
     a.download=`SCIMA-decks-${today()}.json`; a.click();
   }}));
 
@@ -165,6 +165,11 @@ function renderSettings(c) {
         data=JSON.parse(await file.text());
       }
 
+      const clsI = scimaClassify(data);
+      if (!clsI || (clsI.kind!=='account' && clsI.kind!=='collection')) {
+        showToast(clsI ? 'That file is a deck/folder export — import it from Decks → + New Deck → Import JSON' : 'Unrecognized file — not a SCIMA backup (schema check failed)');
+        return;
+      }
       openModal('Import Data', body=>{
         const deckCount=data.decks?.length||0, folderCount=data.folders?.length||0, sourceCount=data.sources?.length||0;
         const libFolderCount=data.libraryFolders?.length||0, pdfCount=Object.keys(pdfFiles).length, htmlCount=Object.keys(htmlFiles).length;

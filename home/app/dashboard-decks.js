@@ -424,7 +424,7 @@ function exportSingleDeck(deckId) {
   const citedSourceIds = new Set(deck.cards.map(c=>c.citation?.sourceId).filter(Boolean));
   const citedSources = (state.sources||[]).filter(s=>citedSourceIds.has(s.id));
   const a = document.createElement('a');
-  a.href = 'data:application/json,' + encodeURIComponent(JSON.stringify({version:2, exportedAt:new Date().toISOString(), deck:_resolveDeckCitations(deck), citedSources}, null, 2));
+  a.href = 'data:application/json,' + encodeURIComponent(JSON.stringify(scimaStamp({version:2, exportedAt:new Date().toISOString(), deck:scimaDeckToShare(_resolveDeckCitations(deck)), citedSources}, 'share', 'deck'), null, 2));
   a.download = `SCIMA-deck-${deck.name.replace(/[^a-z0-9]/gi,'-').toLowerCase()}-${today()}.json`;
   a.click();
   showToast(`"${deck.name}" exported ✓`);
@@ -439,7 +439,7 @@ function exportFolder(folderId) {
   const citedSourceIds = new Set(decks.flatMap(d=>d.cards).map(c=>c.citation?.sourceId).filter(Boolean));
   const citedSources = (state.sources||[]).filter(s=>citedSourceIds.has(s.id));
   const a = document.createElement('a');
-  a.href = 'data:application/json,' + encodeURIComponent(JSON.stringify({version:2, exportedAt:new Date().toISOString(), folder, subFolders, decks:decks.map(_resolveDeckCitations), citedSources}, null, 2));
+  a.href = 'data:application/json,' + encodeURIComponent(JSON.stringify(scimaStamp({version:2, exportedAt:new Date().toISOString(), folder, subFolders, decks:decks.map(d=>scimaDeckToShare(_resolveDeckCitations(d))), citedSources}, 'share', 'folder'), null, 2));
   a.download = `SCIMA-folder-${folder.name.replace(/[^a-z0-9]/gi,'-').toLowerCase()}-${today()}.json`;
   a.click();
   showToast(`Folder "${folder.name}" exported — ${decks.length} deck${decks.length!==1?'s':''} ✓`);
@@ -597,7 +597,7 @@ async function exportAllDataZip() {
       recentStudyScopes: state.recentStudyScopes,
       pdfSourceIds, htmlSourceIds,
     };
-    zipFiles['data.json'] = enc.encode(JSON.stringify(data, null, 2));
+    zipFiles['data.json'] = enc.encode(JSON.stringify(scimaStamp(data, 'full', 'account'), null, 2));
 
     const zipped = fflate.zipSync(zipFiles, {level:1});
     const blob = new Blob([zipped], {type:'application/zip'});
@@ -939,7 +939,9 @@ function openCreateFolderModal(subjectKey, parentId) {
       const file=e.target.files?.[0]; if(!file)return;
       try {
         const data=JSON.parse(await file.text());
-        if(!data.folder||!Array.isArray(data.decks)){importStatus.textContent='❌ Not a valid SCIMA folder export'; return;}
+        const clsF = scimaClassify(data);
+        if(!data.folder||!Array.isArray(data.decks)||(clsF && clsF.kind!=='folder')){importStatus.textContent='❌ Not a SCIMA folder file (unrecognized schema)'; return;}
+        data.decks.forEach(dk=>{ if(Array.isArray(dk.cards)) dk.cards=scimaCardsToLong(dk.cards); });
         parsedImport=data;
         const deckCount=data.decks?.length||0, srcCount=data.citedSources?.length||0;
         importStatus.innerHTML=`<span style="color:#22c55e">✓ "${escHtml(data.folder.name)}" — ${deckCount} deck${deckCount!==1?'s':''}, ${srcCount} source${srcCount!==1?'s':''}</span>`;
@@ -1420,7 +1422,16 @@ function openCreateDeckModal(subjectKey, folderId) {
       const file=e.target.files?.[0]; if(!file)return;
       try {
         const data=JSON.parse(await file.text());
-        if(!data.deck||!Array.isArray(data.deck.cards)){importStatus.textContent='❌ Not a valid SCIMA deck export'; return;}
+        const cls = scimaClassify(data);
+        const normDeck = scimaToFullDeck(data);
+        if (!cls || !normDeck || !Array.isArray(normDeck.cards) || (cls.kind!=='deck' && cls.kind!=='cards')) {
+          importStatus.textContent='❌ Not a SCIMA deck file (unrecognized schema)'; return;
+        }
+        data.deck = normDeck;
+        // Header-less card lists carry no deck name — fall back to the
+        // file's base name so the deck is never created as "undefined".
+        if (typeof data.deck.name !== 'string' || !data.deck.name.trim())
+          data.deck.name = file.name.replace(/\.[^.]+$/, '') || 'Imported deck';
         parsedDeck=data;
         const cardCount=data.deck.cards?.length||0, srcCount=data.citedSources?.length||0;
         importStatus.innerHTML=`<span style="color:#22c55e">✓ "${escHtml(data.deck.name)}" — ${cardCount} card${cardCount!==1?'s':''}, ${srcCount} source${srcCount!==1?'s':''}</span>`;
