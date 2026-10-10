@@ -164,7 +164,7 @@ const COMMUNITY_MARKUP = `<div class="sc-root-bar"><span class="dot" id="api-dot
             font-size:11px;
           "
         >
-          or click to choose a file
+          or click to pick one of your own decks
         </div>
 
         <input
@@ -1650,7 +1650,57 @@ function showUploadStatus(
 
 // ─────────────────────────────────────────────────────────────────────
 // File handling
+//
+// The dropzone accepts two sources, which converge on the same
+// applyParsedExport() tail:
+//   1. a SCIMA JSON export file (drag & drop, the "Deck file" label, or
+//      the picker's "Choose a JSON file instead…" button), and
+//   2. a deck already saved in this browser's dashboard state, picked
+//      through the shared deck-explorer overlay (see
+//      openLocalDeckPicker() below).
 // ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Shared tail for both dropzone sources: validate the export envelope
+ * against the form's current metadata, publish it to cState.upload, and
+ * refresh the dropzone's bold line (displayName — a file name, or the
+ * local deck's name) plus the "Deck detected" preview. Throws an
+ * uploadError on validation failure; callers catch it and surface the
+ * message on the status line.
+ */
+function applyParsedExport(parsed, displayName) {
+  const deck = parsed.deck;
+
+  const meta = {
+    description: byId('upload-desc').value,
+    author: byId('upload-author').value.trim(),
+    tags: [...cState.upload.tags],
+  };
+
+  const problems = validateUpload(parsed, meta);
+
+  if (problems.length) {
+    throw uploadError(problems.join(' '));
+  }
+
+  cState.upload.parsed = parsed;
+
+  byId('upload-file-name').textContent = displayName;
+
+  byId('upload-extracted').style.display = '';
+
+  byId('upload-extracted-name').textContent = deck.name;
+
+  byId('upload-extracted-meta').textContent = [
+    `${deck.cards.length} cards`,
+    deck.id ? `source ID ${deck.id}` : 'no source ID',
+    parsed.version != null ? `export v${parsed.version}` : 'unknown export version',
+    parsed.exportedAt ? `exported ${formatDate(parsed.exportedAt)}` : 'unknown export date',
+  ].join(' · ');
+
+  showUploadStatus(null, 'Deck ready to upload.', false);
+}
+
 
 async function processUploadFile(file) {
   if (!file) {
@@ -1739,72 +1789,9 @@ async function processUploadFile(file) {
       );
     }
 
-    const deck =
-      parsed.deck;
-
-    const meta = {
-      description:
-        byId(
-          'upload-desc'
-        ).value,
-
-      author:
-        byId(
-          'upload-author'
-        ).value.trim(),
-
-      tags:
-        [...cState.upload.tags],
-    };
-
-    const problems =
-      validateUpload(
-        parsed,
-        meta
-      );
-
-    if (problems.length) {
-      throw uploadError(
-        problems.join(' ')
-      );
-    }
-
-    cState.upload.parsed =
-      parsed;
-
-    const extracted =
-      byId(
-        'upload-extracted'
-      );
-
-    extracted.style.display =
-      '';
-
-    byId(
-      'upload-extracted-name'
-    ).textContent =
-      deck.name;
-
-    byId(
-      'upload-extracted-meta'
-    ).textContent =
-      [
-        `${deck.cards.length} cards`,
-        deck.id
-          ? `source ID ${deck.id}`
-          : 'no source ID',
-        parsed.version != null
-          ? `export v${parsed.version}`
-          : 'unknown export version',
-        parsed.exportedAt
-          ? `exported ${formatDate(parsed.exportedAt)}`
-          : 'unknown export date',
-      ].join(' · ');
-
-    showUploadStatus(
-      null,
-      'Deck ready to upload.',
-      false
+    applyParsedExport(
+      parsed,
+      file.name
     );
 
   } catch (error) {
@@ -1839,7 +1826,19 @@ const dropzone =
 
 dropzone.addEventListener(
   'click',
-  () => fileInput.click()
+  event => {
+    /*
+     * The hidden file input lives INSIDE the dropzone: ignore clicks
+     * bubbling up from it (the "Deck file" label's forwarded click, or
+     * our own fileInput.click() from the picker's file button) so they
+     * don't bounce back into the picker and reopen it.
+     */
+    if (event.target === fileInput) {
+      return;
+    }
+
+    openLocalDeckPicker();
+  }
 );
 
 
@@ -1917,6 +1916,166 @@ dropzone.addEventListener(
     processUploadFile(file);
   }
 );
+
+
+// ─────────────────────────────────────────────────────────────────────
+// Local deck picker
+//
+// "Pick one of your own decks": the dropzone click opens the very same
+// Subjects → Folders → Decks explorer overlay as the Study page's
+// "📂 Browse Decks…" button (openDeckExplorerOverlay() in
+// dashboard-core.js), but in single-deck mode — folders/subjects only
+// navigate, and exactly one deck can be selected. The chosen deck is
+// serialized to the same stamped share/deck envelope an export file
+// contains, so everything downstream (validation, preview, the upload
+// request) is shared with the file path.
+// ─────────────────────────────────────────────────────────────────────
+
+/*
+ * Dashboard subject key → closest <select id="upload-subject"> option
+ * (the registry's list is coarser than the dashboard's SUBJECTS:
+ * englishLanguage/englishLiterature both map to 'english',
+ * furtherMathematics to 'mathematics', french to 'languages', …).
+ * Only used to prefill the select while it is still empty — an
+ * unmappable subject (economics, music, misc, tracker customs) simply
+ * leaves the user's choice alone.
+ */
+const UPLOAD_SUBJECT_FOR = {
+  biology: 'biology',
+  chemistry: 'chemistry',
+  physics: 'physics',
+  mathematics: 'mathematics',
+  furtherMathematics: 'mathematics',
+  computerScience: 'computer science',
+  englishLanguage: 'english',
+  englishLiterature: 'english',
+  geography: 'geography',
+  french: 'languages',
+};
+
+
+/**
+ * Serialize a state.decks entry into the same stamped v2 share/deck
+ * envelope exportSingleDeck() (dashboard-decks.js) downloads as a file:
+ * citations resolved to name/chapter/excerpt, the cited sources
+ * collected, and user-specific fields (ids, scheduling state) stripped
+ * by scimaDeckToShare(). Hand-rolled fallbacks mirror processUploadFile's
+ * guard for the (never expected) case where scima-schema.js didn't load.
+ */
+function localDeckToExport(deck) {
+  const resolved = {
+    ...deck,
+    cards: (deck.cards || []).map(c => {
+      if (!c.citation) return c;
+      const src = (state.sources || []).find(s => s.id === c.citation.sourceId);
+      const chap = c.citation.chapterId && src?.chapters?.find(ch => ch.id === c.citation.chapterId);
+      const excerpt = src ? String(src.content || '').slice(c.citation.charStart, c.citation.charEnd) : '';
+      return { ...c, citation: { ...c.citation, sourceName: src?.name || null, chapterTitle: chap?.title || null, excerpt: excerpt || null } };
+    }),
+  };
+
+  const citedSourceIds = new Set(
+    resolved.cards.map(c => c.citation?.sourceId).filter(Boolean)
+  );
+  const citedSources = (state.sources || []).filter(s => citedSourceIds.has(s.id));
+
+  const shareDeck = typeof scimaDeckToShare === 'function'
+    ? scimaDeckToShare(resolved)
+    : (() => {
+        const d = { ...resolved };
+        delete d.id;
+        delete d.pinned;
+        d.cards = (d.cards || []).map(c => {
+          const out = { ...c };
+          ['id', 'ease', 'interval', 'reps', 'lapses', 'due', 'state',
+           'created', 'lastRated', 'suspended', 'leech'].forEach(f => delete out[f]);
+          return out;
+        });
+        return d;
+      })();
+
+  const envelope = {
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    deck: shareDeck,
+    citedSources,
+  };
+
+  return typeof scimaStamp === 'function'
+    ? scimaStamp(envelope, 'share', 'deck')
+    : envelope;
+}
+
+
+function useLocalDeck(deck) {
+  if (!deck) {
+    return;
+  }
+
+  showUploadStatus(null, '', false);
+
+  try {
+    applyParsedExport(
+      localDeckToExport(deck),
+      `${deck.emoji || '📚'} ${deck.name} — from your decks`
+    );
+
+    // Carry the deck's dashboard subject over to the registry's Subject
+    // select, but only while the user hasn't picked one themselves.
+    const subjectSel = byId('upload-subject');
+    const mapped = UPLOAD_SUBJECT_FOR[deck.subject];
+    if (mapped && !subjectSel.value) {
+      subjectSel.value = mapped;
+    }
+
+  } catch (error) {
+    cState.upload.parsed = null;
+
+    byId('upload-extracted').style.display = 'none';
+
+    showUploadStatus(
+      null,
+      error.message || 'Could not read this deck.',
+      true
+    );
+  }
+}
+
+
+function openLocalDeckPicker() {
+  /*
+   * The explorer overlay lives in dashboard-core.js. If it somehow
+   * didn't load, or this browser has no local decks to browse at all,
+   * fall back to the plain file dialog so the dropzone click is never
+   * a dead end.
+   */
+  if (
+    typeof openDeckExplorerOverlay !== 'function' ||
+    !state.decks.length
+  ) {
+    fileInput.click();
+    return;
+  }
+
+  openDeckExplorerOverlay({
+    singleDeck: true,
+    title: '📂 Choose a Deck to Upload',
+    confirmLabel: 'Use this deck ✓',
+    footerButtons: [
+      {
+        label: '📄 Choose a JSON file instead…',
+        variant: 'ghost',
+        onClick(close) {
+          close();
+          fileInput.click();
+        },
+      },
+    ],
+    onConfirm(deck) {
+      useLocalDeck(deck);
+    },
+  });
+}
 
 
 // ─────────────────────────────────────────────────────────────────────

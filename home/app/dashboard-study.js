@@ -279,182 +279,21 @@ function openModeHelp(id) {
 }
 
 // ── Full deck file-explorer overlay for picking (multiple) study scopes ──
-// Browse Subjects → Folders → Decks exactly like the Decks tab, but every
-// level (subject / folder / deck) has its own checkbox so several can be
-// combined into one study session at once.
+// The explorer itself (Subjects → Folders → Decks browsing, per-level
+// checkboxes, the Recents pills, the footer) now lives in dashboard-core.js
+// as openDeckExplorerOverlay() — core loads on every page, so the Community
+// upload dropzone reuses the very same modal in single-deck mode. This
+// wrapper keeps the two study-specific pieces: the selection is seeded from
+// state.studyScope, and the confirmed scopes are applied back onto it.
 function openStudyScopeExplorer() {
-  const selection = new Map(); // scopeKey -> scope object
-  (state.studyScope||[]).forEach(s=>selection.set(scopeKey(s), s));
-  let nav = { view:'subjects', subjectKey:null, folderId:null };
-
-  const overlay = el('div',{id:'study-scope-overlay',style:'position:fixed;inset:0;z-index:1000;background:var(--bg);display:flex;flex-direction:column;animation:fadeIn 0.2s ease;'});
-  const header = el('div',{style:'display:flex;align-items:center;gap:12px;padding:16px 24px;border-bottom:1px solid var(--border);flex-shrink:0'},
-    el('div',{style:'font-weight:900;font-size:16px'},'📂 Choose Study Scope'),
-    el('div',{style:'margin-left:auto;font-size:11px;color:var(--muted)'},'Click to browse · check a box to select'),
-    el('button',{style:'background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:0 4px',onclick:()=>closeOverlay()},'✕')
-  );
-  const recentsRow = el('div',{style:'display:flex;gap:8px;flex-wrap:wrap;padding:14px 24px 0;flex-shrink:0'});
-  const bodyWrap = el('div',{style:'flex:1;overflow-y:auto;padding:16px 24px 24px'});
-  const footer = el('div',{style:'display:flex;align-items:center;gap:12px;padding:14px 24px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0'});
-  overlay.append(header, recentsRow, bodyWrap, footer);
-  document.body.appendChild(overlay);
-
-  function closeOverlay(){ overlay.remove(); }
-
-  function isChecked(scope){ return selection.has(scopeKey(scope)); }
-  function toggle(scope){
-    const k=scopeKey(scope);
-    if(scope.type==='all'){
-      if(selection.has(k)) selection.clear(); else { selection.clear(); selection.set(k,scope); }
-    } else {
-      selection.delete(scopeKey({type:'all',id:null}));
-      if(selection.has(k)) selection.delete(k); else selection.set(k,scope);
-    }
-    refreshAll();
-  }
-  function checkbox(scope){
-    return el('div',{class:'scope-checkbox'+(isChecked(scope)?' checked':''),title:'Select',onclick:e=>{ e.stopPropagation(); toggle(scope); }});
-  }
-
-  function renderRecents(){
-    recentsRow.innerHTML='';
-    recentsRow.appendChild(el('div',{style:'width:100%;font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px'},'Recent'));
-    const allActive = isChecked({type:'all',id:null}) && selection.size===1;
-    recentsRow.appendChild(mkScopePill('🌍','All Decks', allActive, ()=>{ selection.clear(); selection.set(scopeKey({type:'all',id:null}),{type:'all',id:null}); refreshAll(); }, null));
-    orderedRecentScopes().forEach(r=>{
-      const active = r.scopes.length===selection.size && r.scopes.every(s=>isChecked(s));
-      recentsRow.appendChild(mkScopePill(r.icon, r.label, active, ()=>{ selection.clear(); r.scopes.forEach(s=>selection.set(scopeKey(s),s)); refreshAll(); }, { pinned:r.pinned, onToggle:()=>{ toggleRecentPin(r.key); renderRecents(); } }));
-    });
-  }
-
-  function renderBreadcrumb(){
-    const bc = el('div',{class:'breadcrumb',style:'margin-bottom:14px'});
-    bc.appendChild(el('span',{class:`breadcrumb-part${nav.view==='subjects'?' active':''}`,onclick:nav.view==='subjects'?null:()=>{ nav={view:'subjects'}; renderBody(); }},'📚 All Subjects'));
-    if(nav.view==='subject'||nav.view==='folder'){
-      const s=getSubjectSafe(nav.subjectKey);
-      bc.append(el('span',{class:'breadcrumb-sep'},'›'), el('span',{class:`breadcrumb-part${nav.view==='subject'?' active':''}`,style:`color:${s.defaultColor}`,onclick:nav.view==='subject'?null:()=>{ nav={view:'subject',subjectKey:nav.subjectKey}; renderBody(); }},s.name));
-    }
-    if(nav.view==='folder'){
-      const chain=[]; let cur=state.folders.find(f=>f.id===nav.folderId);
-      while(cur){ chain.unshift(cur); cur=state.folders.find(f=>f.id===cur.parentId); }
-      chain.forEach((f,i)=>{
-        bc.append(el('span',{class:'breadcrumb-sep'},'›'));
-        const isLast=i===chain.length-1;
-        bc.append(el('span',{class:`breadcrumb-part${isLast?' active':''}`,onclick:isLast?null:()=>{ nav={view:'folder',subjectKey:f.subjectKey,folderId:f.id}; renderBody(); }},f.name));
-      });
-    }
-    return bc;
-  }
-
-  function renderFoldersAndDecks(folders, decks){
-    if(folders.length){
-      bodyWrap.appendChild(el('div',{class:'u-section-label'},'Folders'));
-      const list=el('div',{class:'card',style:'margin-bottom:16px;overflow:hidden'});
-      folders.forEach(f=>{
-        const fd=state.decks.filter(d=>d.folderId===f.id);
-        const sf=state.folders.filter(x=>x.parentId===f.id);
-        const due=getDueCards(fd.flatMap(d=>d.cards)).length;
-        const row=el('div',{class:'folder-item'+(isChecked({type:'folder',id:f.id})?' explorer-selected':'')},
-          checkbox({type:'folder',id:f.id}),
-          mkIcon(f.emoji||'📁',f.image,'22px','4px'),
-          el('div',{style:'flex:1;min-width:0'},el('div',{class:'folder-name'},f.name),el('div',{class:'folder-meta'},`${fd.length} deck${fd.length!==1?'s':''}${sf.length?` · ${sf.length} subfolder${sf.length!==1?'s':''}`:''}${due>0?` · ${due} due`:''}`)),
-          el('span',{style:'color:var(--muted);font-size:16px;margin-left:4px'},'›')
-        );
-        row.addEventListener('click',e=>{ if(e.target.closest('.scope-checkbox')) return; nav={view:'folder',subjectKey:f.subjectKey,folderId:f.id}; renderBody(); });
-        list.appendChild(row);
-      });
-      bodyWrap.appendChild(list);
-    }
-    if(decks.length){
-      bodyWrap.appendChild(el('div',{class:'u-section-label'},'Decks'));
-      const grid=el('div',{class:'grid-3'});
-      decks.forEach(d=>{
-        const due=getDueCards(d.cards).length;
-        const tile=el('div',{class:'card'+(isChecked({type:'deck',id:d.id})?' explorer-selected':''),style:'padding:16px;cursor:pointer'},
-          el('div',{style:'display:flex;align-items:center;gap:10px'},
-            checkbox({type:'deck',id:d.id}), mkIcon(d.emoji,d.image,'26px','6px'),
-            el('div',{style:'flex:1;min-width:0'},el('div',{style:'font-weight:800;font-size:13px'},d.name),el('div',{class:'u-muted-11'},`${nOf(d.cards.length,'card')}${due>0?` · ${due} due`:''}`))
-          )
-        );
-        tile.addEventListener('click',e=>{ if(e.target.closest('.scope-checkbox')) return; toggle({type:'deck',id:d.id}); });
-        grid.appendChild(tile);
-      });
-      bodyWrap.appendChild(grid);
-    }
-    if(!folders.length && !decks.length) bodyWrap.appendChild(el('div',{class:'empty-state'},el('div',{class:'empty-icon'},'📂'),el('div',{class:'empty-title'},'Empty')));
-  }
-
-  function renderBody(){
-    bodyWrap.innerHTML='';
-    bodyWrap.appendChild(renderBreadcrumb());
-
-    if(nav.view==='subjects'){
-      const allChecked=isChecked({type:'all',id:null});
-      const allRow = el('div',{class:'card'+(allChecked?' explorer-selected':''),style:'display:flex;align-items:center;gap:12px;padding:14px 16px;margin-bottom:14px;cursor:pointer'},
-        checkbox({type:'all',id:null}),
-        el('span',{style:'font-size:20px'},'🌍'),
-        el('div',{style:'flex:1'},el('div',{style:'font-weight:800;font-size:13px'},'All Decks'),el('div',{class:'u-muted-11'},`${state.decks.length} deck${state.decks.length!==1?'s':''} total`))
-      );
-      allRow.addEventListener('click',e=>{ if(e.target.closest('.scope-checkbox')) return; toggle({type:'all',id:null}); });
-      bodyWrap.appendChild(allRow);
-
-      const subjects = new Set([...state.decks.map(d=>d.subject||DEFAULT_SUBJECT_KEY), ...state.folders.filter(f=>!f.parentId).map(f=>f.subjectKey)]);
-      if(!subjects.size){ bodyWrap.appendChild(el('div',{class:'empty-state'},el('div',{class:'empty-icon'},'📚'),el('div',{class:'empty-title'},'No decks yet'))); return; }
-
-      bodyWrap.appendChild(el('div',{class:'u-section-label'},'Subjects'));
-      const grid = el('div',{class:'grid-3'});
-      subjects.forEach(sk=>{
-        const s=getSubjectSafe(sk);
-        const subjectDecks=state.decks.filter(d=>(d.subject||DEFAULT_SUBJECT_KEY)===sk);
-        const subjectFolders=state.folders.filter(f=>f.subjectKey===sk&&!f.parentId);
-        const due=getDueCards(subjectDecks.flatMap(d=>d.cards)).length;
-        const tile = el('div',{class:'card subject-tile'+(isChecked({type:'subject',id:sk})?' explorer-selected':'')},
-          checkbox({type:'subject',id:sk}),
-          el('div',{class:'subject-tile-accent',style:`background:${s.defaultColor}`}),
-          el('div',{class:'subject-tile-name',style:`color:${s.defaultColor}`},s.name),
-          el('div',{class:'subject-tile-meta'},s.board),
-          el('div',{class:'subject-tile-counts'}, mkTag(nOf(subjectDecks.length,'deck'),s.defaultColor), subjectFolders.length?mkTag(nOf(subjectFolders.length,'folder'),'#A78BFA'):null, due>0?mkTag(`${due} due`,'var(--pink)'):null)
-        );
-        tile.addEventListener('click',e=>{ if(e.target.closest('.scope-checkbox')) return; nav={view:'subject',subjectKey:sk}; renderBody(); });
-        grid.appendChild(tile);
-      });
-      bodyWrap.appendChild(grid);
-    } else if(nav.view==='subject'){
-      const sk=nav.subjectKey;
-      renderFoldersAndDecks(
-        state.folders.filter(f=>f.subjectKey===sk&&!f.parentId),
-        state.decks.filter(d=>(d.subject||DEFAULT_SUBJECT_KEY)===sk&&!d.folderId)
-      );
-    } else if(nav.view==='folder'){
-      const folder=state.folders.find(f=>f.id===nav.folderId);
-      if(!folder){ nav={view:'subjects'}; renderBody(); return; }
-      renderFoldersAndDecks(
-        state.folders.filter(f=>f.parentId===folder.id),
-        state.decks.filter(d=>d.folderId===folder.id)
-      );
-    }
-  }
-
-  function renderFooter(){
-    footer.innerHTML='';
-    const scopes=[...selection.values()];
-    const cardCount = getScopeSetCards(scopes.length?scopes:[{type:'all',id:null}]).length;
-    footer.append(
-      el('div',{style:'font-size:12px;font-weight:700;color:var(--muted)'}, scopes.length ? `${scopes.length} selected · ${nOf(cardCount,'card')}` : `Nothing selected — defaults to All Decks (${nOf(cardCount,'card')})`),
-      el('div',{style:'margin-left:auto;display:flex;gap:8px'},
-        btn('Clear','ghost',{small:true,onclick:()=>{ selection.clear(); refreshAll(); }}),
-        btn('Cancel','ghost',{onclick:closeOverlay}),
-        btn('Use Selection ✓','primary',{onclick:()=>{
-          state.studyScope = scopes.length ? scopes : [{type:'all',id:null}];
-          closeOverlay();
-          renderView('study');
-        }})
-      )
-    );
-  }
-
-  function refreshAll(){ renderRecents(); renderBody(); renderFooter(); }
-  refreshAll();
+  openDeckExplorerOverlay({
+    title: '📂 Choose Study Scope',
+    initialSelection: state.studyScope || [],
+    onConfirm(scopes) {
+      state.studyScope = scopes.length ? scopes : [{type:'all',id:null}];
+      renderView('study');
+    },
+  });
 }
 
 // ── "Hand-picked cards" refine mode: search + checklist over the current

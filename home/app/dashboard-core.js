@@ -1321,6 +1321,233 @@ function mkScopePill(icon, label, active, onClick, pinInfo) {
   }
   return wrap;
 }
+
+// ── Full deck file-explorer overlay (shared picker) ─────────────────
+// Browse Subjects → Folders → Decks exactly like the Decks tab. One
+// implementation, two selection modes:
+//   • multi (default — the Study page's "📂 Browse Decks…", formerly
+//     openStudyScopeExplorer() in dashboard-study.js): every level
+//     (subject / folder / deck) has its own checkbox, plus an "All Decks"
+//     row and the Recents pills, so several scopes can be combined into
+//     one study session. onConfirm(scopes) receives the array of selected
+//     scope objects (possibly empty).
+//   • single (opts.singleDeck — the Community upload dropzone's "pick one
+//     of your decks"): only deck tiles are selectable and clicking one
+//     selects it, replacing any previous pick — exactly one deck, no All
+//     Decks row / Recents / folder checkboxes (folders and subjects are
+//     navigation only). onConfirm(deck) receives the chosen state.decks
+//     entry itself.
+// Lives in core (loaded by every page) rather than dashboard-study.js so
+// the Community view on the Home route reuses the exact same modal.
+// opts: { singleDeck, title, hint, confirmLabel, overlayId,
+//         initialSelection (multi only), footerButtons, onConfirm }
+// footerButtons: [{ label, variant, small, onClick(closeOverlay) }] — extra
+// footer buttons rendered before Cancel (the Community picker uses one to
+// fall back to the native file dialog).
+function openDeckExplorerOverlay(opts = {}) {
+  const single = !!opts.singleDeck;
+  const selection = new Map(); // scopeKey -> scope object (single mode: at most one deck entry)
+  if (!single) (opts.initialSelection || []).forEach(s => selection.set(scopeKey(s), s));
+  let nav = { view:'subjects', subjectKey:null, folderId:null };
+
+  const overlay = el('div',{id:opts.overlayId||(single?'deck-picker-overlay':'study-scope-overlay'),style:'position:fixed;inset:0;z-index:1000;background:var(--bg);display:flex;flex-direction:column;animation:fadeIn 0.2s ease;'});
+  const header = el('div',{style:'display:flex;align-items:center;gap:12px;padding:16px 24px;border-bottom:1px solid var(--border);flex-shrink:0'},
+    el('div',{style:'font-weight:900;font-size:16px'}, opts.title || (single?'📂 Choose a Deck':'📂 Choose Study Scope')),
+    el('div',{style:'margin-left:auto;font-size:11px;color:var(--muted)'}, opts.hint || (single?'Click to browse · select exactly one deck':'Click to browse · check a box to select')),
+    el('button',{style:'background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:0 4px',onclick:()=>closeOverlay()},'✕')
+  );
+  const recentsRow = el('div',{style: single ? 'display:none' : 'display:flex;gap:8px;flex-wrap:wrap;padding:14px 24px 0;flex-shrink:0'});
+  const bodyWrap = el('div',{style:'flex:1;overflow-y:auto;padding:16px 24px 24px'});
+  const footer = el('div',{style:'display:flex;align-items:center;gap:12px;padding:14px 24px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0'});
+  overlay.append(header, recentsRow, bodyWrap, footer);
+  document.body.appendChild(overlay);
+
+  function closeOverlay(){ overlay.remove(); }
+
+  function isChecked(scope){ return selection.has(scopeKey(scope)); }
+  function toggle(scope){
+    const k=scopeKey(scope);
+    if(single){
+      // Exactly one deck: picking another replaces the current pick,
+      // clicking the picked deck again clears it (radio-with-undo).
+      if(selection.has(k)) selection.clear(); else { selection.clear(); selection.set(k,scope); }
+    } else if(scope.type==='all'){
+      if(selection.has(k)) selection.clear(); else { selection.clear(); selection.set(k,scope); }
+    } else {
+      selection.delete(scopeKey({type:'all',id:null}));
+      if(selection.has(k)) selection.delete(k); else selection.set(k,scope);
+    }
+    refreshAll();
+  }
+  function checkbox(scope){
+    return el('div',{class:'scope-checkbox'+(isChecked(scope)?' checked':''),title:single?'Select this deck':'Select',onclick:e=>{ e.stopPropagation(); toggle(scope); }});
+  }
+
+  function renderRecents(){
+    if(single) return; // Recents are study scopes — not part of single-deck picking
+    recentsRow.innerHTML='';
+    recentsRow.appendChild(el('div',{style:'width:100%;font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px'},'Recent'));
+    const allActive = isChecked({type:'all',id:null}) && selection.size===1;
+    recentsRow.appendChild(mkScopePill('🌍','All Decks', allActive, ()=>{ selection.clear(); selection.set(scopeKey({type:'all',id:null}),{type:'all',id:null}); refreshAll(); }, null));
+    orderedRecentScopes().forEach(r=>{
+      const active = r.scopes.length===selection.size && r.scopes.every(s=>isChecked(s));
+      recentsRow.appendChild(mkScopePill(r.icon, r.label, active, ()=>{ selection.clear(); r.scopes.forEach(s=>selection.set(scopeKey(s),s)); refreshAll(); }, { pinned:r.pinned, onToggle:()=>{ toggleRecentPin(r.key); renderRecents(); } }));
+    });
+  }
+
+  function renderBreadcrumb(){
+    const bc = el('div',{class:'breadcrumb',style:'margin-bottom:14px'});
+    bc.appendChild(el('span',{class:`breadcrumb-part${nav.view==='subjects'?' active':''}`,onclick:nav.view==='subjects'?null:()=>{ nav={view:'subjects'}; renderBody(); }},'📚 All Subjects'));
+    if(nav.view==='subject'||nav.view==='folder'){
+      const s=getSubjectSafe(nav.subjectKey);
+      bc.append(el('span',{class:'breadcrumb-sep'},'›'), el('span',{class:`breadcrumb-part${nav.view==='subject'?' active':''}`,style:`color:${s.defaultColor}`,onclick:nav.view==='subject'?null:()=>{ nav={view:'subject',subjectKey:nav.subjectKey}; renderBody(); }},s.name));
+    }
+    if(nav.view==='folder'){
+      const chain=[]; let cur=state.folders.find(f=>f.id===nav.folderId);
+      while(cur){ chain.unshift(cur); cur=state.folders.find(f=>f.id===cur.parentId); }
+      chain.forEach((f,i)=>{
+        bc.append(el('span',{class:'breadcrumb-sep'},'›'));
+        const isLast=i===chain.length-1;
+        bc.append(el('span',{class:`breadcrumb-part${isLast?' active':''}`,onclick:isLast?null:()=>{ nav={view:'folder',subjectKey:f.subjectKey,folderId:f.id}; renderBody(); }},f.name));
+      });
+    }
+    return bc;
+  }
+
+  function renderFoldersAndDecks(folders, decks){
+    if(folders.length){
+      bodyWrap.appendChild(el('div',{class:'u-section-label'},'Folders'));
+      const list=el('div',{class:'card',style:'margin-bottom:16px;overflow:hidden'});
+      folders.forEach(f=>{
+        const fd=state.decks.filter(d=>d.folderId===f.id);
+        const sf=state.folders.filter(x=>x.parentId===f.id);
+        const due=getDueCards(fd.flatMap(d=>d.cards)).length;
+        const row=el('div',{class:'folder-item'+(!single&&isChecked({type:'folder',id:f.id})?' explorer-selected':'')},
+          single?null:checkbox({type:'folder',id:f.id}),
+          mkIcon(f.emoji||'📁',f.image,'22px','4px'),
+          el('div',{style:'flex:1;min-width:0'},el('div',{class:'folder-name'},f.name),el('div',{class:'folder-meta'},`${fd.length} deck${fd.length!==1?'s':''}${sf.length?` · ${sf.length} subfolder${sf.length!==1?'s':''}`:''}${due>0?` · ${due} due`:''}`)),
+          el('span',{style:'color:var(--muted);font-size:16px;margin-left:4px'},'›')
+        );
+        row.addEventListener('click',e=>{ if(e.target.closest('.scope-checkbox')) return; nav={view:'folder',subjectKey:f.subjectKey,folderId:f.id}; renderBody(); });
+        list.appendChild(row);
+      });
+      bodyWrap.appendChild(list);
+    }
+    if(decks.length){
+      bodyWrap.appendChild(el('div',{class:'u-section-label'},'Decks'));
+      const grid=el('div',{class:'grid-3'});
+      decks.forEach(d=>{
+        const due=getDueCards(d.cards).length;
+        const tile=el('div',{class:'card'+(isChecked({type:'deck',id:d.id})?' explorer-selected':''),style:'padding:16px;cursor:pointer'},
+          el('div',{style:'display:flex;align-items:center;gap:10px'},
+            checkbox({type:'deck',id:d.id}), mkIcon(d.emoji,d.image,'26px','6px'),
+            el('div',{style:'flex:1;min-width:0'},el('div',{style:'font-weight:800;font-size:13px'},d.name),el('div',{class:'u-muted-11'},`${nOf(d.cards.length,'card')}${due>0?` · ${due} due`:''}`))
+          )
+        );
+        tile.addEventListener('click',e=>{ if(e.target.closest('.scope-checkbox')) return; toggle({type:'deck',id:d.id}); });
+        grid.appendChild(tile);
+      });
+      bodyWrap.appendChild(grid);
+    }
+    if(!folders.length && !decks.length) bodyWrap.appendChild(el('div',{class:'empty-state'},el('div',{class:'empty-icon'},'📂'),el('div',{class:'empty-title'},'Empty')));
+  }
+
+  function renderBody(){
+    bodyWrap.innerHTML='';
+    bodyWrap.appendChild(renderBreadcrumb());
+
+    if(nav.view==='subjects'){
+      if(!single){
+        const allChecked=isChecked({type:'all',id:null});
+        const allRow = el('div',{class:'card'+(allChecked?' explorer-selected':''),style:'display:flex;align-items:center;gap:12px;padding:14px 16px;margin-bottom:14px;cursor:pointer'},
+          checkbox({type:'all',id:null}),
+          el('span',{style:'font-size:20px'},'🌍'),
+          el('div',{style:'flex:1'},el('div',{style:'font-weight:800;font-size:13px'},'All Decks'),el('div',{class:'u-muted-11'},`${state.decks.length} deck${state.decks.length!==1?'s':''} total`))
+        );
+        allRow.addEventListener('click',e=>{ if(e.target.closest('.scope-checkbox')) return; toggle({type:'all',id:null}); });
+        bodyWrap.appendChild(allRow);
+      }
+
+      const subjects = new Set([...state.decks.map(d=>d.subject||DEFAULT_SUBJECT_KEY), ...state.folders.filter(f=>!f.parentId).map(f=>f.subjectKey)]);
+      if(!subjects.size){ bodyWrap.appendChild(el('div',{class:'empty-state'},el('div',{class:'empty-icon'},'📚'),el('div',{class:'empty-title'},'No decks yet'))); return; }
+
+      bodyWrap.appendChild(el('div',{class:'u-section-label'},'Subjects'));
+      const grid = el('div',{class:'grid-3'});
+      subjects.forEach(sk=>{
+        const s=getSubjectSafe(sk);
+        const subjectDecks=state.decks.filter(d=>(d.subject||DEFAULT_SUBJECT_KEY)===sk);
+        const subjectFolders=state.folders.filter(f=>f.subjectKey===sk&&!f.parentId);
+        const due=getDueCards(subjectDecks.flatMap(d=>d.cards)).length;
+        const tile = el('div',{class:'card subject-tile'+(!single&&isChecked({type:'subject',id:sk})?' explorer-selected':'')},
+          single?null:checkbox({type:'subject',id:sk}),
+          el('div',{class:'subject-tile-accent',style:`background:${s.defaultColor}`}),
+          el('div',{class:'subject-tile-name',style:`color:${s.defaultColor}`},s.name),
+          el('div',{class:'subject-tile-meta'},s.board),
+          el('div',{class:'subject-tile-counts'}, mkTag(nOf(subjectDecks.length,'deck'),s.defaultColor), subjectFolders.length?mkTag(nOf(subjectFolders.length,'folder'),'#A78BFA'):null, due>0?mkTag(`${due} due`,'var(--pink)'):null)
+        );
+        tile.addEventListener('click',e=>{ if(e.target.closest('.scope-checkbox')) return; nav={view:'subject',subjectKey:sk}; renderBody(); });
+        grid.appendChild(tile);
+      });
+      bodyWrap.appendChild(grid);
+    } else if(nav.view==='subject'){
+      const sk=nav.subjectKey;
+      renderFoldersAndDecks(
+        state.folders.filter(f=>f.subjectKey===sk&&!f.parentId),
+        state.decks.filter(d=>(d.subject||DEFAULT_SUBJECT_KEY)===sk&&!d.folderId)
+      );
+    } else if(nav.view==='folder'){
+      const folder=state.folders.find(f=>f.id===nav.folderId);
+      if(!folder){ nav={view:'subjects'}; renderBody(); return; }
+      renderFoldersAndDecks(
+        state.folders.filter(f=>f.parentId===folder.id),
+        state.decks.filter(d=>d.folderId===folder.id)
+      );
+    }
+  }
+
+  function extraFooterButtons(){
+    return (opts.footerButtons||[]).map(b=>btn(b.label, b.variant||'ghost', {small:!!b.small, onclick:()=>b.onClick(closeOverlay)}));
+  }
+
+  function renderFooter(){
+    footer.innerHTML='';
+    if(single){
+      const scope=[...selection.values()][0]||null;
+      const deck=scope?state.decks.find(d=>d.id===scope.id):null;
+      footer.append(
+        el('div',{style:'font-size:12px;font-weight:700;color:var(--muted)'}, deck ? `"${deck.name}" selected · ${nOf(deck.cards.length,'card')}` : 'Nothing selected — pick one deck to continue'),
+        el('div',{style:'margin-left:auto;display:flex;gap:8px;flex-wrap:wrap'},
+          ...extraFooterButtons(),
+          btn('Cancel','ghost',{onclick:closeOverlay}),
+          btn(opts.confirmLabel||'Use this deck ✓','primary',{disabled:!deck,onclick:()=>{
+            if(!deck) return;
+            closeOverlay();
+            if(typeof opts.onConfirm==='function') opts.onConfirm(deck);
+          }})
+        )
+      );
+      return;
+    }
+    const scopes=[...selection.values()];
+    const cardCount = getScopeSetCards(scopes.length?scopes:[{type:'all',id:null}]).length;
+    footer.append(
+      el('div',{style:'font-size:12px;font-weight:700;color:var(--muted)'}, scopes.length ? `${scopes.length} selected · ${nOf(cardCount,'card')}` : `Nothing selected — defaults to All Decks (${nOf(cardCount,'card')})`),
+      el('div',{style:'margin-left:auto;display:flex;gap:8px'},
+        ...extraFooterButtons(),
+        btn('Clear','ghost',{small:true,onclick:()=>{ selection.clear(); refreshAll(); }}),
+        btn('Cancel','ghost',{onclick:closeOverlay}),
+        btn(opts.confirmLabel||'Use Selection ✓','primary',{onclick:()=>{
+          closeOverlay();
+          if(typeof opts.onConfirm==='function') opts.onConfirm(scopes);
+        }})
+      )
+    );
+  }
+
+  function refreshAll(){ renderRecents(); renderBody(); renderFooter(); }
+  refreshAll();
+}
+
 // ── Multi-answer cards ──────────────────────────────────────────────
 // A multi-answer card stores each accepted answer on its own line in
 // `back` (see sanitizeCard() in shared.js and openCardModal() in
