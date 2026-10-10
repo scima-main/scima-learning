@@ -820,6 +820,15 @@ async def redirect_unknown_to_home(request: Request, exc: HTTPException):
     path = request.url.path
     if path.startswith("/api/"):
         return JSONResponse({"detail": "Not Found"}, status_code=404)
+    # Deep links in path form (/decks/Biology/My%20Deck, /library/Fics/book)
+    # map onto the hash form the frontend parses — checked before the
+    # asset-looking 404 rule below because deck/book names may contain dots.
+    for prefix in ("/decks/", "/library/"):
+        if path.startswith(prefix):
+            rest = path[len(prefix):].strip("/")
+            if rest:
+                target = f"/{prefix.strip('/')}/#{prefix.strip('/')}/{rest}"
+                return RedirectResponse(target, status_code=302)
     last = path.rstrip("/").rsplit("/", 1)[-1]
     if "." in last:
         return JSONResponse({"detail": "Not Found"}, status_code=404)

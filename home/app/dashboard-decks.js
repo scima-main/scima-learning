@@ -57,7 +57,77 @@ function makeDropTarget(node, targetFolderId, subjectKey) {
   });
 }
 
+// -- URL deep links: #decks/<Subject>/<folder...>/<deck> ---------------------
+// Applied at the top of renderDecks(), but only when the hash changed since
+// the last apply/mirror - so in-app navigation (breadcrumbs, drag-drops,
+// state.deckNav rewrites) is never fought by a stale URL, while fresh loads,
+// shared links and manual hash edits resolve into deckNav. Subject/folder/
+// deck names resolve leniently via matchName() (dashboard-core.js); a deck
+// segment opens the deck detail modal over its containing view.
+let _scDecksLastHash = null;
+function scDeeksApplyHash() {
+  const h = (typeof scParseHash === 'function') ? scParseHash() : null;
+  if (!h || h.segs[0] !== 'decks') return;
+  if (_scDecksLastHash === h.raw) return;
+  _scDecksLastHash = h.raw;
+  const segs = h.segs.slice(1).filter(Boolean);
+  if (!segs.length) { state.deckNav = { view: 'subjects' }; return; }
+  const subjects = typeof getAllSubjects === 'function' ? getAllSubjects() : {};
+  let subj = matchName(Object.entries(subjects).map(([k, v]) => ({ id: k, name: v.name })), segs[0]);
+  // Tolerate subject keys that aren't in the canonical list (old saves,
+  // custom schemas) — a raw key still resolves if any deck/folder uses it.
+  if (!subj && (state.decks.some(d => (d.subject || 'misc') === segs[0]) ||
+                state.folders.some(f => (f.subjectKey || 'misc') === segs[0]))) {
+    subj = { id: segs[0] };
+  }
+  if (!subj) return;
+  // Walk the folder chain by name inside the subject; the first segment that
+  // is not a folder is treated as the deck name.
+  const foldersIn = parent => state.folders
+    .filter(f => (f.subjectKey || 'misc') === subj.id && (f.parentId || null) === parent)
+    .map(f => ({ id: f.id, name: f.name }));
+  const decksIn = parent => state.decks
+    .filter(d => (d.subject || 'misc') === subj.id && (d.folderId || null) === parent)
+    .map(d => ({ id: d.id, name: d.name }));
+  let parent = null, folder = null, i = 1;
+  for (; i < segs.length; i++) {
+    const f = matchName(foldersIn(parent), segs[i]);
+    if (!f) break;
+    parent = f.id; folder = f;
+  }
+  state.deckNav = folder
+    ? { view: 'folder', subjectKey: subj.id, folderId: folder.id }
+    : { view: 'subject', subjectKey: subj.id };
+  if (i < segs.length) {
+    const deck = matchName(decksIn(parent), segs[i]);
+    if (deck && typeof openDeckDetail === 'function') openDeckDetail(deck.id);
+  }
+}
+// State -> URL mirror (renderView calls window.SCIMA_URL_SYNC.decks after
+// renderDecks) so folder paths survive refreshes and can be shared.
+window.SCIMA_URL_SYNC = window.SCIMA_URL_SYNC || {};
+window.SCIMA_URL_SYNC.decks = function () {
+  const nav = state.deckNav || { view: 'subjects' };
+  const subjects = typeof getAllSubjects === 'function' ? getAllSubjects() : {};
+  const subjName = k => (subjects[k] && subjects[k].name) || k;
+  const byId = {};
+  state.folders.forEach(f => { byId[f.id] = f; });
+  let frag = 'decks';
+  if (nav.view === 'subject' && nav.subjectKey) {
+    frag += '/' + scSeg(subjName(nav.subjectKey));
+  } else if (nav.view === 'folder' && nav.folderId) {
+    const chain = [];
+    let cur = byId[nav.folderId];
+    while (cur) { chain.unshift(scSeg(cur.name)); cur = cur.parentId ? byId[cur.parentId] : null; }
+    const f = byId[nav.folderId];
+    frag += '/' + scSeg(subjName(f ? f.subjectKey : 'misc')) + (chain.length ? '/' + chain.join('/') : '');
+  }
+  scReplaceHash(frag);
+  _scDecksLastHash = frag;
+};
+
 function renderDecks(c) {
+  scDeeksApplyHash();
   const nav = state.deckNav;
   if (nav.view === 'folder' && nav.folderId) renderFolderView(c, nav.folderId);
   else if (nav.view === 'subject' && nav.subjectKey) renderSubjectView(c, nav.subjectKey);
@@ -1373,7 +1443,7 @@ function openCreateDeckModal(subjectKey, folderId) {
         el('div',{style:'font-weight:700'},'🌐 Browse Community Decks'),
         el('div',{class:'u-muted-11'},'Find and download decks shared by other users')
       ),
-      btn('Open →','ghost',{small:true,onclick:()=>{ window.open('https://study.scima-net.com/community','_blank','noopener'); }})
+      btn('Open →','ghost',{small:true,onclick:()=>{ closeModal(); navigate('community'); }})
     );
     body.appendChild(communityBanner);
 

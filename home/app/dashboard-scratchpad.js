@@ -30,7 +30,27 @@
    panel/history panel/align-distribute/smart guides/minimize-PiP, no
    curved arrows or regular-polygon mode, no PDF export; two-finger twist
    rotates the grid; exports include the question as plain text + images
-   (no KaTeX font embedding inside PNG/SVG). */
+   (no KaTeX font embedding inside PNG/SVG).
+
+   POST-DELIVERY REFINEMENTS (user feedback round 2):
+   * head bar: ↑ ↓ ← → dock movers (pad parks against any viewport half;
+     the mover for the current dock is disabled, so → starts greyed),
+     ⛶ + × sit at the far right; F toggles fullscreen;
+   * the panel is resizable via a grip on its inner edge (double-click
+     resets); size is per orientation and clamped to 260px…94%;
+   * toolbar glyphs are uniform 18×18 inline SVGs — the request was LaTeX,
+     but KaTeX has no pentagon/image maths glyph and would add a font
+     dependency to pages that don't load it; SVGs give identical metrics
+     everywhere including the extension build;
+   * arrow heads enlarged (max(14, w·3.4), ±0.5 rad) — the old 9px sliver
+     read as "the arrow tool draws a line";
+   * background list: squared paper and dot matrix dropped (duplicates of
+     grid/dotted); graph paper gained x/y axes plus one number per square
+     (square index, thinned below 20px);
+   * every popover config value is an editable number field with an in-box
+     unit suffix — no read-only value text anywhere;
+   * the grid is generated procedurally in screen space, so line families
+     no longer vanish far from the origin (canvas float32 precision). */
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const SP_ZOOM_MIN = 0.1;            // 10%  (spec §8: finite stops 10%–1000%)
@@ -40,36 +60,71 @@ const SP_STATE_VERSION = 1;         // bump when the serialized shape changes
 const SP_Q_WIDTH = 480;             // world px — question layer default width
 const SP_Q_ID = '__q__';            // pseudo-object id for the question group
 
-// Background styles (spec §9). 'dotmatrix' kept one word for the <select>.
+// Background styles (spec §9). 'squared' (squared paper) and 'dotmatrix'
+// (dot matrix) were dropped as duplicates: squared paper drew the same line
+// families as 'grid'/'graph' at one weight, and dot matrix was 'dotted' at
+// half spacing. 'graph' is the real graph paper now — grid lines plus x/y
+// axes AND a number per square along both axes (see spDrawGrid).
+// Saved pads/settings still carrying the removed ids fall back to 'grid'
+// (spApplySettingLive / spStyleSeedFromSettings / spPrepareQuestion all
+// validate against this list).
 const SP_BG_STYLES = [
-  { id: 'blank',     label: 'Blank' },
-  { id: 'grid',      label: 'Grid' },
-  { id: 'dotted',    label: 'Dotted grid' },
-  { id: 'lined',     label: 'Lined paper' },
-  { id: 'squared',   label: 'Squared paper' },
-  { id: 'iso',       label: 'Isometric' },
-  { id: 'dotmatrix', label: 'Dot matrix' },
-  { id: 'graph',     label: 'Graph paper' },
+  { id: 'blank',  label: 'Blank' },
+  { id: 'grid',   label: 'Grid' },
+  { id: 'dotted', label: 'Dotted grid' },
+  { id: 'lined',  label: 'Lined paper' },
+  { id: 'iso',    label: 'Isometric' },
+  { id: 'graph',  label: 'Graph paper' },
 ];
 
 // Tools (spec §10 core list; §26 single-key shortcuts). 'triangle' has no
 // single-key binding in the spec map, so it gets none (click only).
+// Icons: uniform 18×18 inline SVGs (SP_TOOL_ICONS below) instead of the old
+// mixed Unicode/emoji glyphs (╱ ↗  ◯ △  🖼️ ️ …). Those came from different
+// fonts at different optical sizes — the emoji ones were even full-colour —
+// so the toolbar looked ragged. LaTeX (KaTeX) was considered for the glyphs
+// but it has no pentagon/image maths symbol and adds a font dependency the
+// extension build doesn't load on every page; stroke-based SVGs guarantee
+// identical metrics, inherit currentColor and stay crisp at any DPR.
 const SP_TOOLS = [
-  { id: 'select',    icon: '➤', key: 'v', label: 'Select' },
-  { id: 'pan',       icon: '✋', key: 'h', label: 'Pan' },
-  { id: 'text',      icon: 'T',  key: 't', label: 'Text' },
-  { id: 'pen',       icon: '✏️', key: 'p', label: 'Pen' },
-  { id: 'highlight', icon: '🖍️', key: 'm', label: 'Highlighter' },
-  { id: 'eraser',    icon: '⌫',  key: 'e', label: 'Eraser' },
+  { id: 'select',    key: 'v', label: 'Select' },
+  { id: 'pan',       key: 'h', label: 'Pan' },
+  { id: 'text',      key: 't', label: 'Text' },
+  { id: 'pen',       key: 'p', label: 'Pen' },
+  { id: 'highlight', key: 'm', label: 'Highlighter' },
+  { id: 'eraser',    key: 'e', label: 'Eraser' },
   { id: 'sep' },
-  { id: 'line',      icon: '╱',  key: 'l', label: 'Line' },
-  { id: 'arrow',     icon: '↗',  key: 'a', label: 'Arrow' },
-  { id: 'rect',      icon: '▭',  key: 'r', label: 'Rectangle' },
-  { id: 'ellipse',   icon: '◯',  key: 'o', label: 'Ellipse' },
-  { id: 'triangle',  icon: '△',  key: '',  label: 'Triangle' },
-  { id: 'polygon',   icon: '⬠',  key: 'u', label: 'Polygon' },
-  { id: 'image',     icon: '🖼️', key: 'i', label: 'Insert image' },
+  { id: 'line',      key: 'l', label: 'Line' },
+  { id: 'arrow',     key: 'a', label: 'Arrow' },
+  { id: 'rect',      key: 'r', label: 'Rectangle' },
+  { id: 'ellipse',   key: 'o', label: 'Ellipse' },
+  { id: 'triangle',  key: '',  label: 'Triangle' },
+  { id: 'polygon',   key: 'u', label: 'Polygon' },
+  { id: 'image',     key: 'i', label: 'Insert image' },
 ];
+
+// Toolbar glyph set — one viewBox, one stroke width, currentColor throughout.
+const SP_TOOL_ICONS = {
+  select:    '<path d="M4.5 2.5 14 9.2l-4.6.9-2 4.4z" fill="currentColor" stroke="none"/>',
+  pan:       '<path d="M6.4 8.6V4.2a1.1 1.1 0 0 1 2.2 0V8m0-3.9a1.1 1.1 0 0 1 2.2 0V8m0-3a1.1 1.1 0 0 1 2.2 0v5.6c0 3-2 5.2-4.9 5.2-2.4 0-3.6-1.1-4.8-3.2L2.6 9.9c-.5-.9-.2-1.7.5-2 .6-.3 1.4-.1 1.9.7l1.4 2"/>',
+  text:      '<path d="M4 4.5h10M9 4.5V15"/>',
+  pen:       '<path d="M3.5 14.5l1-3.2 7.6-7.6a1.6 1.6 0 0 1 2.3 2.3L6.7 13.6zM11 4.8l2.3 2.3"/>',
+  highlight: '<path d="M9.2 3.6l5.2 5.2-2.6 2.6H9.2l-2.6-2.6zM6.6 8.8 3.5 12v2.5H6L9.2 11.4M3.5 16.5h11"/>',
+  eraser:    '<path d="M8.3 14.5H5.2L2.9 12.2a1.5 1.5 0 0 1 0-2.1l6.5-6.5a1.5 1.5 0 0 1 2.1 0l3.4 3.4a1.5 1.5 0 0 1 0 2.1l-5.4 5.4zM5.6 7.6l5.5 5.5M3.5 16.5h11"/>',
+  line:      '<path d="M4 14 14 4"/>',
+  arrow:     '<path d="M4 14 13.2 4.8M13.6 4.4h-4.2m4.2 0v4.2"/>',
+  rect:      '<rect x="3.5" y="5" width="11" height="8" rx="1"/>',
+  ellipse:   '<ellipse cx="9" cy="9" rx="5.6" ry="4.4"/>',
+  triangle:  '<path d="M9 4 14.6 14H3.4z"/>',
+  polygon:   '<path d="M9 3.4 14.4 7.3l-2 6.3H5.6l-2-6.3z"/>',
+  image:     '<rect x="3" y="4" width="12" height="10" rx="1.5"/><circle cx="6.6" cy="7.4" r="1.1"/><path d="M3.6 12.6 7 9.4l2.6 2.4 2.5-2.2 2.4 2.4"/>',
+};
+function spToolIconSvg(id) {
+  const body = SP_TOOL_ICONS[id];
+  if (!body) return '';
+  return `<svg viewBox="0 0 18 18" width="19" height="19" fill="none" stroke="currentColor" ` +
+    `stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+}
 
 // Quick palette (spec §21 — black/gray/white/red/orange/yellow/green/blue/
 // purple/pink). Ordered light-first because the canvas backdrop is dark.
@@ -335,6 +390,9 @@ const _sp = {
   qLayer: null, canvasWrap: null, textarea: null, fileInput: null,
   zoomSlider: null, zoomLabel: null, undoBtn: null, redoBtn: null,
   gridToggleBtn: null, fullBtn: null, popover: null, ctxMenu: null,
+  // docking/resize (round-2 refinements): current dock side, per-orientation
+  // sizes in px (0 = default), head-bar mover buttons, inner-edge grip.
+  dock: 'right', dockW: 0, dockH: 0, dockBtns: [], resizeHandle: null,
   toolBtns: [], vw: 0, vh: 0,
 };
 
@@ -409,9 +467,24 @@ function spBuildPanel() {
     type: 'button', class: 'sp-icon-btn', 'aria-label': 'Close scratchpad',
     title: 'Close scratchpad (Esc)', onclick: () => spToggle(_sp.card),
   }, '×');
+  // Dock movers - the pad parks against any viewport half; the mover for
+  // the dock it already occupies is disabled (a neutral pill per CSS).
+  _sp.dockBtns = [];
+  const dockGroup = el('div', { class: 'sp-dock-group', role: 'group', 'aria-label': 'Dock scratchpad' });
+  for (const [dir, glyph] of [['top', '↑'], ['bottom', '↓'], ['left', '←'], ['right', '→']]) {
+    const b = el('button', {
+      type: 'button', class: 'sp-icon-btn sp-dock-btn', 'data-dock': dir,
+      'aria-label': `Dock ${dir}`, title: `Dock ${dir}`,
+      onclick: () => spSetDock(dir),
+    }, glyph);
+    b.disabled = (dir === _sp.dock);
+    _sp.dockBtns.push(b);
+    dockGroup.appendChild(b);
+  }
   const head = el('div', { class: 'sp-head' },
     el('div', { class: 'sp-title' }, '✍️ Scratchpad'),
-    el('div', { class: 'spacer' }),
+    dockGroup,
+    el('div', { class: 'sp-head-spacer' }),
     _sp.fullBtn, closeBtn);
 
   // Toolbar ────────────────────────────────────────────────────────────────
@@ -424,7 +497,8 @@ function spBuildPanel() {
       'aria-label': `${t.label}${t.key ? ` (${t.key.toUpperCase()})` : ''}`, 'aria-pressed': 'false',
       title: `${t.label}${t.key ? ` — ${t.key.toUpperCase()}` : ''}`,
       onclick: () => spSetTool(t.id),
-    }, t.icon);
+    });
+    b.innerHTML = spToolIconSvg(t.id);
     _sp.toolBtns.push(b);
     toolbar.appendChild(b);
   }
@@ -503,6 +577,20 @@ function spBuildPanel() {
   _sp.panel = el('section', {
     id: 'scratch-panel', role: 'region', 'aria-label': 'Infinite scratchpad', 'aria-hidden': 'true',
   }, head, el('div', { class: 'sp-body' }, toolbar, _sp.canvasWrap), bottom);
+
+  // Resize grip on the panel's inner edge (left edge when docked right, etc).
+  // Dragging it changes the docked width/height; double-click resets to the
+  // default size for that orientation. Hidden in fullscreen and on mobile.
+  _sp.resizeHandle = el('div', {
+    class: 'sp-resize', title: 'Drag to resize — double-click resets', 'aria-hidden': 'true',
+  });
+  _sp.resizeHandle.addEventListener('pointerdown', spResizeDown);
+  _sp.resizeHandle.addEventListener('dblclick', () => { spResetDockSize(); });
+  _sp.panel.appendChild(_sp.resizeHandle);
+
+  // Park against the default dock so panel class, size vars and the
+  // mover-disabled states all start consistent.
+  spSetDock(_sp.dock || 'right');
 
   _sp.fileInput = el('input', { type: 'file', id: 'sp-file-input', accept: 'image/*', style: 'display:none', 'aria-hidden': 'true' });
   _sp.fileInput.addEventListener('change', () => {
@@ -686,8 +774,13 @@ function spRender() {
   spUpdateChrome();
 }
 
-// Grid canvas (world-space drawing under a rotation around the world origin —
-// the grid rotates, objects don't; spec §9).
+// Grid canvas — the infinite grid is generated procedurally in SCREEN space:
+// every vertex is mapped world→screen in float64 JS and only the visible
+// slice is emitted, so all coordinates handed to the context stay
+// viewport-sized no matter how far from the origin you pan. (The previous
+// version drew under a scaled/rotated world transform; past ~1e6 world px
+// the path coordinates exceeded the canvas' float32 precision and the line
+// families silently vanished — "the grid stops working far from the origin".)
 function spDrawGrid() {
   const ctx = _sp.gridCtx, cv = _sp.gridCanvas;
   if (!ctx) return;
@@ -696,81 +789,126 @@ function spDrawGrid() {
   ctx.clearRect(0, 0, cv._cssW || 0, cv._cssH || 0);
   const g = _sp.grid;
   if (!g.visible || g.style === 'blank') return;
-  const z = _sp.view.zoom;
+  const z = _sp.view.zoom, vx = _sp.view.x, vy = _sp.view.y;
   // Thin out spacing when zoomed far out so line count stays bounded (§29).
   let s = Math.max(4, g.spacing);
   while (s * z < 9 && s < 100000) s *= 5;
   const a = g.angle * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
   const W = cv._cssW || 0, H = cv._cssH || 0;
-  // Visible world corners → grid-local space (rotate by -a around origin).
-  const corners = [{ x: 0, y: 0 }, { x: W, y: 0 }, { x: 0, y: H }, { x: W, y: H }].map(spS2W);
-  let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
-  for (const p of corners) {
-    const lx = p.x * ca + p.y * sa, ly = -p.x * sa + p.y * ca;
-    if (lx < mnx) mnx = lx; if (lx > mxx) mxx = lx;
-    if (ly < mny) mny = ly; if (ly > mxy) mxy = ly;
-  }
-  ctx.save();
-  ctx.translate(_sp.view.x, _sp.view.y);
-  ctx.scale(z, z);
-  ctx.rotate(a);
+  // grid-local → screen (local l → world R(a)·l → screen l·z + view)
+  const l2s = (lx, ly) => ({ x: vx + z * (lx * ca - ly * sa), y: vy + z * (lx * sa + ly * ca) });
+  // screen → grid-local, for the visible bounds
+  const s2l = (sx, sy) => {
+    const wx = (sx - vx) / z, wy = (sy - vy) / z;
+    return { x: wx * ca + wy * sa, y: -wx * sa + wy * ca };
+  };
+  const cs = [s2l(0, 0), s2l(W, 0), s2l(0, H), s2l(W, H)];
+  const mnx = Math.min(cs[0].x, cs[1].x, cs[2].x, cs[3].x);
+  const mxx = Math.max(cs[0].x, cs[1].x, cs[2].x, cs[3].x);
+  const mny = Math.min(cs[0].y, cs[1].y, cs[2].y, cs[3].y);
+  const mxy = Math.max(cs[0].y, cs[1].y, cs[2].y, cs[3].y);
   const op = g.opacity;
   const ink = _sp.gridInk || '255,255,255';
   const faint = `rgba(${ink},${(0.09 * op + 0.03).toFixed(3)})`;
   const mid = `rgba(${ink},${(0.16 * op + 0.05).toFixed(3)})`;
   const strong = `rgba(${ink},${(0.30 * op + 0.08).toFixed(3)})`;
 
-  // One family of parallel lines running along direction θ, spaced `sp`.
-  const family = (thetaDeg, sp, color, lw, onlyEvery) => {
+  // One family of parallel lines running along grid-local direction θ,
+  // spaced `sp`; `every` thins to every n-th line. Lines are rebased around
+  // the family member nearest the viewport centre so path offsets stay small.
+  const family = (thetaDeg, sp, color, lw, every) => {
+    every = every || 1;
     const t = thetaDeg * Math.PI / 180, dx = Math.cos(t), dy = Math.sin(t);
     const nx = -dy, ny = dx;
-    const projs = [{ x: mnx, y: mny }, { x: mxx, y: mny }, { x: mnx, y: mxy }, { x: mxx, y: mxy }].map(p => p.x * nx + p.y * ny);
-    let k0 = Math.floor(Math.min(...projs) / sp) - 1, k1 = Math.ceil(Math.max(...projs) / sp) + 1;
-    if (onlyEvery) { k0 = Math.ceil(k0 / onlyEvery) * onlyEvery; }
-    if (k1 - k0 > 800) return;        // perf guard
-    const diag = Math.hypot(mxx - mnx, mxy - mny) + sp * 2;
+    const pr = [mnx * nx + mny * ny, mxx * nx + mny * ny, mnx * nx + mxy * ny, mxx * nx + mxy * ny];
+    const pmin = Math.min(pr[0], pr[1], pr[2], pr[3]);
+    const pmax = Math.max(pr[0], pr[1], pr[2], pr[3]);
+    let k0 = Math.ceil(pmin / sp), k1 = Math.floor(pmax / sp);
+    if (every > 1) { k0 = Math.ceil(k0 / every) * every; k1 = Math.floor(k1 / every) * every; }
+    if (k1 - k0 > 800) return;                                  // perf guard
+    const kb = Math.round((pmin + pmax) / 2 / sp / every) * every;
+    // Anchor the base line at the viewport-centre projection ALONG the line
+    // direction too — otherwise the anchor sits on the grid's x=0 / y=0 axis
+    // and lands far off-screen once you pan away from the origin.
+    const cproj = (mnx + mxx) / 2 * dx + (mny + mxy) / 2 * dy;
+    const B = l2s(nx * kb * sp + dx * cproj, ny * kb * sp + dy * cproj);
+    const dsx = z * (dx * ca - dy * sa), dsy = z * (dx * sa + dy * ca);   // screen dir per local unit
+    const nsx = z * (nx * ca - ny * sa), nsy = z * (nx * sa + ny * ca);   // screen normal per local unit
+    const diag = Math.hypot(mxx - mnx, mxy - mny) + sp * 2;     // local half-length cover
     ctx.strokeStyle = color; ctx.lineWidth = lw;
     ctx.beginPath();
-    for (let k = k0; k <= k1; k += (onlyEvery || 1)) {
-      const bx = nx * k * sp, by = ny * k * sp;
-      ctx.moveTo(bx - dx * diag, by - dy * diag);
-      ctx.lineTo(bx + dx * diag, by + dy * diag);
+    for (let k = k0; k <= k1; k += every) {
+      const off = (k - kb) * sp;
+      const px = B.x + nsx * off, py = B.y + nsy * off;
+      ctx.moveTo(px - dsx * diag, py - dsy * diag);
+      ctx.lineTo(px + dsx * diag, py + dsy * diag);
     }
     ctx.stroke();
   };
-  const dots = (sp, r, color, offset) => {
-    const x0 = Math.floor(mnx / sp) * sp, x1 = mxx, y0 = Math.floor(mny / sp) * sp, y1 = mxy;
-    const nx = Math.round((x1 - x0) / sp), ny = Math.round((y1 - y0) / sp);
-    if (nx * ny > 12000) return;      // perf guard
+  // Dot lattice, same rebasing trick; dots are screen-axis squares (at dot
+  // size rotation is imperceptible and this stays allocation-free).
+  const dots = (sp, r, color) => {
+    const ib = Math.floor((mnx + mxx) / 2 / sp), jb = Math.floor((mny + mxy) / 2 / sp);
+    const i0 = Math.floor(mnx / sp) - ib, i1 = Math.ceil(mxx / sp) - ib;
+    const j0 = Math.floor(mny / sp) - jb, j1 = Math.ceil(mxy / sp) - jb;
+    if ((i1 - i0 + 1) * (j1 - j0 + 1) > 12000) return;          // perf guard
+    const B = l2s(ib * sp, jb * sp);
+    const ax = z * ca * sp, ay = z * sa * sp;                  // screen step per +i
+    const bx = -z * sa * sp, by = z * ca * sp;                 // screen step per +j
     ctx.fillStyle = color;
-    for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) {
-      ctx.fillRect(x0 + i * sp - r / 2, y0 + j * sp - r / 2, r, r);
+    for (let i = i0; i <= i1; i++) {
+      for (let j = j0; j <= j1; j++) {
+        ctx.fillRect(B.x + i * ax + j * bx - r / 2, B.y + i * ay + j * by - r / 2, r, r);
+      }
     }
   };
-  const lw = 1 / z;                   // hairline at any zoom
+  // Graph-paper axes + one number per square along both axes. Numbers are
+  // square indices (the square size IS the spacing setting), thinned out when
+  // squares shrink below ~26px so labels never collide.
+  const axes = (sp, withNumbers) => {
+    const O = l2s(0, 0);
+    const L = Math.hypot(W, H);
+    ctx.strokeStyle = strong; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(O.x - ca * L, O.y - sa * L); ctx.lineTo(O.x + ca * L, O.y + sa * L);
+    ctx.moveTo(O.x + sa * L, O.y - ca * L); ctx.lineTo(O.x - sa * L, O.y + ca * L);
+    ctx.stroke();
+    if (!withNumbers) return;
+    const every = Math.max(1, Math.ceil(20 / (sp * z)));
+    const ax = z * ca * sp, ay = z * sa * sp, bx = -z * sa * sp, by = z * ca * sp;
+    ctx.fillStyle = `rgba(${ink},${(0.42 * op + 0.18).toFixed(3)})`;
+    ctx.font = '700 10px Nunito, system-ui, sans-serif';
+    let i0 = Math.ceil(mnx / sp), i1 = Math.floor(mxx / sp);
+    i0 = Math.ceil(i0 / every) * every; i1 = Math.floor(i1 / every) * every;
+    if (i1 - i0 <= 400) {
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      for (let i = i0; i <= i1; i += every) {
+        ctx.fillText(String(i), O.x + i * ax + 3, O.y + i * ay + 3);
+      }
+    }
+    let j0 = Math.ceil(mny / sp), j1 = Math.floor(mxy / sp);
+    j0 = Math.ceil(j0 / every) * every; j1 = Math.floor(j1 / every) * every;
+    if (j1 - j0 <= 400) {
+      ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+      for (let j = j0; j <= j1; j += every) {
+        if (j === 0) continue;                                 // origin labelled once above
+        ctx.fillText(String(j), O.x + j * bx - 3, O.y + j * by - 3);
+      }
+    }
+  };
+  const lw = 1;                                                // hairline in screen px
   switch (g.style) {
     case 'grid':
       family(0, s, faint, lw); family(90, s, faint, lw);
-      family(0, s * 5, mid, lw, 5); family(90, s * 5, mid, lw, 5);
-      break;
-    case 'squared':
-      family(0, s, mid, lw); family(90, s, mid, lw);
+      family(0, s, mid, lw, 5); family(90, s, mid, lw, 5);
       break;
     case 'graph':
       family(0, s, faint, lw); family(90, s, faint, lw);
-      family(0, s * 5, mid, lw, 5); family(90, s * 5, mid, lw, 5);
-      ctx.strokeStyle = strong;
-      ctx.lineWidth = 1.5 / z;
-      ctx.beginPath();
-      ctx.moveTo(mnx - s, 0); ctx.lineTo(mxx + s, 0);
-      ctx.moveTo(0, mny - s); ctx.lineTo(0, mxy + s);
-      ctx.stroke();
+      family(0, s, mid, lw, 5); family(90, s, mid, lw, 5);
+      axes(s, true);
       break;
     case 'dotted':
-      dots(s, Math.max(1.4 / z, s * 0.06), `rgba(${ink},${(0.28 * op + 0.08).toFixed(3)})`);
-      break;
-    case 'dotmatrix':
-      dots(s / 2, Math.max(1 / z, s * 0.035), `rgba(${ink},${(0.22 * op + 0.06).toFixed(3)})`);
+      dots(s, Math.max(1.4, s * z * 0.06), `rgba(${ink},${(0.28 * op + 0.08).toFixed(3)})`);
       break;
     case 'lined':
       family(0, s * 1.6, `rgba(${ink},${(0.16 * op + 0.05).toFixed(3)})`, lw);
@@ -780,7 +918,6 @@ function spDrawGrid() {
       break;
     default: break; // 'blank' handled above
   }
-  ctx.restore();
 }
 
 // Objects canvas — everything user-drawn, plus selection UI.
@@ -918,7 +1055,7 @@ function spDrawLineShape(ctx, o, arrow) {
   ctx.strokeStyle = o.color; ctx.lineWidth = o.width; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(o.x1, o.y1); ctx.lineTo(o.x2, o.y2); ctx.stroke();
   if (arrow) {
-    const size = Math.max(9, o.width * 2.8);
+    const size = Math.max(14, o.width * 3.4);
     spArrowHead(ctx, o.x1, o.y1, o.x2, o.y2, size, o.color);
     if (o.double) spArrowHead(ctx, o.x2, o.y2, o.x1, o.y1, size, o.color);
   }
@@ -929,8 +1066,8 @@ function spArrowHead(ctx, x1, y1, x2, y2, size, color) {
   ctx.save(); ctx.fillStyle = color;
   ctx.beginPath();
   ctx.moveTo(x2, y2);
-  ctx.lineTo(x2 - size * Math.cos(a - 0.42), y2 - size * Math.sin(a - 0.42));
-  ctx.lineTo(x2 - size * Math.cos(a + 0.42), y2 - size * Math.sin(a + 0.42));
+  ctx.lineTo(x2 - size * Math.cos(a - 0.5), y2 - size * Math.sin(a - 0.5));
+  ctx.lineTo(x2 - size * Math.cos(a + 0.5), y2 - size * Math.sin(a + 0.5));
   ctx.closePath(); ctx.fill();
   ctx.restore();
 }
@@ -1242,6 +1379,77 @@ function spResetView() {
   const b = _sp.q.present ? { x: _sp.q.x, y: _sp.q.y, w: _sp.q.w, h: _sp.q.h } : { x: 0, y: 0, w: 0, h: 0 };
   _sp.view = spFitZoom(b, _sp.vw || 600, _sp.vh || 420, 48, 1);
   spInvalidate(); spTouch();
+}
+// -- Docking + resize (round-2 refinements; see the header comment) ---------
+// The pad parks against any viewport half - the mover for the dock it
+// already occupies is disabled (CSS renders it as a neutral pill). Size is
+// kept per orientation (left/right share a width, top/bottom a height),
+// clamped to 260px...94% of the viewport; double-clicking the grip resets to
+// the default for that orientation. The grip is hidden in fullscreen and on
+// the <=820px full-screen sheet (CSS).
+const SP_DOCK_DEFAULT_W = 640, SP_DOCK_DEFAULT_H = 430;
+function spDockIsVertical() { return _sp.dock === 'left' || _sp.dock === 'right'; }
+function spDockClamp(px, vertical) {
+  const limit = (vertical ? window.innerWidth : window.innerHeight) * 0.94;
+  return Math.max(260, Math.min(Math.round(px), Math.round(limit)));
+}
+function spSetDock(dir) {
+  if (!['top', 'bottom', 'left', 'right'].includes(dir)) return;
+  _sp.dock = dir;
+  const p = _sp.panel;
+  if (!p) return;
+  p.classList.remove('sp-dock-top', 'sp-dock-bottom', 'sp-dock-left', 'sp-dock-right');
+  p.classList.add('sp-dock-' + dir);
+  if (spDockIsVertical()) {
+    _sp.dockW = spDockClamp(_sp.dockW || SP_DOCK_DEFAULT_W, true);
+    p.style.setProperty('--sp-w', _sp.dockW + 'px');
+  } else {
+    _sp.dockH = spDockClamp(_sp.dockH || SP_DOCK_DEFAULT_H, false);
+    p.style.setProperty('--sp-h', _sp.dockH + 'px');
+  }
+  for (const b of (_sp.dockBtns || [])) b.disabled = (b.dataset.dock === dir);
+  requestAnimationFrame(() => { spResizeCanvases(); spInvalidate(); });
+}
+function spResetDockSize() {
+  if (!_sp.panel) return;
+  if (spDockIsVertical()) {
+    _sp.dockW = SP_DOCK_DEFAULT_W;
+    _sp.panel.style.setProperty('--sp-w', SP_DOCK_DEFAULT_W + 'px');
+  } else {
+    _sp.dockH = SP_DOCK_DEFAULT_H;
+    _sp.panel.style.setProperty('--sp-h', SP_DOCK_DEFAULT_H + 'px');
+  }
+  requestAnimationFrame(() => { spResizeCanvases(); spInvalidate(); });
+}
+function spResizeDown(e) {
+  if (_sp.fullscreen || window.innerWidth <= 820) return;
+  e.preventDefault(); e.stopPropagation();
+  const vertical = spDockIsVertical();
+  const rect0 = _sp.panel.getBoundingClientRect();
+  const start = vertical ? rect0.width : rect0.height;
+  const sx = e.clientX, sy = e.clientY;
+  const grip = _sp.resizeHandle;
+  if (grip) grip.classList.add('sp-active');
+  const move = ev => {
+    // Dragging the grip away from the docked edge grows the panel.
+    const d = vertical
+      ? (_sp.dock === 'right' ? sx - ev.clientX : ev.clientX - sx)
+      : (_sp.dock === 'bottom' ? sy - ev.clientY : ev.clientY - sy);
+    const size = spDockClamp(start + d, vertical);
+    if (vertical) { _sp.dockW = size; _sp.panel.style.setProperty('--sp-w', size + 'px'); }
+    else { _sp.dockH = size; _sp.panel.style.setProperty('--sp-h', size + 'px'); }
+    spResizeCanvases(); spInvalidate();
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
+    if (grip) grip.classList.remove('sp-active');
+    spResizeCanvases(); spInvalidate();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
 }
 function spSetFullscreen(on) {
   _sp.fullscreen = !!on;
@@ -2551,10 +2759,10 @@ function spExportSVG() {
       case 'line': out.push(`<line x1="${o.x1.toFixed(1)}" y1="${o.y1.toFixed(1)}" x2="${o.x2.toFixed(1)}" y2="${o.y2.toFixed(1)}"${sw}${op}${rotA}/>`); break;
       case 'arrow': {
         out.push(`<line x1="${o.x1.toFixed(1)}" y1="${o.y1.toFixed(1)}" x2="${o.x2.toFixed(1)}" y2="${o.y2.toFixed(1)}"${sw}${op}${rotA}/>`);
-        const a = Math.atan2(o.y2 - o.y1, o.x2 - o.x1), size = Math.max(9, (o.width || 2) * 2.8);
+        const a = Math.atan2(o.y2 - o.y1, o.x2 - o.x1), size = Math.max(14, (o.width || 2) * 3.4);
         const p1 = [o.x2, o.y2];
-        const p2 = [o.x2 - size * Math.cos(a - 0.42), o.y2 - size * Math.sin(a - 0.42)];
-        const p3 = [o.x2 - size * Math.cos(a + 0.42), o.y2 - size * Math.sin(a + 0.42)];
+        const p2 = [o.x2 - size * Math.cos(a - 0.5), o.y2 - size * Math.sin(a - 0.5)];
+        const p3 = [o.x2 - size * Math.cos(a + 0.5), o.y2 - size * Math.sin(a + 0.5)];
         out.push(`<polygon points="${p1.concat(p2, p3).map(n => n.toFixed(1)).join(',')}" fill="${esc(o.color)}"${op}${rotA}/>`);
         break;
       }
@@ -2791,6 +2999,12 @@ if (typeof window !== 'undefined' && window.addEventListener) {
       return;
     }
     if (editing) return;                                  // the rest needs canvas focus
+    // F toggles fullscreen (Esc exits - see the Escape branch above).
+    if ((key === 'f' || key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault(); e.stopPropagation();
+      spSetFullscreen(!_sp.fullscreen);
+      return;
+    }
 
     const mod = e.ctrlKey || e.metaKey;
     if (mod && typeof key === 'string' && key.toLowerCase() === 'z') {

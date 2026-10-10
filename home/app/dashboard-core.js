@@ -1731,8 +1731,14 @@ function navigate(viewId) {
   renderView(viewId);
   renderPageTabs();
   // Keep the URL hash in step with in-page view switches (shareable links,
-  // sane Back-button behaviour) without piling up history entries.
-  try { history.replaceState(null, '', `#${viewId}`); } catch (e) {}
+  // sane Back-button behaviour) without piling up history entries — but
+  // never truncate a deep-link payload (#decks/Science/Biology,
+  // #study?scope=…) that a module is about to parse on first render.
+  try {
+    const cur = location.hash.replace(/^#/, '');
+    const owns = cur === viewId || cur.startsWith(viewId + '/') || cur.startsWith(viewId + '?');
+    if (!owns) history.replaceState(null, '', `#${viewId}`);
+  } catch (e) {}
 }
 function routeOfView(viewId) {
   return viewId in VIEW_ROUTES ? VIEW_ROUTES[viewId] : viewId;
@@ -1821,6 +1827,62 @@ function renderView(id) {
   }
   c.innerHTML = '';
   fn(c);
+  // URL deep links: let the page module mirror its navigation state into
+  // location.hash (replaceState, no history spam) so folder paths, open
+  // decks/books and study sessions survive refreshes and can be shared.
+  try {
+    const sync = (typeof window !== 'undefined' && window.SCIMA_URL_SYNC) || {};
+    if (typeof sync[id] === 'function') sync[id]();
+  } catch (e) {}
+}
+
+// ── URL deep links ─────────────────────────────────────────────────────────
+// Hash payloads keep every route static-hostable (the 404-to-home fallback
+// also maps /decks/<path> and /library/<path> onto the hash form, so the
+// path-style URLs work too). Shape:
+//   #decks/<Subject>/<folder…>/<deck>      names, resolved leniently
+//   #library/<folder…>/<book>              ditto, last seg may open a book
+//   #study?scope=…&mode=…&seed=…&qid=…&timed=…
+function scParseHash() {
+  if (typeof location === 'undefined' || !location.hash) return null;
+  const h = location.hash.replace(/^#/, '');
+  if (!h) return null;
+  const qi = h.indexOf('?');
+  const head = qi >= 0 ? h.slice(0, qi) : h;
+  const segs = head.split('/').filter(Boolean).map(s => {
+    try { return decodeURIComponent(s); } catch (e) { return s; }
+  });
+  let params = null;
+  if (qi >= 0 && typeof URLSearchParams !== 'undefined') params = new URLSearchParams(h.slice(qi + 1));
+  return { raw: h, head, segs, params };
+}
+function scReplaceHash(frag) {
+  if (typeof location === 'undefined' || typeof history === 'undefined') return;
+  const url = location.pathname + location.search + (frag ? '#' + frag : '');
+  try { history.replaceState(null, '', url); } catch (e) {}
+}
+function scSeg(s) { return encodeURIComponent(String(s).replace(/\/+/g, ' ')); }
+
+// Lenient name resolver for deep-link path segments: exact id, then exact
+// name (case/whitespace-insensitive), then first prefix/substring hit.
+// Returns the matched entry ({ id, name, ... }) or null. Shared by the
+// per-page appliers (scDeeksApplyHash / scLibraryApplyHash) so shared URLs
+// survive case changes and small typos in names.
+function matchName(list, raw) {
+  if (!Array.isArray(list) || raw == null) return null;
+  const want = String(raw).trim();
+  if (!want) return null;
+  const norm = s => String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' ');
+  const w = norm(want);
+  let hit = list.find(x => x && x.id === want);
+  if (hit) return hit;
+  hit = list.find(x => x && norm(x.name) === w);
+  if (hit) return hit;
+  hit = list.find(x => x && norm(x.name).startsWith(w));
+  if (hit) return hit;
+  hit = list.find(x => x && norm(x.name) && w.startsWith(norm(x.name)));
+  if (hit) return hit;
+  return list.find(x => x && norm(x.name).includes(w)) || null;
 }
 
 function renderSidebar() {

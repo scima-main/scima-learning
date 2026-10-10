@@ -914,6 +914,51 @@ input[type="number"]:focus { border-color: rgba(var(--blue-rgb),0.5); }
 #scratch-panel.sp-open { transform: none; visibility: visible; transition: transform .22s ease; }
 #scratch-panel.sp-full { width: 100vw; border-left: none; }
 
+/* Docked variants - head-bar movers park the pad against any viewport half.
+   Sizes come from --sp-w / --sp-h, written inline by spSetDock/spResizeDown
+   (kept per orientation, clamped 260px...94%). The right dock is the base
+   rule above; these override its edge, border and slide-in direction. */
+#scratch-panel.sp-dock-right { width: var(--sp-w, min(640px, 92vw)); }
+#scratch-panel.sp-dock-left {
+  right: auto; left: 0; width: var(--sp-w, min(640px, 92vw));
+  border-left: none; border-right: 1px solid var(--border);
+  box-shadow: 18px 0 50px rgba(0, 0, 0, .5);
+  transform: translateX(-105%);
+}
+#scratch-panel.sp-dock-top {
+  top: 0; bottom: auto; left: 0; right: 0; width: auto;
+  height: var(--sp-h, min(430px, 60vh));
+  border-left: none; border-bottom: 1px solid var(--border);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .5);
+  transform: translateY(-105%);
+}
+#scratch-panel.sp-dock-bottom {
+  top: auto; bottom: 0; left: 0; right: 0; width: auto;
+  height: var(--sp-h, min(430px, 60vh));
+  border-left: none; border-top: 1px solid var(--border);
+  box-shadow: 0 -18px 50px rgba(0, 0, 0, .5);
+  transform: translateY(105%);
+}
+/* Open / fullscreen win over the docked slide-out transforms above. */
+#scratch-panel.sp-dock-left.sp-open,
+#scratch-panel.sp-dock-top.sp-open,
+#scratch-panel.sp-dock-bottom.sp-open,
+#scratch-panel.sp-full { transform: none; }
+#scratch-panel.sp-full {
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100vw; height: 100vh; border: none;
+}
+
+/* Resize grip on the panel's inner edge (left edge when docked right, etc).
+   Hidden in fullscreen; the <=820px full-screen sheet hides it too. */
+.sp-resize { position: absolute; z-index: 6; touch-action: none; background: transparent; }
+.sp-resize:hover, .sp-resize.sp-active { background: rgba(var(--blue-rgb), .28); }
+#scratch-panel.sp-dock-right .sp-resize { left: -3px; top: 0; bottom: 0; width: 7px; cursor: ew-resize; }
+#scratch-panel.sp-dock-left .sp-resize { right: -3px; top: 0; bottom: 0; width: 7px; cursor: ew-resize; }
+#scratch-panel.sp-dock-top .sp-resize { bottom: -3px; left: 0; right: 0; height: 7px; cursor: ns-resize; }
+#scratch-panel.sp-dock-bottom .sp-resize { top: -3px; left: 0; right: 0; height: 7px; cursor: ns-resize; }
+#scratch-panel.sp-full .sp-resize { display: none; }
+
 .sp-head {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px; border-bottom: 1px solid var(--border);
@@ -930,6 +975,12 @@ input[type="number"]:focus { border-color: rgba(var(--blue-rgb),0.5); }
 .sp-icon-btn:disabled { opacity: .35; cursor: default; }
 .sp-icon-btn[aria-pressed="true"] { color: var(--blue); background: rgba(var(--blue-rgb), .12); }
 .sp-icon-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.sp-head-spacer { flex: 1; }                /* pushes ⛶ and × to the far right */
+.sp-dock-group { display: flex; gap: 2px; margin-left: 4px; }
+.sp-dock-btn { font-size: 14px; font-weight: 800; }
+/* The mover for the dock the pad already occupies is disabled — render it
+   as a neutral "current position" pill instead of a faded-out button. */
+.sp-dock-btn:disabled { opacity: 1; background: var(--surface2); border-color: var(--border); color: var(--muted); }
 
 .sp-body { flex: 1; display: flex; min-height: 0; }
 .sp-toolbar {
@@ -1088,7 +1139,16 @@ input[type="number"]:focus { border-color: rgba(var(--blue-rgb),0.5); }
 /* Mobile / narrow: the panel becomes a full-screen sheet with a horizontal
    toolbar along the top (spec §3/§28). */
 @media (max-width: 820px) {
-  #scratch-panel { width: 100vw; border-left: none; }
+  #scratch-panel,
+  #scratch-panel.sp-dock-left,
+  #scratch-panel.sp-dock-top,
+  #scratch-panel.sp-dock-bottom {
+    top: 0; left: 0; right: 0; bottom: 0;
+    width: 100vw; height: auto; border: none;
+    transform: translateY(105%);
+  }
+  #scratch-panel.sp-open, #scratch-panel.sp-full { transform: none; }
+  .sp-resize { display: none; }
   .sp-body { flex-direction: column; }
   .sp-toolbar {
     flex-direction: row; align-items: center;

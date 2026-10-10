@@ -333,7 +333,55 @@ function openSourceSubjectModal(sourceId) {
   });
 }
 
+// -- URL deep links: #library/<folder...>/<book> ----------------------------
+// Applied at the top of renderLibrary() (captured call below), only when the
+// hash changed since the last apply/mirror. Folder names resolve leniently
+// via matchName() (dashboard-core.js); a trailing segment that matches a
+// source inside the resolved folder opens it in the reader.
+let _scLibraryLastHash = null;
+function scLibraryApplyHash() {
+  const h = (typeof scParseHash === 'function') ? scParseHash() : null;
+  if (!h || h.segs[0] !== 'library') return;
+  if (_scLibraryLastHash === h.raw) return;
+  _scLibraryLastHash = h.raw;
+  const segs = h.segs.slice(1).filter(Boolean);
+  if (!state.libraryFolders) state.libraryFolders = [];
+  if (!segs.length) { state._libraryFolderNav = null; return; }
+  let parent = null, folder = null, i = 0;
+  for (; i < segs.length; i++) {
+    const f = matchName(state.libraryFolders
+      .filter(x => (x.parentId || null) === parent)
+      .map(x => ({ id: x.id, name: x.name })), segs[i]);
+    if (!f) break;
+    parent = f.id; folder = f;
+  }
+  state._libraryFolderNav = folder ? folder.id : null;
+  // The last segment may open a book inside the resolved folder.
+  const last = segs[segs.length - 1];
+  if (i < segs.length && last && typeof openLibraryReader === 'function') {
+    const src = matchName((state.sources || [])
+      .filter(s => (s.libraryFolderId || null) === (folder ? folder.id : null))
+      .map(s => ({ id: s.id, name: s.name })), last);
+    if (src) openLibraryReader(src.id);
+  }
+}
+// State -> URL mirror (renderView calls window.SCIMA_URL_SYNC.library after
+// renderLibrary) so the folder path survives refreshes and can be shared.
+window.SCIMA_URL_SYNC = window.SCIMA_URL_SYNC || {};
+window.SCIMA_URL_SYNC.library = function () {
+  if (!state.libraryFolders) state.libraryFolders = [];
+  const byId = {};
+  state.libraryFolders.forEach(f => { byId[f.id] = f; });
+  const parts = [];
+  let cur = state._libraryFolderNav ? byId[state._libraryFolderNav] : null;
+  while (cur) { parts.unshift(scSeg(cur.name)); cur = cur.parentId ? byId[cur.parentId] : null; }
+  const frag = 'library' + (parts.length ? '/' + parts.join('/') : '');
+  scReplaceHash(frag);
+  _scLibraryLastHash = frag;
+};
+
 function renderLibrary(c) {
+  scLibraryApplyHash();
   if(!state.libraryFolders) state.libraryFolders=[];
   const currentFolderId=state._libraryFolderNav||null;
   const currentFolder=currentFolderId?state.libraryFolders.find(f=>f.id===currentFolderId):null;
