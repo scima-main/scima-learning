@@ -1,5 +1,9 @@
 # CHANGELOG (last updated 10th October 2026, UTC)
 
+## VERSION 2026.10.013-ALPHA
+
+- UI tweaks
+
 ## VERSION 2026.10.012-ALPHA
 
 - community tab now allows selection of decks through decks already on your device/browser without uploading a file
@@ -27,7 +31,3 @@
 - added about page
 
 - moved ./home/scima-standalone-landing/* to ./home/
-
-  ***
-  
-  https://www.github.com/scima-main/scima-learning
