@@ -1,4 +1,14 @@
-# CHANGELOG
+# CHANGELOG (last updated 10th October 2026)
+
+## VERSION 2026.10.011-ALPHA
+
+- quality of life additions and bug fixes to scratchpad
+- community page merged with main page
+- URL standardization now allows for session persistence, including inside file browsers (excluding modals)
+
+## VERSION 2026.10.010-ALPHA
+
+- added new, feature-rich, infinite scratchpad for use in all study modes
 
 ## VERSION 2026.10.009-ALPHA
 
