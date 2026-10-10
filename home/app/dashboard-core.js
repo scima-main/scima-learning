@@ -48,6 +48,7 @@ const NAV_ITEMS = [
   { id: 'study',     icon: '🧠', label: 'Study'     },
   { id: 'library',   icon: '📖', label: 'Library'   },
   { id: 'analytics', icon: '📊', label: 'Analytics' },
+  { id: 'community', icon: '🌐', label: 'Community' },
   { id: 'settings',  icon: '⚙️', label: 'Settings'  },
   { id: 'about',     icon: '❓', label: 'About'     },
 ];
@@ -62,6 +63,7 @@ const VIEW_TABS = {
   library:   { icon: '📖', label: 'Library'   },
   analytics: { icon: '📊', label: 'Analytics' },
   quests:    { icon: '🎯', label: 'Quests'    },
+  community: { icon: '🌐', label: 'Community' },
   settings:  { icon: '⚙️', label: 'Settings'  },
   about:     { icon: '❓', label: 'About'     },
 };
@@ -101,6 +103,7 @@ const VIEW_ROUTES = {
   library: 'library',
   analytics: 'analytics',
   quests: 'analytics',   // Quests merged into the Analytics page
+  community: '',         // Community merged into the Home page (was its own port/domain)
   settings: 'settings',
   about: 'about',
 };
@@ -1585,6 +1588,14 @@ function getOrderedNavItems() {
   const order = (state.settings.navOrder || []).filter(id => byId[id]);
   const ordered = order.map(id => byId[id]);
   NAV_ITEMS.forEach(n => { if (!order.includes(n.id)) ordered.push(n); });
+  // Migration: saved orders from before the Community tab existed get it in
+  // its default slot (between Analytics and Settings) instead of appended
+  // after About — matches NAV_ITEMS for fresh installs.
+  if (order.length && !order.includes('community')) {
+    const ci = ordered.findIndex(n => n.id === 'community');
+    const si = ordered.findIndex(n => n.id === 'settings');
+    if (ci > -1 && si > -1 && ci > si) ordered.splice(si, 0, ordered.splice(ci, 1)[0]);
+  }
   return ordered;
 }
 function getVisibleNavItems() {
@@ -1813,7 +1824,7 @@ function closeNav() {
 function viewRenderer(id) {
   const FC_RENDERERS = { home: 'renderHome', decks: 'renderDecks', study: 'renderStudy',
     library: 'renderLibrary', analytics: 'renderAnalytics', quests: 'renderQuests', settings: 'renderSettings',
-    about: 'renderAbout' };
+    about: 'renderAbout', community: 'renderCommunity' };
   return FC_RENDERERS[id] ? window[FC_RENDERERS[id]] : null;
 }
 function renderView(id) {
