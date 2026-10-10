@@ -14,7 +14,9 @@
     Management — exportAllDataZip() and the .zip/.json import (which writes
     PDF chunks and HTML chapters back through the blobstore helpers decks.js
     owns). dashboard-onboarding.js (in the common tail) provides "Replay
-    tutorial". Theme scheduling uses bootstrap's tickThemeSchedule()/
+    tutorial". dashboard-scratchpad.js loads before dashboard-settings.js so
+    the ✍️ Scratchpad defaults card can read/write its SP_DEFAULTS via
+    spSetting()/spSetSetting(). Theme scheduling uses bootstrap's tickThemeSchedule()/
     fetchGeoForSchedule(), as before. This page's script order keeps
     dashboard-settings.js after dashboard-onboarding.js, mirroring the old
     single-page order. The Navigation section lists the six nav tabs.
@@ -93,6 +95,7 @@
   <script src="../app/dashboard-core.js"></script>
   <script src="../app/dashboard-blobstore.js"></script>
   <script src="../app/dashboard-decks.js"></script>
+  <script src="../app/dashboard-scratchpad.js"></script>
   <script src="../app/dashboard-analytics.js"></script>
   <script src="../app/dashboard-onboarding.js"></script>
   <script src="../app/dashboard-settings.js"></script>

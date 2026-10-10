@@ -544,6 +544,7 @@ function startStudySession(scopes, mode) {
     _timeouts: 0,             // timed-quiz cards that expired before submit
     _gap: mode==='gaps' ? {correct:0,close:0,wrong:0} : null,
   };
+  spSessionStart();         // ✍️ scratchpad: a new session wipes any leftover pads (spec §31)
   renderView('study');
 }
 
@@ -553,6 +554,7 @@ function renderStudySession(c) {
   clearQuizTimer();
   if(sess.idx>=sess.queue.length){ finishSession(); return; }
   const card=sess.queue[sess.idx];
+  spOnCardRender(card);     // ✍️ scratchpad: bind/rebind the pad to this question (spec §20 restore)
   sess._cardStart = Date.now(); // reset per-card timer on every new card
 
   // Always rebuild from a clean slate — prevents stale flashcards/buttons (and
@@ -562,7 +564,7 @@ function renderStudySession(c) {
   c.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;padding:0';
 
   const progress=el('div',{style:'display:flex;align-items:center;gap:12px;margin-bottom:20px'},
-    btn('← Exit','ghost',{small:true,onclick:()=>{ clearQuizTimer(); if(window.speechSynthesis) window.speechSynthesis.cancel(); studySession=null; renderView('study'); }}),
+    btn('← Exit','ghost',{small:true,onclick:()=>{ clearQuizTimer(); if(window.speechSynthesis) window.speechSynthesis.cancel(); spSessionEnd(); studySession=null; renderView('study'); }}),
     el('div',{style:'flex:1'},
       el('div',{style:'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'},
         el('span',{style:'font-size:12px;font-weight:700;color:var(--muted)'},`${sess.idx+1} / ${sess.queue.length}`),
@@ -570,6 +572,8 @@ function renderStudySession(c) {
       ),
       el('div',{class:'study-progress'},el('div',{class:'study-prog-fill',style:`width:${(sess.idx/sess.queue.length)*100}%`}))
     ),
+    // ✍️ Scratchpad toggle — circular button, left of the hint (spec §2).
+    spMakeOpenButton(card),
     // A hint costs half the card's XP (see rateCard()) — greyed out entirely
     // when the card has no hint to show, so it's not a dead click.
     (() => {
@@ -1525,6 +1529,7 @@ function rateCard(rating) {
 }
 
 function nextCard(){
+  spCardDone();             // ✍️ scratchpad: question answered ⇒ its pad is deleted now (spec §31)
   const sess=studySession;
   sess.flipped=false; sess.showHint=false; sess.quizAnswer=''; sess.quizAnswers=[]; sess.gapChoice=null; sess.idx++;
   if(sess.idx>=sess.queue.length) finishSession();
@@ -1533,6 +1538,7 @@ function nextCard(){
 
 function finishSession(){
   if(window.speechSynthesis) window.speechSynthesis.cancel();
+  spSessionEnd();           // ✍️ scratchpad: session over ⇒ every pad is wiped (spec §31)
   const sess=studySession; addXP(50); sess.active=false;
   checkAchievements();
   const elapsed=Math.round((Date.now()-sess.startTime)/1000);

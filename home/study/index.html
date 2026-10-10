@@ -14,7 +14,12 @@
     header). Manifest notes: dashboard-decks.js is loaded because sessions
     call its openCitationViewer() (the 📖 Source badge on cited cards) and
     because the shared `studySession` binding lives at its bottom; KaTeX +
-    mhchem render LaTeX on card faces. The active session is carried across
+    mhchem render LaTeX on card faces. dashboard-scratchpad.js sits right
+    after dashboard-study.js — the session progress row renders its ✍️
+    open/close button (spMakeOpenButton) and the session lifecycle calls its
+    spSessionStart/spOnCardRender/spCardDone/spSessionEnd hooks, so the
+    per-question scratchpad lives and dies with the card being answered.
+    The active session is carried across
     page swaps by bootstrap's pagehide snapshot / init() restore
     (sessionStorage), matching the SPA's in-memory lifetime.
   -->
@@ -94,6 +99,7 @@
   <script src="../app/dashboard-blobstore.js"></script>
   <script src="../app/dashboard-decks.js"></script>
   <script src="../app/dashboard-study.js"></script>
+  <script src="../app/dashboard-scratchpad.js"></script>
   <script src="../app/dashboard-analytics.js"></script>
   <script src="../app/dashboard-onboarding.js"></script>
   <script src="../app/dashboard-bootstrap.js"></script>

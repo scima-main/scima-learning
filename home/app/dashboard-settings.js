@@ -843,9 +843,93 @@ function renderSettings(c) {
     }})
   ));
 
+  // ✍️ Scratchpad defaults (spec §32) — persisted under state.settings.scratch
+  // via dashboard-scratchpad.js's spSetting()/spSetSetting() (loaded before
+  // this file on the settings route). Guarded so a stale cache without the
+  // scratchpad module still renders the rest of Settings.
+  const scratchCard = el('div', { class:'card', style:'padding:20px;margin-top:16px' });
+  scratchCard.appendChild(el('div', { style:'font-weight:800;margin-bottom:4px;color:var(--blue)' }, '✍️ Scratchpad'));
+  scratchCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:10px' },
+    'Defaults for the per-question drawing pad in study sessions. Pads are ephemeral — kept only while you answer a question, deleted the moment you answer it, and wiped when the session ends.'));
+  if (typeof spSetting === 'function' && typeof SP_SWATCHES !== 'undefined') {
+    const spRow = (label, desc, node) => scratchCard.appendChild(el('div', { style:'padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05)' },
+      el('div', { style:'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap' },
+        el('div', {},
+          el('div', { style:'font-size:13px;font-weight:600' }, label),
+          desc ? el('div', { style:'font-size:11px;color:var(--muted)' }, desc) : null),
+        node)));
+    const spToggle = (label, desc, key) => {
+      const knob = el('div', { class:'toggle-knob' });
+      const sw = el('button', { class:`toggle${spSetting(key) ? ' on' : ''}`, 'aria-label': label, onclick: () => {
+        spSetSetting(key, !spSetting(key));
+        sw.classList.toggle('on', !!spSetting(key));
+      }}, knob);
+      spRow(label, desc, sw);
+    };
+    // Default pen color — quick swatches + custom picker
+    const swatchRow = el('div', { style:'display:flex;gap:6px;flex-wrap:wrap;align-items:center' });
+    const redrawSwatches = () => {
+      swatchRow.innerHTML = '';
+      for (const c of SP_SWATCHES) {
+        swatchRow.appendChild(el('button', {
+          type:'button', class:'sp-swatch' + (String(spSetting('color')).toLowerCase() === c.toLowerCase() ? ' active' : ''),
+          'aria-label': `Default scratchpad color ${c}`, title: c, style:`background:${c}`,
+          onclick: () => { spSetSetting('color', c); redrawSwatches(); },
+        }));
+      }
+      swatchRow.appendChild(el('button', {
+        type:'button', class:'sp-mini-btn', 'aria-label':'Custom default scratchpad color', title:'Custom color…',
+        onclick: e => { try { openColorPicker(e.currentTarget, spSetting('color'), c => { spSetSetting('color', c); redrawSwatches(); }); } catch (err) {} },
+      }, '🎨'));
+    };
+    redrawSwatches();
+    spRow('Default pen color', 'Applied to fresh pads and new strokes', swatchRow);
+    // Default stroke width
+    const widthRow = el('div', { style:'display:flex;gap:6px' });
+    const redrawWidths = () => {
+      widthRow.innerHTML = '';
+      for (const w of SP_WIDTHS) {
+        widthRow.appendChild(el('button', {
+          type:'button', class:'sp-mini-btn' + (Number(spSetting('width')) === w ? ' active' : ''),
+          'aria-label': `Default stroke width ${w} pixels`,
+          onclick: () => { spSetSetting('width', w); redrawWidths(); },
+        }, String(w)));
+      }
+    };
+    redrawWidths();
+    spRow('Default stroke width', 'Pen / shape outline thickness', widthRow);
+    // Default background style
+    const bgSel = el('select', { class:'u-input', style:'max-width:180px', 'aria-label':'Default scratchpad background', onchange: e => spSetSetting('bg', e.target.value) });
+    for (const b of SP_BG_STYLES) {
+      const o = el('option', { value: b.id }, b.label);
+      if (spSetting('bg') === b.id) o.selected = true;
+      bgSel.appendChild(o);
+    }
+    spRow('Default background', 'Paper style behind the drawing canvas', bgSel);
+    // Ranges
+    const SMOOTH_LABELS = ['Off', 'Light', 'Medium', 'Strong'];
+    const spRange = (label, desc, key, min, max, step, fmtv) => {
+      const valSpan = el('span', { style:'font-size:12px;color:var(--muted);min-width:56px;text-align:right' }, fmtv(spSetting(key)));
+      const input = el('input', {
+        type:'range', min:String(min), max:String(max), step:String(step), value:String(spSetting(key)),
+        style:'accent-color:var(--blue);flex:1', 'aria-label': label,
+        oninput: e => { const v = Number(e.target.value); spSetSetting(key, v); valSpan.textContent = fmtv(v); },
+      });
+      spRow(label, desc, el('div', { style:'display:flex;align-items:center;gap:10px;min-width:200px;flex:1' }, input, valSpan));
+    };
+    spRange('Stroke smoothing', 'Filters jitter out of freehand lines', 'smoothing', 0, 3, 1, v => SMOOTH_LABELS[v] || 'Medium');
+    spRange('Undo history steps', 'How many undos a pad remembers', 'undoSteps', 20, 300, 20, v => `${v} steps`);
+    // Toggles
+    spToggle('Show grid on open', 'Start new pads with the background grid visible', 'gridVisible');
+    spToggle('Snap to grid', 'Drawing and dragging snap to the (rotated) grid', 'snap');
+    spToggle('Autosave while answering', 'Restore the pad if you close and reopen it on the same question', 'autosave');
+    spToggle('Confirm before clearing', 'Ask before 🧹 Clear pad wipes the drawing', 'confirmClear');
+    spToggle('Open in fullscreen', 'The pad covers the whole window instead of docking to the side', 'fullscreen');
+  }
+
   c.append(
     el('div', { style:'margin-bottom:24px' }, el('div', { class:'section-title' }, 'Settings')),
-    helpCard, grid, llmCard, schedCard, appearCard, navCard, dataCard
+    helpCard, grid, llmCard, schedCard, appearCard, scratchCard, navCard, dataCard
   );
 }
 
