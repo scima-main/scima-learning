@@ -23,11 +23,15 @@
     the drawer's labels fade in. Slide is transform-only, fades are
     opacity-only; .power-saving and prefers-reduced-motion disable motion.
 
-      /             Home + Community           Community lives here as a
-                                               second in-page view (it was
-                                               its own port/domain before),
-                                               so this slice also carries
-                                               dashboard-community.js
+      /             Home + #community          Community lives in THIS
+                                               document at the #community
+                                               hash (the old standalone
+                                               /community/ mount is
+                                               deprecated). It is entered
+                                               ONLY via the 🌐 nav tab —
+                                               no in-page selector bar —
+                                               and adds dashboard-community
+                                               .js to this slice
       /decks/       Decks                      + KaTeX/mhchem card previews;
                                                ✨ AI Capture lives in the
                                                "+ New Deck" modal
@@ -96,6 +100,9 @@
       <div id="page-tabs"></div>
       <div id="page-tabs-float" aria-hidden="true"></div>
       <div id="view-home"      class="view"></div>
+      <!-- Community view container: empty and hidden unless #community is
+           the active view (nav tab is the only entry point; the in-page
+           selector bar is not rendered on this page). -->
       <div id="view-community" class="view"></div>
     </main>
   </div>

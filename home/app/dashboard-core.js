@@ -74,7 +74,12 @@ const VIEW_TABS = {
 // its views need (see the landing folder's index.html header for the full
 // route/manifest map):
 //
-//   /            Home                        (landing index.html)
+//   /            Home + #community           (landing index.html; Community
+//                                             lives in this document at the
+//                                             #community hash — the legacy
+//                                             standalone /community/ mount is
+//                                             deprecated — and is entered only
+//                                             via the nav tab: no in-page bar)
 //   /study/      Decks + Study               (the flashcard core — the most
 //                                             jumped-between pair, so they
 //                                             switch in-page, no reload)
@@ -103,7 +108,10 @@ const VIEW_ROUTES = {
   library: 'library',
   analytics: 'analytics',
   quests: 'analytics',   // Quests merged into the Analytics page
-  community: '',         // Community merged into the Home page (was its own port/domain)
+  community: '',         // Community lives in the landing document at
+                         // /#community (the old standalone /community/ mount
+                         // is deprecated); entry is the nav tab only — the
+                         // landing page renders no in-page tab bar for it
   settings: 'settings',
   about: 'about',
 };
@@ -1779,6 +1787,12 @@ function renderPageTabs() {
   const hosts = [document.getElementById('page-tabs'), document.getElementById('page-tabs-float')];
   hosts.forEach(h => { if (h) h.innerHTML = ''; });
   if (PAGE_VIEWS.length < 2) return;
+  // The bar exists to reach views the sidebar nav CAN'T (Quests, merged into
+  // the Analytics page without a nav entry of its own). Where every hosted
+  // view has its own nav tab — Home + Community on the landing page — the
+  // nav is the single entry point and a second, in-page switcher would just
+  // be a duplicate reference to the other view on this page.
+  if (PAGE_VIEWS.every(v => NAV_ITEMS.some(n => n.id === v))) return;
   hosts.forEach(host => {
     if (!host) return;
     const bar = el('div', { class: 'tab-bar' });
@@ -2026,6 +2040,13 @@ const PAGE_HELP = {
     'The Daily Goal bar tracks today\u2019s review count against your target (change it in Settings).',
     'Click a deck\u2019s "Study Now" to jump straight into a session for that deck.',
     'Click 📌 on a deck card to pin it to the top of the sidebar for quick access.',
+  ]},
+  community: { icon:'🌐', title:'Community', intro:'Search, preview and download decks shared by the SCIMA community — and share your own.', tips:[
+    'The dot next to the top bar shows whether the community API is reachable; popular decks load beneath the search box.',
+    'Search matches names, subjects, authors, descriptions and tags; sort by relevance, newest or popularity.',
+    'Open a deck to see its stats, metadata and tags; "⬇ Download deck" saves its SCIMA JSON export to your device.',
+    '"＋ Add to dashboard" copies the deck straight into your own decks under a subject (and optional folder) of your choice — it counts as a download for the deck\'s author.',
+    'Drop a SCIMA JSON export on the upload panel to share it: add a description, author and tags, pick subject/level/exam board, then upload.',
   ]},
   decks: { icon:'📚', title:'Decks', intro:'Organize your flashcards into decks, grouped by subject and folder.', tips:[
     'Browse by subject, then drill into folders and decks.',
