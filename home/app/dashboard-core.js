@@ -1735,9 +1735,11 @@ function navigate(viewId) {
   state.view = viewId;
   closeNav(); // picking a destination folds the drawer away again
   // The nav tab for the page stays lit while any of its views shows
-  // (Quests keeps "Analytics" lit while it shows.)
-  const route = routeOfView(viewId);
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', routeOfView(b.dataset.view) === route));
+  // (Quests keeps "Analytics" lit while it shows.) Views with their own
+  // nav entry (Community, though hosted on the Home page) light only
+  // themselves — see navIdForView().
+  const activeNav = navIdForView(viewId);
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === activeNav));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${viewId}`));
   renderView(viewId);
   renderPageTabs();
@@ -1753,6 +1755,16 @@ function navigate(viewId) {
 }
 function routeOfView(viewId) {
   return viewId in VIEW_ROUTES ? VIEW_ROUTES[viewId] : viewId;
+}
+// The nav item a view lights up. A view with its own nav entry lights that
+// entry; a view merged into another page's tab bar WITHOUT one of its own
+// (Quests on Analytics) lights its host's entry instead. Route grouping
+// alone can't decide this: Community shares the landing route '' with Home
+// yet keeps its own nav entry, so comparing routes would light Home and
+// Community simultaneously.
+function navIdForView(viewId) {
+  if (NAV_ITEMS.some(n => n.id === viewId)) return viewId;
+  return routeOfView(viewId);
 }
 // In-page tab bar for pages hosting more than one view (Analytics⇄Quests)
 // — the UI face of "six tabs, six pages" while keeping merged views one tap
@@ -1928,7 +1940,7 @@ function renderSidebar() {
   getVisibleNavItems().forEach((n, idx) => {
     const shortcutNum = idx < 9 ? idx + 1 : null;
     const btn = el('button', {
-      class: `nav-btn${routeOfView(state.view) === routeOfView(n.id) ? ' active' : ''}`,
+      class: `nav-btn${navIdForView(state.view) === n.id ? ' active' : ''}`,
       'data-view': n.id,
       draggable: 'true',
       onclick: () => navigate(n.id),
@@ -1972,7 +1984,7 @@ function renderSidebar() {
     if (navDrawerOpen) {
       const drawer = el('div', { class: 'nav-drawer' });
       hiddenItems.forEach(n => {
-        drawer.appendChild(el('button', { class: `nav-btn nav-btn-hidden${routeOfView(state.view) === routeOfView(n.id) ? ' active' : ''}`, onclick: () => navigate(n.id) },
+        drawer.appendChild(el('button', { class: `nav-btn nav-btn-hidden${navIdForView(state.view) === n.id ? ' active' : ''}`, onclick: () => navigate(n.id) },
           el('span', { class: 'nav-icon' }, n.icon), el('span', { class: 'nav-label' }, n.label)));
       });
       nav.appendChild(drawer);

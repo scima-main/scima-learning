@@ -6,7 +6,13 @@
 (function () {
 
 let ROOT = null;
-const byId = id => ROOT.getElementById(id);
+// ROOT is the view's container ELEMENT (renderCommunity assigns it below),
+// and getElementById() only exists on Document/DocumentFragment — calling
+// it on an element root threw TypeError on every lookup, killing the view's
+// init (health check, popular decks, all wiring). Query into ROOT instead
+// (attribute selector: ids here are internal tokens, and this needs no
+// CSS.escape, which not every runtime exposes).
+const byId = id => ROOT.querySelector(`[id="${id}"]`);
 const qs   = s  => ROOT.querySelector(s);
 const qsa  = s  => ROOT.querySelectorAll(s);
 
@@ -838,8 +844,7 @@ const cState = {
 // ─────────────────────────────────────────────────────────────────────
 
 function showScreen(name) {
-  document
-    .querySelectorAll('.screen')
+  qsa('.screen')
     .forEach(screen => {
       screen.classList.toggle(
         'active',
@@ -853,8 +858,7 @@ function showScreen(name) {
   });
 }
 
-document
-  .getElementById('back-to-search')
+byId('back-to-search')
   .addEventListener('click', () => {
     showScreen('search');
   });

@@ -23,7 +23,11 @@
     the drawer's labels fade in. Slide is transform-only, fades are
     opacity-only; .power-saving and prefers-reduced-motion disable motion.
 
-      /             Home                       (this page — lightest slice)
+      /             Home + Community           Community lives here as a
+                                               second in-page view (it was
+                                               its own port/domain before),
+                                               so this slice also carries
+                                               dashboard-community.js
       /decks/       Decks                      + KaTeX/mhchem card previews;
                                                ✨ AI Capture lives in the
                                                "+ New Deck" modal
@@ -125,7 +129,7 @@
   <!-- Page identity for the multi-page router (app/dashboard-core.js
        reads this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is
        the relative path from this page back to the landing folder. -->
-  <script>window.SCIMA_PAGE = { id: 'home', root: '', views: ['home'] };</script>
+  <script>window.SCIMA_PAGE = { id: 'home', root: '', views: ['home', 'community'] };</script>
   <script src="shared/theme.js"></script>
   <script src="shared/shared.js"></script>
   <script src="shared/scima-schema.js"></script>
@@ -134,6 +138,7 @@
   <script src="shared/translate-shared.js"></script>
   <script src="app/dashboard-core.js"></script>
   <script src="app/dashboard-home.js"></script>
+  <script src="app/dashboard-community.js"></script>
   <script src="app/dashboard-analytics.js"></script>
   <script src="app/dashboard-onboarding.js"></script>
   <script src="app/dashboard-bootstrap.js"></script>
