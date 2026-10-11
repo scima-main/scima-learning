@@ -41,6 +41,11 @@ function markdownToHtml(md) {
     const h = /^(#{1,4})\s+(.*)$/.exec(t);
     if (h) { flushAll(); const lvl = Math.min(h[1].length + 2, 6); out.push(`<h${lvl}>${inline(h[2])}</h${lvl}>`); continue; }
     if (/^(-{3,}|\*{3,})$/.test(t)) { flushAll(); out.push('<hr>'); continue; }
+    // Box break: closes the current card box and opens the next one (see
+    // renderAbout). `***` can't be the marker — markdown's own rule syntax
+    // swallows it as an <hr> — so a `*=*` line (or *=*=*… ) is the agreed
+    // "separate boxes here" token instead.
+    if (/^(?:\*=)+\*$/.test(t)) { flushAll(); out.push('<!--box-break-->'); continue; }
     const b = /^[-*]\s+(.*)$/.exec(t);
     if (b) { flushPara(); flushQuote(); if (!list || list.type !== 'ul') { flushList(); list = { type: 'ul', items: [] }; } list.items.push(b[1]); continue; }
     const n = /^\d+\.\s+(.*)$/.exec(t);
@@ -72,10 +77,27 @@ function renderAbout(c) {
     el('div', { class: 'section-title' }, 'About'),
     el('div', { class: 'section-sub', style: 'margin-bottom:0' }, 'haii, it\'s me, SCIMA! :3')
   );
-  const body = el('div', { class: 'md-body card', style: 'padding:24px 28px;margin-top:20px' });
-  body.innerHTML = '<p>Loading…</p>';
-  c.appendChild(body);
+  // Every box-break (`*=*`) section of ABOUT.md renders as its OWN card
+  // box, stacked with a gap — the markdown token is the only thing that
+  // decides where one box ends and the next begins.
+  const wrap = el('div', { style: 'display:flex;flex-direction:column;gap:14px;margin-top:20px' });
+  c.appendChild(wrap);
+  const mkBox = html => {
+    const box = el('div', { class: 'md-body card', style: 'padding:24px 28px' });
+    box.innerHTML = html;
+    return box;
+  };
+  wrap.appendChild(mkBox('<p>Loading…</p>'));
   aboutMarkdown()
-    .then(md => { body.innerHTML = markdownToHtml(md); })
-    .catch(() => { body.innerHTML = '<p>Couldn’t load ABOUT.md right now — check back later.</p>'; });
+    .then(md => {
+      wrap.innerHTML = '';
+      for (const part of markdownToHtml(md).split('<!--box-break-->')) {
+        if (part.trim()) wrap.appendChild(mkBox(part));
+      }
+      if (!wrap.children.length) wrap.appendChild(mkBox('<p>ABOUT.md is empty right now — check back later.</p>'));
+    })
+    .catch(() => {
+      wrap.innerHTML = '';
+      wrap.appendChild(mkBox('<p>Couldn’t load ABOUT.md right now — check back later.</p>'));
+    });
 }
