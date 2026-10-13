@@ -46,32 +46,68 @@ function fetchGeoForSchedule() {
   });
 }
 
-async function init() {
+/** Reads both storage blobs back into the in-memory `state`. init() calls this
+ *  once at startup; the guided tour's sandbox calls it again after it has
+ *  written a pre-tour snapshot back over localStorage (see
+ *  dashboard-onboarding.js's "TOUR SANDBOX"), so discarding the practice deck
+ *  leaves the live state matching what's on disk without a page reload. */
+async function rehydrateFromStorage() {
   const saved=await store.load();
   const mf = sanitizeMfState(saved.mf);
   if(saved.mf.decks)           state.decks=mf.decks;
+  else                         state.decks=[];
   if(saved.mf.folders)         state.folders=mf.folders;
+  else                         state.folders=[];
   if(saved.mf.sources)         state.sources=mf.sources;
+  else                         state.sources=[];
   if(saved.mf.libraryFolders)  state.libraryFolders=mf.libraryFolders;
+  else                         state.libraryFolders=[];
   if(saved.mf.streak!=null)    state.streak=mf.streak;
+  else                         state.streak=0;
   if(saved.mf.lastStreakDate)  state.lastStreakDate=mf.lastStreakDate;
+  else                         state.lastStreakDate=null;
   if(saved.mf.reviewHistory)   state.reviewHistory=mf.reviewHistory;
+  else                         state.reviewHistory=[];
   if(saved.mf.achievements)    state.achievements=mf.achievements;
+  else                         state.achievements=[];
   if(saved.mf.recentStudyScopes) state.recentStudyScopes=mf.recentStudyScopes;
-  if(Array.isArray(saved.mf.sessionLog)) state.sessionLog = mf.sessionLog;
+  else                           state.recentStudyScopes=[];
+  state.sessionLog = Array.isArray(saved.mf.sessionLog) ? mf.sessionLog : [];
+  // Settings are merged onto the defaults rather than replaced, so a field this
+  // build knows about but an older save doesn't keeps its default. A tour
+  // rollback needs the same treatment in reverse: keys the restored blob
+  // doesn't mention fall back to whatever the in-memory defaults say.
   if(saved.mf.settings)        Object.assign(state.settings,mf.settings);
   // Ensure themeSchedule has all required fields (new fields added in updates won't break old saves)
   state.settings.themeSchedule = { ...DEFAULT_SCHEDULE, ...state.settings.themeSchedule };
   if (!state.settings.themeSchedule.sun) state.settings.themeSchedule.sun = { ...DEFAULT_SCHEDULE.sun };
+
+  state.trackerState = sanitizeState(saved.tracker);
+  if (!state.trackerState.config) state.trackerState.config = { xpCoef: XP_COEFFICIENT, capMult: MONTHLY_CAP_MULT, theme: 'dark', customSubjects: {} };
+  if (!state.trackerState.config.customSubjects) state.trackerState.config.customSubjects = {};
+}
+
+async function init() {
+  await rehydrateFromStorage();
   // Apply theme — schedule takes priority over manual theme when enabled
   startThemeScheduler();
   // Power saving / accessibility modes
   document.documentElement.classList.toggle('power-saving', !!state.settings.powerSaving);
   document.documentElement.classList.toggle('dyslexia-mode', !!state.settings.dyslexia);
   document.documentElement.classList.toggle('a11y-high-contrast', !!state.settings.highContrast);
-  state.trackerState = sanitizeState(saved.tracker);
-  if (!state.trackerState.config) state.trackerState.config = { xpCoef: XP_COEFFICIENT, capMult: MONTHLY_CAP_MULT, theme: 'dark', customSubjects: {} };
-  if (!state.trackerState.config.customSubjects) state.trackerState.config.customSubjects = {};
+
+  // Miscellaneous used to be a built-in subject (shared.js's SUBJECTS); it's now
+  // one the user creates, via the guided tour or by skipping it. Anyone who
+  // isn't about to be walked through that step — every pre-existing install, and
+  // every import — gets it seeded here instead, so removing it from the defaults
+  // can never leave an old deck pointing at a subject that doesn't exist.
+  const ob0 = state.settings.onboarding || {};
+  const firstRun = !ob0.completed || (ob0.version || 0) < TUTORIAL_VERSION;
+  if (!firstRun) {
+    // No-op once the subject exists, and never overwrites the user's own
+    // name/colour for it — safe on every load. Persists via saveTrackerState().
+    ensureMiscSubject();
+  }
 
   // ── Multi-page site build: view routing + carried-over state ──────────
   // (No-ops in the extension build — SCIMA_PAGE is only declared by the
@@ -182,10 +218,23 @@ async function init() {
 
   // First-run guided tour, or resume mid-tour if the tab was closed partway
   // through. Bumping TUTORIAL_VERSION in dashboard-onboarding.js re-triggers
-  // it for everyone after a redesign, even for users who finished it before.
-  const ob = state.settings.onboarding;
-  if (!ob.completed || (ob.version||0) < TUTORIAL_VERSION) {
-    setTimeout(() => startTutorial(ob.completed ? 0 : (ob.step||0)), 300);
+  // it for everyone after a redesign, even for users who finished it before —
+  // so it's reserved for changes worth making everyone sit through again.
+  // Inserting or removing a step without bumping it is handled by stepCount
+  // below: a saved step index into a differently-shaped step list would resume
+  // on the wrong step (or past the end), so a length mismatch restarts at 0.
+  //
+  // pendingTourResume() wins: it's the per-tab marker a tour writes before it
+  // navigates to another route (see dashboard-onboarding.js's TOUR_ACTIVE_KEY),
+  // and it's the only thing that can resume a REPLAY — this user's onboarding is
+  // already flagged completed, so the test below would never fire for them.
+  const ob = state.settings.onboarding || (state.settings.onboarding = { completed: false, step: 0, version: TUTORIAL_VERSION });
+  const resume = (typeof pendingTourResume === 'function') ? pendingTourResume() : null;
+  if (resume) {
+    setTimeout(() => startTutorial(resume.step, resume.origin), 300);
+  } else if (!ob.completed || (ob.version||0) < TUTORIAL_VERSION) {
+    const resumeAt = (ob.completed || ob.stepCount !== TUTORIAL_STEPS.length) ? 0 : (ob.step||0);
+    setTimeout(() => startTutorial(resumeAt, 'first-run'), 300);
   }
 }
 

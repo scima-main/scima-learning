@@ -215,6 +215,29 @@ function withTrackerWriteLock(fn) {
 // single seam Phase 1 (blobStore, cross-tab sync, etc.) builds on top of.
 const isExtension = typeof chrome !== 'undefined' && !!chrome?.storage?.local;
 
+/** Persists the whole tracker state (subjects, config.customSubjects, XP,
+ *  predicted grades) under the SCIMATracker key.
+ *
+ *  This had no site-build writer at all: the Mark Tracker view that used to own
+ *  it wasn't ported, and store.addXPToTracker() below only ever read-modify-
+ *  writes `totalXP`. Everything else in trackerState — notably
+ *  config.customSubjects, which is where subjects live (see shared.js's
+ *  getEffectiveSubjects) — was memory-only and vanished on the next page load.
+ *  Goes through the same write lock as addXPToTracker() so the two can't
+ *  interleave and stomp each other (see the comment above it). */
+function saveTrackerState() {
+  return withTrackerWriteLock(async () => {
+    const t = sanitizeState(state.trackerState);
+    state.trackerState = t;
+    if (isExtension && chrome?.storage?.local) {
+      try { return await new Promise(res => chrome.storage.local.set({ SCIMATracker: t }, res)); }
+      catch (e) { console.warn('[SCIMA] chrome.storage.local.set(SCIMATracker) failed, falling back to localStorage:', e); }
+    }
+    try { localStorage.setItem('SCIMATracker', JSON.stringify(t)); }
+    catch (e) { console.warn('[SCIMA] localStorage SCIMATracker save failed \u2014 subject changes were NOT persisted:', e); }
+  });
+}
+
 const store = {
   async load() {
     if (isExtension) {
@@ -256,7 +279,9 @@ const store = {
         } catch (e) { console.warn('[SCIMA] chrome.storage.local addXPToTracker failed, falling back to localStorage:', e); }
       }
       try {
-        const t = JSON.parse(localStorage.getItem('SCIMATracker') || '{}');
+        // `|| '{}'` only covers a missing key — a stored literal "null" parses
+        // to null and the next line would throw, silently dropping the award.
+        const t = JSON.parse(localStorage.getItem('SCIMATracker') || '{}') || {};
         t.totalXP = (t.totalXP || 0) + amount;
         state.trackerState = t;
         localStorage.setItem('SCIMATracker', JSON.stringify(t));
@@ -1224,6 +1249,169 @@ function getSubjectSafe(key) {
   const subjects = getAllSubjects();
   return subjects[key] || subjects[DEFAULT_SUBJECT_KEY] || FALLBACK_SUBJECT;
 }
+
+// ── Subject management (Settings → Subjects) ──────────────────────────────
+// Subjects used to be a fixed built-in list (shared.js's SUBJECTS) that only the
+// Mark Tracker — a separate view, not part of this build — could extend. Decks and
+// folders have always been tagged with one, so this is the dashboard's own CRUD
+// layer over config.customSubjects: the same store getEffectiveSubjects() already
+// merges, which means a subject made here immediately shows up in every deck/folder
+// picker, tag, breadcrumb and analytics breakdown with no further wiring.
+//
+// Lives in core (not dashboard-settings.js) so the guided tour can create the
+// catch-all subject from any route, and so ensureDefaultSubject() has a single
+// place to go through. Every mutator returns a result object rather than throwing:
+// { ok: true, key } or { ok: false, error } — the callers turn that into a toast.
+
+/** Turns a subject name into a stable storage key: "Computer Science" -> "computerScience".
+ *  Falls back to a uid() when the name has no usable letters (e.g. all emoji), so the
+ *  key is always non-empty and safe to use as an object property and in a URL hash. */
+function subjectKeyFromName(name) {
+  const words = String(name || '').trim().split(/[^A-Za-z0-9]+/).filter(Boolean);
+  if (!words.length) return uid('subj');
+  return words.map((w, i) => i === 0
+    ? w.charAt(0).toLowerCase() + w.slice(1)
+    : w.charAt(0).toUpperCase() + w.slice(1)).join('');
+}
+
+function _customSubjectStore() {
+  if (!state.trackerState) state.trackerState = makeDefaultState();
+  if (!state.trackerState.config) state.trackerState.config = { ...makeDefaultState().config };
+  if (!state.trackerState.config.customSubjects) state.trackerState.config.customSubjects = {};
+  return state.trackerState.config.customSubjects;
+}
+
+/** Normalises a subject draft into the full shape every consumer expects. `board`
+ *  defaults to 'N/A' and `short` to a trimmed `name` because the deck/folder pickers
+ *  interpolate both unconditionally (`${s.name} (${s.board})`), so a missing field
+ *  would render literally as "undefined". */
+/** Picks a sensible default for the "Short Name" field (the one shown on deck
+ *  tags) when the user leaves it blank: the name itself if it's short, an
+ *  acronym if it's multi-word ("Computer Programming" -> "CP"), the catch-all's
+ *  own "Misc" if that's what they named it, else a 12-char truncation. */
+function defaultSubjectShort(name) {
+  const n = String(name || '').trim();
+  if (!n) return 'Subject';
+  if (n.toLowerCase() === MISC_SUBJECT.name.toLowerCase()) return MISC_SUBJECT.short;
+  if (n.length <= 12) return n;
+  const words = n.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    const acr = words.map(w => w[0]).join('').toUpperCase();
+    if (acr.length >= 2 && acr.length <= 6) return acr;
+    return words[0].slice(0, 12);
+  }
+  return n.slice(0, 12);
+}
+
+function normalizeSubjectDraft(draft) {
+  const name = String(draft.name || '').trim();
+  return {
+    name,
+    short: String(draft.short || '').trim() || defaultSubjectShort(name),
+    board: String(draft.board || '').trim() || 'N/A',
+    examMarks: Math.max(1, Math.round(Number(draft.examMarks) || MISC_SUBJECT.examMarks)),
+    defaultColor: /^#[0-9a-fA-F]{6}$/.test(draft.defaultColor || '') ? draft.defaultColor : MISC_SUBJECT.defaultColor,
+  };
+}
+
+/** Adds a new subject. Rejects empty names, duplicate names (case-insensitive) and
+ *  keys that would collide with a built-in — colliding would silently rewrite the
+ *  built-in via getEffectiveSubjects()'s overlay instead of adding anything. */
+function addSubject(draft) {
+  const name = String(draft?.name || '').trim();
+  if (!name) return { ok: false, error: 'Give the subject a name' };
+  const store = _customSubjectStore();
+  const existing = getAllSubjects();
+  const dupe = Object.entries(existing).some(([, s]) => String(s.name).toLowerCase() === name.toLowerCase());
+  if (dupe) return { ok: false, error: `You already have a subject called "${name}"` };
+
+  // Naming a subject exactly "Miscellaneous" is how both the guided tour and
+  // the skip-fallback create the catch-all, so it must land on
+  // DEFAULT_SUBJECT_KEY — that's the key untagged decks resolve through
+  // (getSubjectSafe) and the one ensureMiscSubject() checks. Letting it become
+  // "miscellaneous" instead would leave the sentinel unbacked and split the
+  // catch-all across two lookalike subjects.
+  const wantsCatchAll = !SUBJECTS[DEFAULT_SUBJECT_KEY]
+    && name.toLowerCase() === MISC_SUBJECT.name.toLowerCase();
+  let key = wantsCatchAll ? DEFAULT_SUBJECT_KEY : subjectKeyFromName(name);
+  if (!wantsCatchAll) {
+    // A key that clashes with a built-in (or an existing custom entry) gets a
+    // suffix rather than overwriting it — getEffectiveSubjects() spreads custom
+    // over built-in, so a clash would silently rewrite the other subject.
+    let n = 2;
+    while (SUBJECTS[key] || store[key]) key = `${subjectKeyFromName(name)}${n++}`;
+  }
+
+  store[key] = normalizeSubjectDraft({ ...draft, name });
+  saveTrackerState();
+  return { ok: true, key };
+}
+
+/** Edits an existing subject's display fields. The key is immutable — decks and
+ *  folders reference subjects by key, so renaming must not move them. */
+function updateSubject(key, draft) {
+  const store = _customSubjectStore();
+  const current = getAllSubjects()[key];
+  if (!current) return { ok: false, error: 'That subject no longer exists' };
+  const name = String(draft?.name || '').trim();
+  if (!name) return { ok: false, error: 'Give the subject a name' };
+  const dupe = Object.entries(getAllSubjects())
+    .some(([k, s]) => k !== key && String(s.name).toLowerCase() === name.toLowerCase());
+  if (dupe) return { ok: false, error: `You already have a subject called "${name}"` };
+  // Built-ins get their overrides layered on top; customs are stored whole. Either
+  // way the merge point is the same, so a built-in edit is just a partial override.
+  store[key] = { ...(SUBJECTS[key] ? store[key] || {} : current), ...normalizeSubjectDraft({ ...draft, name }) };
+  saveTrackerState();
+  return { ok: true, key };
+}
+
+/** Hides a subject. Decks keep their tag (nothing is deleted) — the subject just
+ *  stops appearing in pickers, via getEffectiveSubjects()'s _removed filter. */
+function removeSubject(key) {
+  if (!getAllSubjects()[key]) return { ok: false, error: 'That subject no longer exists' };
+  _customSubjectStore()[key] = { ...(_customSubjectStore()[key] || getAllSubjects()[key]), _removed: true };
+  saveTrackerState();
+  return { ok: true, key };
+}
+
+/** Undoes removeSubject(). */
+function restoreSubject(key) {
+  const store = _customSubjectStore();
+  if (!store[key]?._removed) return { ok: false, error: 'That subject isn\u2019t hidden' };
+  delete store[key]._removed;
+  saveTrackerState();
+  return { ok: true, key };
+}
+
+/** Makes sure `key` resolves to a real, labelled subject, creating a custom
+ *  entry for it when it doesn't. For subject keys that arrive from OUTSIDE the
+ *  dashboard's own list — a Community import picks from dashboard-community.js's
+ *  private mirror of the subject list, which can offer a key the user has hidden
+ *  or never created. Returns true if it created/un-hid anything. */
+function ensureSubjectKeyExists(key, name) {
+  if (!key) return false;
+  if (getAllSubjects()[key]) return false; // already resolvable — leave it alone
+  const base = SUBJECTS[key] || (key === DEFAULT_SUBJECT_KEY ? MISC_SUBJECT : {});
+  const label = String(name || base.name || key).trim();
+  _customSubjectStore()[key] = { ...base, ...normalizeSubjectDraft({ ...base, name: label }) };
+  saveTrackerState();
+  return true;
+}
+
+/** Seeds the catch-all Miscellaneous subject if it's absent — the load-time
+ *  migration for installs that predate it being user-created, and the fallback
+ *  for anyone who skips the guided tour. Idempotent: returns true only when it
+ *  actually created or un-hid something (and persisted it). */
+function ensureMiscSubject() {
+  if (typeof ensureDefaultSubject !== 'function') return false;
+  const rec = () => JSON.stringify(state.trackerState?.config?.customSubjects?.[DEFAULT_SUBJECT_KEY] ?? null);
+  const before = rec();
+  ensureDefaultSubject(state.trackerState);
+  if (rec() === before) return false;
+  saveTrackerState();
+  return true;
+}
+
 function getDescendantFolderIds(folderId) {
   const children = state.folders.filter(f => f.parentId === folderId).map(f => f.id);
   return children.flatMap(id => [id, ...getDescendantFolderIds(id)]);
@@ -1933,6 +2121,8 @@ function gotoViewPage(viewId) {
     try {
       state.settings.onboarding = state.settings.onboarding || {};
       state.settings.onboarding.step = _tut.stepIdx;
+      state.settings.onboarding.stepCount = TUTORIAL_STEPS.length;
+      state.settings.onboarding.version = TUTORIAL_VERSION;
     } catch (e) {}
   }
   flushSave(touring);
@@ -2308,10 +2498,15 @@ const PAGE_HELP = {
     'Quests tab: short-lived daily goals (e.g. review 20 cards today) that award bonus XP when completed — they reset each day.',
     'Achievements tab: permanent milestones for card count, review count, deck count, streak length, mature cards, citations, imported sources, and single-day review records. Each one unlocks once and stays unlocked.',
   ]},
-  settings: { icon:'⚙️', title:'Settings', intro:'Configure the SRS algorithm, notifications, accessibility, and appearance.', tips:[
+  settings: { icon:'⚙️', title:'Settings', intro:'Configure the SRS algorithm, subjects, notifications, accessibility, appearance, and your data.', tips:[
+    'Help: replay the guided tour. It builds a real practice deck as it goes — keep it at the end, or discard it and start clean.',
     'Algorithm & Notifications: choose FSRS or SM-2, auto-suspend leeches, enable text-to-speech or daily reminders, toggle power-saving mode.',
-    'Study & Accessibility: set your Smart Definition language, pinyin display, dyslexia-friendly mode, high contrast, and where a book resumes when reopened.',
-    'Further down: daily review goal, new cards per day, leech threshold, theme/appearance presets, and sidebar navigation order.',
+    'AI Card Generation: point it at a local LLM server (LM Studio, Ollama, llama.cpp — anything OpenAI-compatible) to write cards from pasted text. Nothing is sent to a hosted API and there\u2019s no key to store.',
+    'Study & Accessibility: set your Smart Definition language, pinyin display, dyslexia-friendly mode, high contrast, and where a book resumes when reopened. Daily review goal, new cards per day and leech threshold live here too.',
+    'Theme Schedule: switch themes automatically at set times, per weekday, or at sunrise/sunset.',
+    'Subjects: add, rename, recolour or hide the subjects your decks and folders are grouped by. Hiding keeps the decks — they just stop offering that subject in pickers.',
+    'Scratchpad: defaults for the per-question drawing pad used in study sessions.',
+    'Navigation: reorder the sidebar tabs or hide them into the drawer.',
     'Data Management: "Export All Data" downloads a complete .zip backup — every deck/card, folder, source (including bundled PDFs and illustrated EPUBs), review history, achievements, tracker data, streak, and recent study scopes. "Import" reads that .zip (or an older .json export) back in, either merging with or replacing your current data.',
   ]},
   about: { icon:'❓', title:'About', intro:'What SCIMA Learning is — rendered live from the ABOUT.md file at the site root.', tips:[

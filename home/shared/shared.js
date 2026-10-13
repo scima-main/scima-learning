@@ -142,13 +142,16 @@ const SUBJECTS = {
     examMarks: 96,
     defaultColor: '#C5A800',
   },
-  misc: {
-    name: 'Miscellaneous',
-    short: 'Misc',
-    board: 'N/A',
-    examMarks: 100,
-    defaultColor: '#AAAAAA',
-  },
+  // NOTE: 'misc' (Miscellaneous) deliberately does NOT appear here any more.
+  // It used to be a built-in, which meant every new user inherited a grey
+  // catch-all bucket they never chose and mostly never renamed — decks piled
+  // into it by accident. It is now a subject the user creates themselves:
+  //   • the guided tour walks them through it (Settings → Subjects → Add),
+  //   • skipping the tour auto-creates it (see ensureDefaultSubject() below),
+  //   • pre-existing installs get it back on load, also via ensureDefaultSubject(),
+  //     so removing it from this list can never strand an old deck's subject.
+  // The canonical definition lives in MISC_SUBJECT below — keep the key in sync
+  // with DEFAULT_SUBJECT_KEY.
 };
 
 // The sentinel subject key used whenever a deck/folder has no subject assigned,
@@ -159,12 +162,47 @@ const SUBJECTS = {
 // by hand. Everywhere else (dashboard, popup) loads shared.js first and should use this.
 const DEFAULT_SUBJECT_KEY = 'misc';
 
+// The catch-all subject's canonical definition. No longer a SUBJECTS built-in
+// (see the note at the end of that object) — it is seeded into
+// config.customSubjects by ensureDefaultSubject(), either by the guided tour,
+// by skipping it, or by the load-time migration for pre-existing installs.
+const MISC_SUBJECT = Object.freeze({
+  name: 'Miscellaneous',
+  short: 'Misc',
+  board: 'N/A',
+  examMarks: 100,
+  defaultColor: '#AAAAAA',
+});
+
 // A pristine, un-hideable, un-deletable copy of the fallback subject. getEffectiveSubjects()
-// lets the user hide/remove DEFAULT_SUBJECT_KEY like any other built-in, which means
+// lets the user hide/remove DEFAULT_SUBJECT_KEY like any other subject, which means
 // `getEffectiveSubjects(state)[DEFAULT_SUBJECT_KEY]` can legitimately be undefined. Any code
 // that needs a *guaranteed* non-undefined subject object (e.g. to read .defaultColor/.name for
 // rendering) should fall back to this rather than to the possibly-removed merged entry.
-const FALLBACK_SUBJECT = Object.freeze({ ...SUBJECTS.misc });
+const FALLBACK_SUBJECT = MISC_SUBJECT;
+
+/**
+ * Idempotently makes sure the catch-all Miscellaneous subject exists, creating
+ * it under DEFAULT_SUBJECT_KEY in config.customSubjects if it is missing or was
+ * previously removed. Mutates and returns the tracker state it was given (and
+ * tolerates being handed null/undefined by building a default state first).
+ *
+ * Safe to call on every load — it is a no-op once the subject is there, and it
+ * never overwrites a user's own edits to the name/short/board/colour. Callers
+ * are responsible for persisting (scheduleSave()/saveTrackerState()).
+ */
+function ensureDefaultSubject(trackerState) {
+  const t = (trackerState && typeof trackerState === 'object') ? trackerState : makeDefaultState();
+  if (!t.config || typeof t.config !== 'object') t.config = { ...makeDefaultState().config };
+  if (!t.config.customSubjects || typeof t.config.customSubjects !== 'object') t.config.customSubjects = {};
+  const existing = t.config.customSubjects[DEFAULT_SUBJECT_KEY];
+  if (existing && !existing._removed) return t; // already there and visible — don't touch it
+  // Merge over MISC_SUBJECT so a previously-removed entry keeps any custom
+  // name/colour the user had given it, and only loses the _removed flag.
+  t.config.customSubjects[DEFAULT_SUBJECT_KEY] = { ...MISC_SUBJECT, ...(existing || {}) };
+  delete t.config.customSubjects[DEFAULT_SUBJECT_KEY]._removed;
+  return t;
+}
 
 
 /* ─────────────────────────────────────────────────────────────

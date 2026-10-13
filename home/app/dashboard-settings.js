@@ -42,9 +42,9 @@ function renderSettings(c) {
   const helpCard=el('div',{class:'card',style:'padding:20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap'},
     el('div',{},
       el('div',{style:'font-weight:800;margin-bottom:4px'},'❓ Help'),
-      el('div',{style:'font-size:12px;color:var(--muted)'},'Rewatch the guided walkthrough of decks, flashcards, studying, the sidebar, and shortcuts.')
+      el('div',{style:'font-size:12px;color:var(--muted)'},'Rewatch the guided walkthrough: subjects, decks, flashcards, studying, the sidebar and the shortcuts. It builds a real practice deck as it goes \u2014 you can keep it or discard it at the end.')
     ),
-    btn('Replay tutorial','primary',{onclick:()=>startTutorial(0)})
+    btn('Replay tutorial','primary',{onclick:()=>startTutorial(0,'replay')})
   );
   const aiCard=el('div',{class:'card',style:'padding:20px'},el('div',{style:'font-weight:800;margin-bottom:14px;color:var(--blue)'},'🤖 Algorithm & Notifications'));
   const algoSel=el('select',{class:'u-input',onchange:e=>{ state.settings.algorithm=e.target.value; scheduleSave(); }});
@@ -794,6 +794,125 @@ function renderSettings(c) {
     scheduleSave(); renderView('settings'); renderSidebar();
   }}));
 
+  // ── Subjects ──────────────────────────────────────────────────────────────
+  // Subjects group decks and folders. They used to be a fixed built-in list that
+  // only the (unported) Mark Tracker could extend, so this card is the
+  // dashboard's own editor over the same config.customSubjects store — a subject
+  // added here shows up in every deck/folder picker immediately. Hidden subjects
+  // are kept (their decks keep their tag) and can be restored.
+  const subjectsCard = el('div', { class:'card', style:'padding:20px;margin-top:16px' });
+  subjectsCard.id = 'tutorial-target-subjects-card';
+  subjectsCard.appendChild(el('div', { style:'font-weight:800;margin-bottom:6px' }, '📘 Subjects'));
+  subjectsCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:14px' },
+    'Subjects group your decks and folders. Pick one when you create a deck — it drives the deck\u2019s colour tag, its breadcrumb, its XP multiplier and the Analytics breakdown. Hiding a subject keeps its decks; they just stop offering it in pickers.'));
+
+  const subjectList = el('div', { style:'display:flex;flex-direction:column;gap:4px' });
+  subjectsCard.appendChild(subjectList);
+
+  /** The Add/Edit dialog. `key` null = create; otherwise edit that subject. */
+  function openSubjectModal(key) {
+    const existing = key ? getAllSubjects()[key] : null;
+    const isBuiltin = !!key && !!SUBJECTS[key];
+    let color = existing?.defaultColor || MISC_SUBJECT.defaultColor;
+
+    openModal(existing ? `Edit ${existing.name}` : 'Add Subject', body => {
+      const nameField  = createField('Subject Name', 'text', 'e.g. Miscellaneous');
+      const shortField = createField('Short Name', 'text', 'Shown on tags — e.g. Misc');
+      const boardField = createField('Exam Board', 'text', 'AQA, OCR, Edexcel… or N/A');
+      const marksField = createField('Total Exam Marks', 'number', '100');
+      nameField.querySelector('input').id = 'tutorial-target-subject-name-input';
+      if (existing) {
+        nameField.querySelector('input').value  = existing.name || '';
+        shortField.querySelector('input').value = existing.short || '';
+        boardField.querySelector('input').value = existing.board || '';
+        marksField.querySelector('input').value = String(existing.examMarks || MISC_SUBJECT.examMarks);
+      } else {
+        boardField.querySelector('input').value = 'N/A';
+        marksField.querySelector('input').value = String(MISC_SUBJECT.examMarks);
+      }
+
+      const swatch = mkColorSwatch(color, hex => { color = hex; });
+      const colorRow = el('div', { style:'display:flex;align-items:center;gap:10px;padding:10px 0' },
+        el('div', { style:'flex:1' },
+          el('div', { style:'font-size:12px;font-weight:600;margin-bottom:2px' }, 'Colour'),
+          el('div', { class:'u-muted-11' }, 'Used for the subject\u2019s tag and accent')),
+        swatch);
+
+      const errEl = el('div', { style:'font-size:12px;color:#ef4444;margin-top:8px;min-height:16px' });
+      const submit = btn(existing ? 'Save Subject' : 'Add Subject', 'primary', { full:true, onclick: () => {
+        const draft = {
+          name:  nameField.querySelector('input').value,
+          short: shortField.querySelector('input').value,
+          board: boardField.querySelector('input').value,
+          examMarks: marksField.querySelector('input').value,
+          defaultColor: color,
+        };
+        const res = existing ? updateSubject(key, draft) : addSubject(draft);
+        if (!res.ok) { errEl.textContent = res.error; return; }
+        closeModal();
+        renderView('settings');
+        renderSidebar();
+        showToast(existing ? `Subject updated \u2713` : `Subject "${draft.name.trim()}" added \u2713`);
+      }});
+      submit.id = 'tutorial-target-subject-submit';
+
+      body.append(
+        nameField, shortField, boardField, marksField, colorRow,
+        isBuiltin ? el('div', { class:'u-muted-11', style:'margin-bottom:8px' },
+          'This is a built-in subject — editing it saves your own overrides on top of it.') : null,
+        errEl, submit);
+    });
+  }
+
+  function renderSubjectEditor() {
+    subjectList.innerHTML = '';
+    const all = getAllSubjects();
+    const hiddenKeys = new Set(Object.entries(
+      state.trackerState?.config?.customSubjects || {}).filter(([, s]) => s?._removed).map(([k]) => k));
+    const rows = [...Object.entries(all), ...[...hiddenKeys].filter(k => !all[k]).map(k => {
+      const rec = state.trackerState.config.customSubjects[k];
+      return [k, { ...MISC_SUBJECT, ...rec, name: rec?.name || k }];
+    })];
+
+    if (!rows.length) {
+      subjectList.appendChild(el('div', { class:'u-muted-12', style:'padding:10px 0' },
+        'No subjects yet — add one below so your decks have somewhere to live.'));
+    }
+
+    rows.forEach(([key, s]) => {
+      const isHidden = hiddenKeys.has(key);
+      const deckCount  = state.decks.filter(d => (d.subject || DEFAULT_SUBJECT_KEY) === key).length;
+      const folderCount = state.folders.filter(f => f.subjectKey === key).length;
+      const row = el('div', { class:'subject-edit-row', style:`display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,${isHidden?'0.02':'0.04'});border:1px solid var(--border);opacity:${isHidden?0.55:1}` });
+      row.append(
+        el('span', { style:`width:14px;height:14px;border-radius:4px;flex-shrink:0;background:${s.defaultColor || '#888'}` }),
+        el('div', { style:'flex:1;min-width:0' },
+          el('div', { style:`font-size:13px;font-weight:600;color:${isHidden?'var(--muted)':'var(--text)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap` },
+            s.name || key,
+            SUBJECTS[key] ? el('span', { class:'u-muted-11', style:'margin-left:6px;font-weight:500' }, 'built-in') : null),
+          el('div', { class:'u-muted-11', style:'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' },
+            `${s.short || '\u2014'} · ${s.board || 'N/A'} · ${nOf(deckCount, 'deck')}${folderCount ? ` · ${nOf(folderCount, 'folder')}` : ''}${isHidden ? ' · hidden' : ''}`)),
+        isHidden
+          ? el('button', { class:'btn btn-ghost btn-sm', title:'Show this subject again', style:'padding:2px 10px;font-size:12px', onclick: () => { const r = restoreSubject(key); if (!r.ok) { showToast(r.error); return; } renderView('settings'); } }, '\u21a9 Restore')
+          : el('button', { class:'btn btn-ghost btn-sm', title:'Edit subject', style:'padding:2px 8px;font-size:12px', onclick: () => openSubjectModal(key) }, '\u270e'),
+        isHidden ? null : el('button', { class:'btn btn-ghost btn-sm', title:'Hide (decks keep their tag)', style:'padding:2px 8px;font-size:13px', onclick: () => {
+          const r = removeSubject(key);
+          if (!r.ok) { showToast(r.error); return; }
+          renderView('settings'); renderSidebar();
+          showToast(`Hidden "${s.name}" \u2014 its decks keep their tag`, 4000, { label:'Undo', onClick: () => { restoreSubject(key); renderView('settings'); } });
+        }}, '\ud83e\udee3')
+      );
+      subjectList.appendChild(row);
+    });
+  }
+  renderSubjectEditor();
+
+  const addSubjectBtn = btn('+ Add Subject', 'primary', { onclick: () => openSubjectModal(null) });
+  addSubjectBtn.id = 'tutorial-target-add-subject';
+  subjectsCard.appendChild(el('div', { style:'display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center' },
+    addSubjectBtn,
+    el('span', { class:'u-muted-11' }, 'Defaults come from shared.js\u2019s SUBJECTS; anything you add or change is stored with your own data.')));
+
   // ── Navigation ────────────────────────────────────────────────────────────
   // Reorder sidebar tabs (drag not available here — use up/down arrows) and
   // toggle their visibility. Hidden tabs move to the drawer at the bottom of
@@ -929,7 +1048,7 @@ function renderSettings(c) {
 
   c.append(
     el('div', { style:'margin-bottom:24px' }, el('div', { class:'section-title' }, 'Settings')),
-    helpCard, grid, llmCard, schedCard, appearCard, scratchCard, navCard, dataCard
+    helpCard, grid, llmCard, schedCard, appearCard, scratchCard, subjectsCard, navCard, dataCard
   );
 }
 

@@ -10,40 +10,151 @@
    Settings), so it doesn't matter that dashboard-bootstrap.js itself loads
    after this file.
 
-   SITE PORT NOTES: ported verbatim, no changes. Purely state/DOM overlay
-   logic — no chrome.* APIs anywhere in this file. The nav-walk step opens
-   the nav drawer while it runs (its spotlight targets live inside it) and
-   closes it again afterwards — see _renderTutorialStep(). */
+   SITE PORT NOTES: pure state/DOM overlay logic — no chrome.* APIs anywhere in
+   this file. Two seams do care about the multi-page site build, where each nav
+   tab is its own document:
+     • a step that needs another route calls navigate(), which becomes a real
+       page load; bootstrap's init() resumes the tour at the saved step on
+       arrival (see TUTORIAL_VERSION / onboarding.step below);
+     • the tour sandbox (see "TOUR SANDBOX") uses sessionStorage, which is
+       per-tab and survives same-tab navigation — exactly the tour's lifetime.
+   The nav-walk step opens the nav drawer while it runs (its spotlight targets
+   live inside it) and closes it again afterwards — see _renderTutorialStep().
 
+   ── TOUR SANDBOX ───────────────────────────────────────────────────────────
+   The tour makes you really click "+ New Deck", really type a card and really
+   rate it, because a walkthrough that fakes the clicks teaches nothing. That
+   used to leave every new user — and everyone who hit "Replay tutorial" from
+   Settings — with a junk deck in their library they then had to find and
+   delete. So the tour now snapshots the two storage blobs it can touch
+   (mf_state, SCIMATracker) into sessionStorage before its first step, and
+     • Finish  → the snapshot is dropped and everything you made is kept;
+     • Discard → the snapshot is written back verbatim, so the practice deck
+                 and its card vanish (subjects you added are carried across);
+     • Skip    → same as Discard, plus the catch-all Miscellaneous subject is
+                 auto-created, since you never reached the step that makes it.
+   Restoring is a straight setItem() of the exact backed-up string — no parse,
+   no merge — so a bug here can't corrupt your data, only decline to clean up.
+   If no snapshot exists (tour abandoned by closing the tab, which takes
+   sessionStorage with it) every restore path is a no-op. */
+
+// Bumped whenever the step list changes in a way that should re-run the tour
+// for people who already finished an older one. Left alone for step insertions
+// that only affect mid-tour resumes — onboarding.stepCount (below) catches those
+// without making everyone sit through the whole thing again.
 const TUTORIAL_VERSION = 1;
 
-// Each step: { title, body, selector (or resolver fn), waitFor: 'click'|'next',
-// beforeShow: optional fn run before positioning (e.g. navigate to a view),
-// sidebarWalk: optional array for the "sidebar tour" composite step }.
+// Per-tab sessionStorage key holding { mf, tracker } as raw strings, exactly as
+// they were before the tour's first mutation. See the header note.
+const TOUR_BACKUP_KEY = 'scima_tour_backup';
+
+// Per-tab sessionStorage key holding { step, stepCount, version, origin } for a
+// tour currently in flight. In the multi-page site build a step that needs
+// another route is a real page load, so "resume me at step N" has to live
+// somewhere that survives the swap. sessionStorage rather than
+// state.settings.onboarding because a REPLAYED tour runs for a user whose
+// onboarding is already flagged completed — init()'s `!ob.completed` test can't
+// distinguish "resume me" from "don't start", which silently killed any replay
+// at its first route change. It also gives the right lifetime for free: closing
+// the tab abandons the tour, exactly when the sandbox snapshot dies with it.
+const TOUR_ACTIVE_KEY = 'scima_tour_active';
+
+// Sidebar-walk blurbs, keyed by nav id. The walk itself is built from
+// getVisibleNavItems() rather than a hardcoded list, so it can't drift when a
+// tab is added, renamed or reordered (it used to — Community was missing
+// entirely) and it respects the user's own tab order and hidden tabs.
+const NAV_BLURBS = {
+  home:      'Home — your daily snapshot: what\u2019s due, retention, your streak and the daily goal, with Study Now on each deck.',
+  decks:     'Decks — your flashcards, grouped by subject and folder. "+ New Deck" also has Import JSON, Import Text and an ✨ AI Capture tab that writes cards from pasted text.',
+  study:     'Study — launches a review session across one deck, a folder, a subject or everything due today, in six modes.',
+  library:   'Library — imported books, PDFs and articles to read, highlight and cite straight into cards.',
+  analytics: 'Analytics — retention, streak and study-time charts, with Quests and achievements on the same page.',
+  community: 'Community — search decks other people have shared and add one to your own library in a click.',
+  settings:  'Settings — algorithm, subjects, theme and schedule, accessibility, AI card generation, scratchpad defaults, navigation, and data import/export.',
+  about:     'About — what this app is and what changed, rendered live from the ABOUT.md file at the site root.',
+};
+
+// Each step: { title, body, selector (or resolver fn), waitFor: 'click'|'input'|'next',
+// view: optional route this step must be on (navigated to if we're not there —
+//   makes a tour resumed after a manual reload self-heal instead of pointing at
+//   a selector that isn't on this page),
+// beforeShow: optional fn run before positioning (extra setup after navigating),
+// sidebarWalk: true for the composite "your menu" step,
+// skipIf: optional fn — when it returns true the step auto-advances instead of
+//   rendering (used by the subject-creation group, which is pointless once the
+//   catch-all subject already exists — a replay for an existing user would
+//   otherwise dead-end on "you already have a subject called Miscellaneous"),
+// extraButtons: optional [{ label, variant, onclick }] added to the controls row }.
 const TUTORIAL_STEPS = [
   {
     title: 'Welcome to SCIMA Learning',
-    body: 'Your adaptive flashcard and reading companion. This quick tour covers decks, flashcards, studying, the sidebar, and shortcuts — about a minute, skip anytime.',
+    body: 'Your adaptive flashcard and reading companion. This quick tour walks you through subjects, decks, flashcards, studying, the menu and the shortcuts \u2014 about two minutes, and you can skip it at any point.',
     waitFor: 'next',
   },
+
+  // ── Subjects ────────────────────────────────────────────────────────────
+  // Deliberately first: the create-deck modal has a Subject dropdown, and
+  // Miscellaneous is no longer a built-in default (see shared.js's SUBJECTS),
+  // so a brand-new user has nothing sensible to file their first deck under
+  // until they make one.
+  {
+    title: 'Set up your subjects',
+    body: 'Subjects are how SCIMA groups your decks \u2014 one per course, topic, or anything else you study. They live here in Settings, where you can add, rename, recolour or hide them at any time.',
+    selector: '#tutorial-target-subjects-card',
+    view: 'settings',
+    waitFor: 'next',
+     skipIf: _catchAllSubjectExists,
+  },
+  {
+    title: 'Add your first subject',
+    body: 'Click + Add Subject. Most people start with a catch-all \u2014 "Miscellaneous" \u2014 for anything that doesn\u2019t belong to a course yet, then add real subjects as they go.',
+    selector: '#tutorial-target-add-subject',
+    view: 'settings',
+    waitFor: 'click',
+    opensModal: true, // opens the add-subject modal — nothing persisted yet
+     skipIf: _catchAllSubjectExists,
+  },
+  {
+    title: 'Name it',
+    body: 'Type a name \u2014 try "Miscellaneous". Short name, exam board, marks and colour are all optional; the defaults are fine for now.',
+    selector: '#tutorial-target-subject-name-input',
+    view: 'settings',
+    waitFor: 'input',
+     skipIf: _catchAllSubjectExists,
+  },
+  {
+    title: 'Save the subject',
+    body: 'Click Add Subject to save it. It\u2019ll be waiting in the Subject dropdown when you create a deck in a moment.',
+    selector: '#tutorial-target-subject-submit',
+    view: 'settings',
+    waitFor: 'click',
+    waitForModalClose: true,
+    irreversible: true, // subject now exists — going Back can't undo that
+     skipIf: _catchAllSubjectExists,
+  },
+
+  // ── Deck + first card ───────────────────────────────────────────────────
   {
     title: 'Create a deck',
     body: 'Decks organize your flashcards by topic. Click + New Deck to create your first one.',
     selector: '#tutorial-target-new-deck',
+    view: 'decks',
     waitFor: 'click',
     opensModal: true, // just opens the create-deck modal — nothing persisted yet
-    beforeShow: () => { state.deckNav = { view: 'subjects', subjectKey: null, folderId: null }; navigate('decks'); },
+    beforeShow: () => { state.deckNav = { view: 'subjects', subjectKey: null, folderId: null }; },
   },
   {
     title: 'Name your deck',
     body: 'Type a name for your deck here, then click Next.',
     selector: '#tutorial-target-deck-name-input',
+    view: 'decks',
     waitFor: 'input',
   },
   {
     title: 'Create the deck',
-    body: 'Icon, subject, and folder are optional \u2014 defaults are fine for now. Click Create Deck to finish.',
+    body: 'Icon and folder are optional. The Subject dropdown is set to the one you just made \u2014 change it if you like. Click Create Deck to finish.',
     selector: '#tutorial-target-create-deck-submit',
+    view: 'decks',
     waitFor: 'click',
     waitForModalClose: true,
     irreversible: true, // deck now exists — going Back can't undo that
@@ -52,107 +163,302 @@ const TUTORIAL_STEPS = [
     title: 'Add a flashcard',
     body: "That's your deck. Now click + Add Card to add your first flashcard.",
     selector: '#tutorial-target-add-card',
+    view: 'decks',
     waitFor: 'click',
     opensModal: true, // opens the add-card modal — nothing persisted yet
-    beforeShow: () => { const d = state.decks[state.decks.length - 1]; if (d) { navigate('decks'); openDeckDetail(d.id); } },
+    beforeShow: () => { const d = state.decks[state.decks.length - 1]; if (d) openDeckDetail(d.id); },
   },
   {
     title: 'Write the question',
-    body: 'Type the front of the card \u2014 the question or prompt \u2014 then click Next.',
+    body: 'Type the front of the card \u2014 the question or prompt \u2014 then click Next. The Basic card type is right for most things; Mark scheme, Process, Calculation and Table are there when you need them.',
     selector: '#tutorial-target-card-front-input',
+    view: 'decks',
     waitFor: 'input',
   },
   {
     title: 'Write the answer',
     body: 'Type the back of the card \u2014 the answer \u2014 then click Next.',
     selector: '#tutorial-target-card-back-input',
+    view: 'decks',
     waitFor: 'input',
   },
   {
     title: 'Save the card',
     body: 'Click Add Card to save it to the deck.',
     selector: '#modal-box .btn-primary',
+    view: 'decks',
     waitFor: 'click',
     waitForModalClose: true,
     irreversible: true, // card now exists — going Back can't undo that
   },
+
+  // ── Study ───────────────────────────────────────────────────────────────
   {
     title: 'Start studying',
     body: 'Click Start on SRS Review to begin a session with the card you just made.',
     selector: '#tutorial-target-study-start',
+    view: 'study',
     waitFor: 'click',
-    beforeShow: () => navigate('study'),
     irreversible: true, // session has begun — going Back can't undo that
   },
   {
     title: 'Flip the card',
-    body: 'Click the card to reveal the answer.',
+    body: 'Click the card to reveal the answer. The ✍️ button beside the hint opens a scratchpad if you want to work something out first.',
     selector: '.flashcard',
+    view: 'study',
     waitFor: 'click',
     irreversible: true, // card is now flipped — going Back can't undo that
   },
   {
     title: 'Rate yourself',
-    body: 'Rate how well you knew it — this decides when you\u2019ll see it again.',
+    body: 'Rate how well you knew it \u2014 the label under each button is when the algorithm (FSRS or SM-2, your choice in Settings) will show it to you again.',
     selector: '.rating-grid',
+    view: 'study',
     waitFor: 'click',
     irreversible: true, // rating commits and advances the session — going Back can't undo that
   },
+
+  // ── Orientation ─────────────────────────────────────────────────────────
   {
     title: 'Your menu',
     body: '',
     waitFor: 'next',
-    sidebarWalk: [
-      { view: 'home', blurb: 'Home — your daily snapshot: what\u2019s due, streaks, and quick shortcuts into recent decks.' },
-      { view: 'decks', blurb: 'Decks — your flashcard decks and folders; "+ New Deck" has an ✨ AI Capture tab that writes cards from pasted text.' },
-      { view: 'study', blurb: 'Study — launches a review session across one deck, a folder, or everything due today.' },
-      { view: 'library', blurb: 'Library — imported books and articles to read, highlight and cite into cards.' },
-      { view: 'analytics', blurb: 'Analytics — retention, streak and study-time charts, with Quests and achievements on the same page.' },
-      { view: 'settings', blurb: 'Settings — algorithm, theme, accessibility, data import/export, and navigation customization.' },
-      { view: 'about', blurb: 'About — what this app is, rendered live from the ABOUT.md file at the site root.' },
-    ],
+    sidebarWalk: true, // sub-list built live from getVisibleNavItems()
   },
   {
     title: 'Keyboard shortcuts',
-    body: '\u2318/Ctrl+K opens the command palette. Alt+Shift+1\u20139 jumps straight to a sidebar tab. Esc closes any dialog. \u2318/Ctrl+Enter submits a typed quiz answer.\nCtrl+Shift+F opens this dashboard. Ctrl+Shift+Z creates a flashcard with the text selected, while Ctrl+Shift+X defines the selected text.',
+    body: '\u2318/Ctrl+K opens the command palette. Alt+Shift+1\u20139 jumps to a sidebar tab, in your own order. Esc closes any dialog, modal or the menu. \u2318/Ctrl+Enter submits a typed answer in Written Quiz.\nIn a study session, Ctrl/⌘+Alt+S opens the scratchpad; inside it, Ctrl+Z / Ctrl+Shift+Z undo and redo.',
     waitFor: 'next',
   },
   {
     title: "You're all set",
-    body: 'Replay this anytime from Settings \u2192 Help \u2192 Replay tutorial.',
+    body: 'Everything you just made is real \u2014 keep it, or throw the practice deck away and start clean. Replay this tour anytime from Settings \u2192 Help.',
     waitFor: 'next',
+    extraButtons: [{
+      label: 'Discard practice deck',
+      variant: 'ghost',
+      title: 'Delete the deck and card this tour created, keeping your subject',
+      onclick: () => endTutorial('discard'),
+    }],
   },
 ];
 
-let _tut = null; // { stepIdx, sidebarSub, cleanupFns }
+/** True once the catch-all subject exists, i.e. once the four subject-creation
+ *  steps have nothing left to teach. Re-evaluated on every render rather than
+ *  baked into the step list, so the list (and therefore stepCount, which
+ *  bootstrap uses to validate a saved resume index) never changes shape. */
+function _catchAllSubjectExists() {
+  try { return !!getAllSubjects()[DEFAULT_SUBJECT_KEY]; } catch (e) { return false; }
+}
 
-function startTutorial(fromStep = 0) {
-  endTutorial(); // tear down any stray previous instance first
+/** Does the step at `idx` want to be skipped right now? Never throws. */
+function _shouldSkipStep(idx) {
+  const st = TUTORIAL_STEPS[idx];
+  if (!st || typeof st.skipIf !== 'function') return false;
+  try { return !!st.skipIf(); } catch (e) { return false; }
+}
+
+let _tut = null; // { stepIdx, sidebarSub, cleanupFns, modalOpenStepIdx }
+
+/* ── Tour sandbox ───────────────────────────────────────────────────────── */
+
+function _sandboxRead() {
+  try { return JSON.parse(sessionStorage.getItem(TOUR_BACKUP_KEY) || 'null'); }
+  catch (e) { return null; }
+}
+
+/** Snapshots the two blobs the tour can mutate. Idempotent on purpose: a tour
+ *  that crosses a route boundary re-enters startTutorial() on the new page and
+ *  must not overwrite the original pre-tour snapshot with a half-built one.
+ *
+ *  Site build only. The extension build's real store is chrome.storage.local
+ *  (see dashboard-core.js's storage adapter), so a localStorage snapshot there
+ *  would capture nothing and "restore" nothing — the sandbox stays inert and
+ *  the tour simply behaves as it did before, keeping whatever you made. */
+function _sandboxBegin() {
+  try { if (typeof isExtension !== 'undefined' && isExtension) return; } catch (e) {}
+  try {
+    if (sessionStorage.getItem(TOUR_BACKUP_KEY)) return;
+    sessionStorage.setItem(TOUR_BACKUP_KEY, JSON.stringify({
+      mf: localStorage.getItem('mf_state'),
+      tracker: localStorage.getItem('SCIMATracker'),
+    }));
+  } catch (e) { console.warn('[SCIMA] tour sandbox: snapshot failed — Skip/Discard won\u2019t be able to clean up:', e); }
+}
+
+function _sandboxDrop() {
+  try { sessionStorage.removeItem(TOUR_BACKUP_KEY); } catch (e) {}
+}
+
+/* ── Cross-route resume marker ─────────────────────────────────────────── */
+
+function _markTourActive() {
+  if (!_tut) return;
+  try {
+    sessionStorage.setItem(TOUR_ACTIVE_KEY, JSON.stringify({
+      step: _tut.stepIdx, stepCount: TUTORIAL_STEPS.length,
+      version: TUTORIAL_VERSION, origin: _tut.origin || 'replay',
+    }));
+  } catch (e) {}
+}
+
+function _clearTourActive() {
+  try { sessionStorage.removeItem(TOUR_ACTIVE_KEY); } catch (e) {}
+}
+
+/** For bootstrap's init(): a tour this tab was mid-way through when the page
+ *  swapped underneath it. Returns { step, origin } to resume, or null. A marker
+ *  written by a different tour version/shape is dropped rather than resumed,
+ *  since its step index would point somewhere else entirely. */
+function pendingTourResume() {
+  let act = null;
+  try { act = JSON.parse(sessionStorage.getItem(TOUR_ACTIVE_KEY) || 'null'); } catch (e) { act = null; }
+  if (!act) return null;
+  if (act.version !== TUTORIAL_VERSION || act.stepCount !== TUTORIAL_STEPS.length) { _clearTourActive(); return null; }
+  return { step: Math.max(0, Math.min(act.step | 0, TUTORIAL_STEPS.length - 1)), origin: act.origin || 'replay' };
+}
+
+/** Custom-subject keys that exist now but didn't before the tour. Used by the
+ *  discard path so a subject you deliberately created in Settings survives
+ *  rolling the rest of your data back. */
+function _subjectsAddedSince(snap) {
+  const now = state.trackerState?.config?.customSubjects || {};
+  let before = {};
+  try { before = JSON.parse(snap.tracker || '{}')?.config?.customSubjects || {}; } catch (e) {}
+  return Object.keys(now).filter(k => !before[k] && !now[k]?._removed);
+}
+
+/** Writes the snapshot back over localStorage. `carrySubjectKeys` re-applies
+ *  those custom subjects on top of the restored tracker blob afterwards. */
+function _sandboxRestore(carrySubjectKeys) {
+  const snap = _sandboxRead();
+  if (!snap) return false; // nothing to restore — no-op, never a destructive guess
+  const carried = (carrySubjectKeys || []).reduce((acc, k) => {
+    const rec = state.trackerState?.config?.customSubjects?.[k];
+    if (rec) acc[k] = { ...rec };
+    return acc;
+  }, {});
+
+  let trackerBlob = snap.tracker;
+  if (Object.keys(carried).length) {
+    try {
+      const t = JSON.parse(snap.tracker || '{}');
+      t.config = t.config || {};
+      t.config.customSubjects = { ...(t.config.customSubjects || {}), ...carried };
+      trackerBlob = JSON.stringify(t);
+    } catch (e) { trackerBlob = snap.tracker; } // unparseable: restore verbatim, drop the carry
+  }
+
+  // Onboarding flags live inside mf_state, which we're about to overwrite with
+  // the pre-tour copy — stamp the finished state back on so the tour doesn't
+  // immediately restart on the next load.
+  let mfBlob = snap.mf;
+  try {
+    const mf = JSON.parse(snap.mf || '{}');
+    mf.settings = mf.settings || {};
+    mf.settings.onboarding = _finishedOnboardingRecord();
+    mfBlob = JSON.stringify(mf);
+  } catch (e) { mfBlob = snap.mf; }
+
+  try {
+    if (mfBlob == null) localStorage.removeItem('mf_state'); else localStorage.setItem('mf_state', mfBlob);
+    if (trackerBlob == null) localStorage.removeItem('SCIMATracker'); else localStorage.setItem('SCIMATracker', trackerBlob);
+  } catch (e) { console.warn('[SCIMA] tour sandbox: restore failed:', e); return false; }
+  return true;
+}
+
+function _finishedOnboardingRecord() {
+  return { completed: true, step: 0, version: TUTORIAL_VERSION, stepCount: TUTORIAL_STEPS.length };
+}
+
+/* ── Public entry points ────────────────────────────────────────────────── */
+
+/** @param {number} fromStep  @param {'first-run'|'replay'} origin — 'first-run'
+ *  is the only origin that leaves the catch-all subject out until the tour (or a
+ *  skip) creates it; a replay always runs against whatever you already have. */
+function startTutorial(fromStep = 0, origin = 'replay') {
+  endTutorial('teardown'); // tear down any stray previous instance first
+  _sandboxBegin();
   _tut = {
-    stepIdx: fromStep,
+    stepIdx: Math.max(0, Math.min(fromStep, TUTORIAL_STEPS.length - 1)),
     sidebarSub: 0,
     cleanupFns: [],
+    origin,
     modalOpenStepIdx: null, // index of the step whose click opened the currently-open modal, or null
   };
   _buildOverlaySkeleton();
   _renderTutorialStep();
 }
 
-function endTutorial() {
+/** @param {'finish'|'discard'|'skip'|'teardown'} reason
+ *  Async only because the discard/skip paths re-read storage after rolling it
+ *  back; every caller is a click handler that doesn't await it. */
+async function endTutorial(reason = 'finish') {
+  if (reason === 'teardown') { _teardownOverlay(); return; }
+  if (!_tut) return;
+  _teardownOverlay();
+  _clearTourActive();
+
+  const snap = _sandboxRead();
+  const addedSubjects = snap ? _subjectsAddedSince(snap) : [];
+  let rolledBack = false;
+
+  if (reason === 'finish') {
+    // Keep everything the user made; the snapshot has no further use.
+    _sandboxDrop();
+  } else if (snap) {
+    // 'discard' keeps subjects (they were a deliberate Settings change);
+    // 'skip' never reached that step, so it seeds the catch-all instead.
+    rolledBack = _sandboxRestore(reason === 'discard' ? addedSubjects : []);
+    _sandboxDrop();
+    if (rolledBack && typeof rehydrateFromStorage === 'function') {
+      try { await rehydrateFromStorage(); }
+      catch (e) {
+        console.warn('[SCIMA] tour sandbox: re-hydrate failed, reloading instead:', e);
+        location.reload();
+        return;
+      }
+      // A session started during the tour would still be pointing at cards the
+      // rollback just deleted. Declared in dashboard-decks.js, so it only exists
+      // on routes that load it.
+      try { if (typeof studySession !== 'undefined') studySession = null; } catch (e) {}
+      try { state.studyScope = [{ type: 'all', id: null }]; } catch (e) {}
+    }
+  } else {
+    _sandboxDrop();
+  }
+
+  if (reason === 'skip' && typeof ensureMiscSubject === 'function') {
+    // Skipped before the Subjects step could run — create the catch-all so
+    // untagged decks still have somewhere to live (see shared.js's SUBJECTS note).
+    ensureMiscSubject();
+  }
+
+  state.settings.onboarding = _finishedOnboardingRecord();
+  // flushSave, not scheduleSave: the tour is over and nothing else is about to
+  // write, so there's no reason to leave the finished flag (and a rollback)
+  // sitting in a 600ms debounce that a tab close could swallow.
+  flushSave(true);
+  try { renderSidebar(); } catch (e) {}
+  try { renderView(state.view); } catch (e) {}
+  return rolledBack;
+}
+
+function _teardownOverlay() {
   if (!_tut) return;
   if (_tut._clickListener) document.removeEventListener('click', _tut._clickListener, true);
   if (_tut._inputListener?.target) _tut._inputListener.target.removeEventListener('input', _tut._inputListener.fn);
   _tut.cleanupFns.forEach(fn => { try { fn(); } catch (e) {} });
   document.getElementById('tutorial-overlay')?.remove();
+  const wasTouring = !!_tut;
   _tut = null;
-  state.settings.onboarding = state.settings.onboarding || {};
-  state.settings.onboarding.completed = true;
-  state.settings.onboarding.step = 0;
-  state.settings.onboarding.version = TUTORIAL_VERSION;
-  scheduleSave();
+  return wasTouring;
 }
 
-function _skipTutorial() { endTutorial(); showToast('Tutorial skipped \u2014 replay anytime in Settings'); }
+function _skipTutorial() {
+  endTutorial('skip');
+  showToast('Tutorial skipped \u2014 replay anytime in Settings');
+}
 
 function _buildOverlaySkeleton() {
   const overlay = el('div', { id: 'tutorial-overlay' },
@@ -210,10 +516,23 @@ function _reconcileModalState() {
   return true;
 }
 
+/** The nav-walk step's live sub-list. Built from the tabs the user can actually
+ *  see, in their order, so the walk can never name a tab that isn't there or
+ *  miss one that is. */
+function _sidebarWalkItems() {
+  const items = (typeof getVisibleNavItems === 'function') ? getVisibleNavItems() : [];
+  return items.map(n => ({
+    view: n.id,
+    blurb: NAV_BLURBS[n.id] || `${n.label} — one of your sidebar tabs.`,
+  }));
+}
+
 function _currentStep() {
   const step = TUTORIAL_STEPS[_tut.stepIdx];
   if (step?.sidebarWalk) {
-    const sub = step.sidebarWalk[_tut.sidebarSub];
+    const walk = _sidebarWalkItems();
+    const sub = walk[Math.min(_tut.sidebarSub, Math.max(0, walk.length - 1))];
+    if (!sub) return { ...step, body: 'Your sidebar tabs are all reachable from the menu button.', selector: null };
     return { ...step, body: sub.blurb, selector: `[data-view="${sub.view}"]` };
   }
   return step;
@@ -221,14 +540,33 @@ function _currentStep() {
 
 function _renderTutorialStep() {
   if (_reconcileModalState()) return; // redirected to the modal-opening step; it already re-rendered
+  if (!TUTORIAL_STEPS[_tut.stepIdx]) { endTutorial('finish'); return; }
+
+  // A step with nothing left to teach (see skipIf) advances instead of
+  // rendering. Bounded so a bad predicate can't spin forever.
+  let skipped = 0;
+  while (_shouldSkipStep(_tut.stepIdx) && skipped++ < TUTORIAL_STEPS.length) {
+    _tut.stepIdx++;
+    _tut.sidebarSub = 0;
+  }
   const step = TUTORIAL_STEPS[_tut.stepIdx];
-  if (!step) { endTutorial(); return; }
+  if (!step) { endTutorial('finish'); return; }
+
+  // Written before the navigate() below: in the multi-page site build that call
+  // is a real page load, and the new document's init() needs this marker to
+  // pick the tour back up at this same step.
+  _markTourActive();
+  // Land on the route this step points at. A cross-route navigate() is a real
+  // page load there, so the rest of this function runs on a document that's
+  // about to go away and init() re-renders the same step on arrival (where the
+  // check is then a no-op). It also self-heals a tour resumed after a manual
+  // reload on the wrong page.
+  if (step.view && state.view !== step.view) navigate(step.view);
   step.beforeShow?.();
   // The nav-walk step spotlights tabs that live inside the nav drawer, so
   // the drawer opens for it; every other step gets the viewport to itself.
   if (step.sidebarWalk) openNav(); else closeNav();
 
-  // Composite "sidebar tour" step auto-advances through its own sub-list on Next.
   const live = _currentStep();
   _renderCard(live);
   _attachWaitFor(live);
@@ -244,7 +582,7 @@ function _renderCard(step) {
 
   const isLast = _tut.stepIdx === TUTORIAL_STEPS.length - 1;
   const isFirst = _tut.stepIdx === 0;
-  const atSubStart = !TUTORIAL_STEPS[_tut.stepIdx].sidebarWalk || _tut.sidebarSub === 0;
+  const atSubStart = !step.sidebarWalk || _tut.sidebarSub === 0;
   const prevIrreversible = atSubStart && !!TUTORIAL_STEPS[_tut.stepIdx - 1]?.irreversible;
   const hideBack = isFirst || prevIrreversible;
   const nextBtn = btn(isLast ? 'Finish' : 'Next', 'primary', { small: true, onclick: () => _advance() });
@@ -257,6 +595,11 @@ function _renderCard(step) {
     nextBtn.disabled = !(target && target.value.trim());
     controls.appendChild(nextBtn);
   }
+  (step.extraButtons || []).forEach(spec => {
+    const b = btn(spec.label, spec.variant || 'ghost', { small: true, onclick: spec.onclick });
+    if (spec.title) b.title = spec.title;
+    controls.appendChild(b);
+  });
   controls.appendChild(btn('Skip tutorial', 'ghost', { small: true, onclick: _skipTutorial }));
 
   card.append(
@@ -317,21 +660,31 @@ function _attachWaitFor(step) {
 
 function _advance() {
   const step = TUTORIAL_STEPS[_tut.stepIdx];
-  if (step?.sidebarWalk && _tut.sidebarSub < step.sidebarWalk.length - 1) {
+  const walkLen = step?.sidebarWalk ? _sidebarWalkItems().length : 0;
+  if (step?.sidebarWalk && _tut.sidebarSub < walkLen - 1) {
     _tut.sidebarSub++;
   } else {
     _tut.stepIdx++;
     _tut.sidebarSub = 0;
   }
-  if (_tut.stepIdx >= TUTORIAL_STEPS.length) { endTutorial(); return; }
-  state.settings.onboarding.step = _tut.stepIdx;
+  if (_tut.stepIdx >= TUTORIAL_STEPS.length) { endTutorial('finish'); return; }
+  // stepCount rides along with the step index so bootstrap's init() can tell a
+  // resumable mid-tour save from one written by an older, differently-shaped
+  // step list (see the comment there).
+  state.settings.onboarding = {
+    ...(state.settings.onboarding || {}),
+    step: _tut.stepIdx,
+    stepCount: TUTORIAL_STEPS.length,
+    version: TUTORIAL_VERSION,
+  };
   // Deliberately NOT calling scheduleSave() here: it shares one debounce
   // timer with every real save in the app (creating the deck/card you just
   // made included). Calling it on every tutorial step advance kept resetting
   // that timer, so if you clicked through steps faster than 600ms apart, the
   // save that included your new deck/card kept getting pushed back — and
   // could be lost entirely if the tab closed before it ever got a quiet
-  // 600ms. The step number will simply piggyback on the next real save.
+  // 600ms. The step number will simply piggyback on the next real save
+  // (and gotoViewPage() force-flushes it before any cross-route hop).
   _renderTutorialStep();
 }
 
@@ -349,10 +702,14 @@ function _back() {
   if (step?.sidebarWalk && _tut.sidebarSub > 0) {
     _tut.sidebarSub--;
   } else if (_tut.stepIdx > 0) {
-    const destIdx = _tut.stepIdx - 1;
+    // Walk back past any steps that would immediately auto-skip forward again
+    // (see _shouldSkipStep), so Back always lands somewhere that renders.
+    let destIdx = _tut.stepIdx - 1;
+    while (destIdx > 0 && _shouldSkipStep(destIdx)) destIdx--;
     _closeModalIfOpenSince(destIdx);
     _tut.stepIdx = destIdx;
-    _tut.sidebarSub = 0;
+    const dest = TUTORIAL_STEPS[destIdx];
+    _tut.sidebarSub = dest?.sidebarWalk ? Math.max(0, _sidebarWalkItems().length - 1) : 0;
   }
   _renderTutorialStep();
 }

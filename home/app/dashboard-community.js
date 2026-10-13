@@ -797,6 +797,15 @@ function openAddDeckModal(deck) {
         // other download. api.getDeck() only returns the metadata
         // summary (no cards), so it can't be used here regardless.
         const full = await api.exportDeck(deck.id);
+        // The picker above lists this module's own mirror of the subject list,
+        // so the chosen key may not exist in the dashboard's subjects yet — the
+        // user hid that built-in, or picked the catch-all, which is no longer a
+        // default (see shared.js's SUBJECTS note). Seed it so the imported deck
+        // lands on a real, labelled subject instead of resolving anonymously
+        // through getSubjectSafe()'s fallback.
+        try {
+          if (typeof ensureSubjectKeyExists === 'function') ensureSubjectKeyExists(subjectKey, SUBJECTS[subjectKey]?.name);
+        } catch (e) { console.warn('[SCIMA] community import: could not seed subject', subjectKey, e); }
         dashboardStore.addDeckToDashboard(full, deck, subjectKey, folderId);
         status.className = 'sc-modal-status ok'; status.textContent = `Added to ${SUBJECTS[subjectKey]?.name || subjectKey} ✓`;
         setTimeout(() => closeModal(), 900);
