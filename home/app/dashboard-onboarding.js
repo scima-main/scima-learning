@@ -65,13 +65,13 @@ const TOUR_ACTIVE_KEY = 'scima_tour_active';
 // entirely) and it respects the user's own tab order and hidden tabs.
 const NAV_BLURBS = {
   home:      'Home — your daily snapshot: what\u2019s due, retention, your streak and the daily goal, with Study Now on each deck.',
-  decks:     'Decks — your flashcards, grouped by subject and folder. "+ New Deck" also has Import JSON, Import Text and an ✨ AI Capture tab that writes cards from pasted text.',
+  decks:     'Decks — your flashcards, grouped by subject and folder. "+ New Deck" also has Import JSON, Import Text and an ✨ AI Capture tab that writes cards from text.',
   study:     'Study — launches a review session across one deck, a folder, a subject or everything due today, in six modes.',
   library:   'Library — imported books, PDFs and articles to read, highlight and cite straight into cards.',
   analytics: 'Analytics — retention, streak and study-time charts, with Quests and achievements on the same page.',
   community: 'Community — search decks other people have shared and add one to your own library in a click.',
-  settings:  'Settings — algorithm, subjects, theme and schedule, accessibility, AI card generation, scratchpad defaults, navigation, and data import/export.',
-  about:     'About — what this app is and what changed, rendered live from the ABOUT.md file at the site root.',
+  settings:  'Settings — change preferences, algorithm, subjects, theme and schedule, etc.',
+  about:     'About — what this app is and what changed.',
 };
 
 // Each step: { title, body, selector (or resolver fn), waitFor: 'click'|'input'|'next',
@@ -195,11 +195,12 @@ const TUTORIAL_STEPS = [
   // ── Study ───────────────────────────────────────────────────────────────
   {
     title: 'Start studying',
-    body: 'Click Start on SRS Review to begin a session with the card you just made.',
+    body: 'Click Start on SRS Review. The session is scoped to the deck you just made, so the queue holds your new card and nothing else — other cards you have due today won’t sneak in.',
     selector: '#tutorial-target-study-start',
     view: 'study',
     waitFor: 'click',
     irreversible: true, // session has begun — going Back can't undo that
+    beforeShow: () => _scopeStudyToTourCard(),
   },
   {
     title: 'Flip the card',
@@ -211,7 +212,7 @@ const TUTORIAL_STEPS = [
   },
   {
     title: 'Rate yourself',
-    body: 'Rate how well you knew it \u2014 the label under each button is when the algorithm (FSRS or SM-2, your choice in Settings) will show it to you again.',
+    body: 'Rate how well you knew it \u2014 the length of time under each button is when the algorithm (FSRS or SM-2, your choice in Settings) will show it to you again.',
     selector: '.rating-grid',
     view: 'study',
     waitFor: 'click',
@@ -226,7 +227,7 @@ const TUTORIAL_STEPS = [
     sidebarWalk: true, // sub-list built live from getVisibleNavItems()
   },
   {
-    title: 'Keyboard shortcuts',
+    title: 'Keyboard shortcuts (ignore on mobile)',
     body: '\u2318/Ctrl+K opens the command palette. Alt+Shift+1\u20139 jumps to a sidebar tab, in your own order. Esc closes any dialog, modal or the menu. \u2318/Ctrl+Enter submits a typed answer in Written Quiz.\nIn a study session, Ctrl/⌘+Alt+S opens the scratchpad; inside it, Ctrl+Z / Ctrl+Shift+Z undo and redo.',
     waitFor: 'next',
   },
@@ -282,8 +283,57 @@ function _sandboxBegin() {
     sessionStorage.setItem(TOUR_BACKUP_KEY, JSON.stringify({
       mf: localStorage.getItem('mf_state'),
       tracker: localStorage.getItem('SCIMATracker'),
+      // The tour narrows the Study picker to its own card (see
+      // _scopeStudyToTourCard); remember what it was so ending the tour can
+      // hand the picker back the way the user left it.
+      studyScope: _cloneJson(state.studyScope),
+      studyRefine: _cloneJson(state.studyRefine),
     }));
   } catch (e) { console.warn('[SCIMA] tour sandbox: snapshot failed — Skip/Discard won\u2019t be able to clean up:', e); }
+}
+
+function _cloneJson(v) {
+  try { return JSON.parse(JSON.stringify(v)); } catch (e) { return null; }
+}
+
+/** Deck and card ids the tour itself created, by diffing live state against the
+ *  pre-tour snapshot. Used to keep the tour's study session to just the card it
+ *  made: SRS Review queues everything due in scope, so on an established install
+ *  (or a replay) "Start studying" would otherwise sweep in every other due card
+ *  and the flip/rate steps could land on someone's real revision. */
+function _tourCreatedIds() {
+  const out = { deckIds: [], cardIds: [] };
+  const snap = _sandboxRead();
+  if (!snap) return out;
+  let before = null;
+  try { before = JSON.parse(snap.mf || '{}'); } catch (e) { return out; }
+  const hadDecks = new Set(((before && before.decks) || []).map(d => d.id));
+  const hadCards = new Set(((before && before.decks) || []).flatMap(d => (d.cards || []).map(c => c.id)));
+  for (const d of state.decks) {
+    if (!hadDecks.has(d.id)) out.deckIds.push(d.id);
+    for (const c of d.cards || []) if (!hadCards.has(c.id)) out.cardIds.push(c.id);
+  }
+  return out;
+}
+
+/** Narrows the Study picker to exactly what the tour created and re-renders it,
+ *  so the due-counts and the Start button's gating match the real queue. The
+ *  scope and refine ride across the route hop in gotoViewPage()'s sessionStorage
+ *  handoff, which is why setting them here (on the study page, just before the
+ *  user clicks Start) is enough. */
+function _scopeStudyToTourCard() {
+  const made = _tourCreatedIds();
+  const deck = state.decks.find(d => made.deckIds.includes(d.id));
+  if (!deck) return; // snapshot gone (tab closed mid-tour): leave the picker alone
+  state.studyScope = [{ type: 'deck', id: deck.id }];
+  const cardIds = (deck.cards || []).filter(c => made.cardIds.includes(c.id)).map(c => c.id);
+  state.studyRefine = {
+    mode: cardIds.length ? 'cards' : 'all',
+    cardIds,
+    n: state.studyRefine?.n || 20,
+    easeDir: state.studyRefine?.easeDir || 'hardest',
+  };
+  try { renderView('study'); } catch (e) {}
 }
 
 function _sandboxDrop() {
@@ -432,6 +482,14 @@ async function endTutorial(reason = 'finish') {
     // Skipped before the Subjects step could run — create the catch-all so
     // untagged decks still have somewhere to live (see shared.js's SUBJECTS note).
     ensureMiscSubject();
+  }
+
+  // Hand the Study picker back the way the user had it before the tour narrowed
+  // it to its own card. Read from the snapshot taken at tour start, so it
+  // survives the route hops the tour made in between.
+  if (snap) {
+    if (snap.studyScope) state.studyScope = snap.studyScope;
+    if (snap.studyRefine) state.studyRefine = snap.studyRefine;
   }
 
   state.settings.onboarding = _finishedOnboardingRecord();
@@ -600,7 +658,11 @@ function _renderCard(step) {
     if (spec.title) b.title = spec.title;
     controls.appendChild(b);
   });
-  controls.appendChild(btn('Skip tutorial', 'ghost', { small: true, onclick: _skipTutorial }));
+  // "Skip tutorial" on the final step is nonsense — there is nothing left to
+  // skip, and it sat next to a Finish button that does almost the same thing.
+  // The choice that matters here is keep-vs-discard, which the extra buttons
+  // above already offer.
+  if (!isLast) controls.appendChild(btn('Skip tutorial', 'ghost', { small: true, onclick: _skipTutorial }));
 
   card.append(
     el('div', { class: 'tutorial-title' }, step.title),
@@ -747,26 +809,55 @@ function _positionOverlay(selectorOverride) {
 
   ring.style.cssText = `display:block;top:${r.top - pad}px;left:${r.left - pad}px;width:${r.width + pad * 2}px;height:${r.height + pad * 2}px;`;
 
-  // Prefer placing the card to the side of the target with the most room.
+  // Measure the card instead of trusting a fixed guess. The old code assumed
+  // 300x160 and picked a side, then only clamped the axis it happened to move
+  // on — so a TALL spotlight (the add-subject modal, the study flashcard, which
+  // can both fill most of the viewport) left every branch short of room and the
+  // "above" fallback computed cardTop = r.top - 160 - 36, i.e. negative, i.e. a
+  // card hanging off the top of the screen with its buttons unreachable.
+  // Real size + a hard clamp on BOTH axes means the card is always fully
+  // on-screen; when nothing fits cleanly it overlaps the spotlight's least
+  // interesting corner rather than the void.
+  const M = 10;
+  const cardW = Math.min(card.offsetWidth || 300, vw - M * 2);
+  // Apply the width FIRST: height depends on it (the copy re-wraps), so
+  // measuring before would size the clamp against the wrong number.
+  card.style.width = cardW + 'px';
+  const cardH = card.offsetHeight || 160;
+
   const roomRight = vw - r.right, roomLeft = r.left, roomBelow = vh - r.bottom, roomAbove = r.top;
-  const cardW = 300, cardH = 160;
   let cardTop, cardLeft, arrowRotate, arrowTop, arrowLeft;
 
   if (roomRight > cardW + 40) {
-    cardLeft = r.right + 36; cardTop = Math.min(Math.max(r.top, 12), vh - cardH - 12);
+    cardLeft = r.right + 36; cardTop = r.top;
     arrowLeft = r.right + 4; arrowTop = r.top + r.height / 2 - 10; arrowRotate = 90;
   } else if (roomLeft > cardW + 40) {
-    cardLeft = r.left - cardW - 36; cardTop = Math.min(Math.max(r.top, 12), vh - cardH - 12);
+    cardLeft = r.left - cardW - 36; cardTop = r.top;
     arrowLeft = r.left - 32; arrowTop = r.top + r.height / 2 - 10; arrowRotate = 270;
   } else if (roomBelow > cardH + 40) {
-    cardTop = r.bottom + 36; cardLeft = Math.min(Math.max(r.left, 12), vw - cardW - 12);
+    cardTop = r.bottom + 36; cardLeft = r.left + r.width / 2 - cardW / 2;
     arrowTop = r.bottom + 4; arrowLeft = r.left + r.width / 2 - 10; arrowRotate = 180;
-  } else {
-    cardTop = r.top - cardH - 36; cardLeft = Math.min(Math.max(r.left, 12), vw - cardW - 12);
+  } else if (roomAbove > cardH + 40) {
+    cardTop = r.top - cardH - 36; cardLeft = r.left + r.width / 2 - cardW / 2;
     arrowTop = r.top - 32; arrowLeft = r.left + r.width / 2 - 10; arrowRotate = 0;
+  } else {
+    // Nothing fits beside it (a near-full-viewport target). Park the card in
+    // whichever corner is furthest from the spotlight's centre, over the dim.
+    const preferBottom = roomAbove > roomBelow;
+    cardTop = preferBottom ? vh - cardH : 0;
+    cardLeft = roomLeft > roomRight ? 0 : vw - cardW;
+    arrowRotate = -1; // no arrow: it wouldn't point at anything meaningful
   }
 
+  // Final guarantee: whatever branch we took, the whole card stays in view.
+  cardTop  = Math.min(Math.max(cardTop, M), Math.max(M, vh - cardH - M));
+  cardLeft = Math.min(Math.max(cardLeft, M), Math.max(M, vw - cardW - M));
+
   card.style.cssText = `position:fixed;top:${cardTop}px;left:${cardLeft}px;width:${cardW}px;transform:none;`;
-  arrow.style.cssText = `display:block;position:fixed;top:${arrowTop}px;left:${arrowLeft}px;transform:rotate(${arrowRotate}deg);`;
-  arrow.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 2 L10 16 M10 16 L4 10 M10 16 L16 10" stroke="var(--blue)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  if (arrowRotate < 0) {
+    arrow.style.display = 'none';
+  } else {
+    arrow.style.cssText = `display:block;position:fixed;top:${arrowTop}px;left:${arrowLeft}px;transform:rotate(${arrowRotate}deg);`;
+    arrow.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 2 L10 16 M10 16 L4 10 M10 16 L16 10" stroke="var(--blue)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
 }

@@ -1,5 +1,11 @@
 # CHANGELOG (last updated 14th October 2026, UTC)
 
+#### VERSION 2026.10.016-ALPHA
+
+- subjects can now be deleted
+- build version shown at the foot of the sidebar nav
+- guided tour: the study session is scoped to the card the tour just created, the explanation card is now measured and clamped to the viewport
+
 #### VERSION 2026.10.015-ALPHA
 
 - subjects are now user-managed

@@ -804,7 +804,7 @@ function renderSettings(c) {
   subjectsCard.id = 'tutorial-target-subjects-card';
   subjectsCard.appendChild(el('div', { style:'font-weight:800;margin-bottom:6px' }, '📘 Subjects'));
   subjectsCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:14px' },
-    'Subjects group your decks and folders. Pick one when you create a deck — it drives the deck\u2019s colour tag, its breadcrumb, its XP multiplier and the Analytics breakdown. Hiding a subject keeps its decks; they just stop offering it in pickers.'));
+    'Subjects group your decks and folders. Pick one when you create a deck — it drives the deck\u2019s colour tag, its breadcrumb, its XP multiplier and the Analytics breakdown. Deleting one \u2014 built-ins included \u2014 offers to move its decks elsewhere first, and leaves a \u21a9 Restore row here in case you change your mind.'));
 
   const subjectList = el('div', { style:'display:flex;flex-direction:column;gap:4px' });
   subjectsCard.appendChild(subjectList);
@@ -864,43 +864,101 @@ function renderSettings(c) {
     });
   }
 
+  /** Delete confirmation. Built-ins get deleted exactly like user subjects —
+   *  the only difference deleteSubject() makes is where the tombstone lands —
+   *  so the dialog's job is the part that ISN'T reversible-by-default: what
+   *  happens to the decks and folders currently tagged with it. */
+  function openDeleteSubjectModal(key) {
+    const subject = getAllSubjects()[key];
+    if (!subject) return;
+    const decks   = state.decks.filter(d => (d.subject || DEFAULT_SUBJECT_KEY) === key);
+    const folders = state.folders.filter(f => (f.subjectKey || DEFAULT_SUBJECT_KEY) === key);
+    const affected = decks.length + folders.length;
+    const isCatchAll = key === DEFAULT_SUBJECT_KEY;
+
+    openModal(`Delete ${subject.name}?`, body => {
+      body.appendChild(el('div', { style:'font-size:13px;line-height:1.6;margin-bottom:14px' },
+        affected
+          ? el('span', {}, `${nOf(decks.length, 'deck')}${folders.length ? ` and ${nOf(folders.length, 'folder')}` : ''} are filed under this subject. Move them somewhere else first, or delete it anyway and let them fall back to the untagged bucket.`)
+          : el('span', {}, 'Nothing is filed under this subject, so deleting it changes nothing but the pickers.')));
+      if (isCatchAll) {
+        body.appendChild(el('div', { style:'font-size:12px;line-height:1.6;color:var(--muted);margin-bottom:14px;padding:10px 12px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid var(--border)' },
+          'This is the catch-all that untagged decks fall back to. Deleting it is allowed and it stays deleted \u2014 but anything left untagged will show as a plain grey \u201cMiscellaneous\u201d until you file it under a real subject.'));
+      }
+
+      const others = Object.entries(getAllSubjects()).filter(([k]) => k !== key);
+      let reassignTo = others.length ? others[0][0] : null;
+      let doReassign = affected > 0 && others.length > 0;
+
+      const sel = el('select', { class:'u-input', onchange: e => { reassignTo = e.target.value; } });
+      others.forEach(([k, sub]) => {
+        const o = el('option', { value:k, class:'u-bg' }, sub.name);
+        if (k === DEFAULT_SUBJECT_KEY) o.selected = true;
+        sel.appendChild(o);
+      });
+      if (others.some(([k]) => k === DEFAULT_SUBJECT_KEY)) reassignTo = DEFAULT_SUBJECT_KEY;
+
+      const moveRow = el('div', { style:'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px' },
+        (() => {
+          const knob = el('div', { class:'toggle-knob' });
+          const sw = el('button', { class:`toggle${doReassign ? ' on' : ''}`, onclick: () => {
+            doReassign = !doReassign;
+            sw.classList.toggle('on', doReassign);
+          }}, knob);
+          return el('div', { style:'display:flex;align-items:center;gap:10px' }, sw,
+            el('div', { style:'font-size:12px;font-weight:600' }, 'Move its decks & folders to'));
+        })(),
+        sel);
+      if (!others.length || !affected) moveRow.style.display = 'none';
+
+      const errEl = el('div', { style:'font-size:12px;color:#ef4444;margin-top:10px;min-height:16px' });
+      const confirmBtn = btn('Delete subject', 'danger', { full:true, onclick: () => {
+        const r = deleteSubject(key, { reassignTo: doReassign ? reassignTo : null });
+        if (!r.ok) { errEl.textContent = r.error; return; }
+        closeModal();
+        renderView('settings'); renderSidebar();
+        showToast(`Deleted \u201c${subject.name}\u201d${r.reassignTo ? ` \u2014 moved to ${getSubjectSafe(r.reassignTo).name}` : ''}`, 5000,
+          { label:'Undo', onClick: () => { restoreSubject(key); renderView('settings'); renderSidebar(); } });
+      }});
+
+      body.append(moveRow, errEl, confirmBtn,
+        el('div', { class:'u-muted-11', style:'margin-top:10px' },
+          'Built-in subjects can be deleted too. Deleting leaves a row here with \u21a9 Restore, in case you change your mind.'));
+    });
+  }
+
   function renderSubjectEditor() {
     subjectList.innerHTML = '';
     const all = getAllSubjects();
-    const hiddenKeys = new Set(Object.entries(
+    const deletedKeys = new Set(Object.entries(
       state.trackerState?.config?.customSubjects || {}).filter(([, s]) => s?._removed).map(([k]) => k));
-    const rows = [...Object.entries(all), ...[...hiddenKeys].filter(k => !all[k]).map(k => {
+    const rows = [...Object.entries(all), ...[...deletedKeys].filter(k => !all[k]).map(k => {
       const rec = state.trackerState.config.customSubjects[k];
       return [k, { ...MISC_SUBJECT, ...rec, name: rec?.name || k }];
     })];
 
     if (!rows.length) {
       subjectList.appendChild(el('div', { class:'u-muted-12', style:'padding:10px 0' },
-        'No subjects yet — add one below so your decks have somewhere to live.'));
+        'No subjects yet \u2014 add one below so your decks have somewhere to live.'));
     }
 
     rows.forEach(([key, s]) => {
-      const isHidden = hiddenKeys.has(key);
+      const isDeleted = deletedKeys.has(key);
       const deckCount  = state.decks.filter(d => (d.subject || DEFAULT_SUBJECT_KEY) === key).length;
       const folderCount = state.folders.filter(f => f.subjectKey === key).length;
-      const row = el('div', { class:'subject-edit-row', style:`display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,${isHidden?'0.02':'0.04'});border:1px solid var(--border);opacity:${isHidden?0.55:1}` });
+      const row = el('div', { class:'subject-edit-row', style:`display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,${isDeleted?'0.02':'0.04'});border:1px solid var(--border);opacity:${isDeleted?0.55:1}` });
       row.append(
         el('span', { style:`width:14px;height:14px;border-radius:4px;flex-shrink:0;background:${s.defaultColor || '#888'}` }),
         el('div', { style:'flex:1;min-width:0' },
-          el('div', { style:`font-size:13px;font-weight:600;color:${isHidden?'var(--muted)':'var(--text)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap` },
+          el('div', { style:`font-size:13px;font-weight:600;color:${isDeleted?'var(--muted)':'var(--text)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap` },
             s.name || key,
             SUBJECTS[key] ? el('span', { class:'u-muted-11', style:'margin-left:6px;font-weight:500' }, 'built-in') : null),
           el('div', { class:'u-muted-11', style:'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' },
-            `${s.short || '\u2014'} · ${s.board || 'N/A'} · ${nOf(deckCount, 'deck')}${folderCount ? ` · ${nOf(folderCount, 'folder')}` : ''}${isHidden ? ' · hidden' : ''}`)),
-        isHidden
-          ? el('button', { class:'btn btn-ghost btn-sm', title:'Show this subject again', style:'padding:2px 10px;font-size:12px', onclick: () => { const r = restoreSubject(key); if (!r.ok) { showToast(r.error); return; } renderView('settings'); } }, '\u21a9 Restore')
+            `${s.short || '\u2014'} \u00b7 ${s.board || 'N/A'} \u00b7 ${nOf(deckCount, 'deck')}${folderCount ? ` \u00b7 ${nOf(folderCount, 'folder')}` : ''}${isDeleted ? ' \u00b7 deleted' : ''}`)),
+        isDeleted
+          ? el('button', { class:'btn btn-ghost btn-sm', title:'Bring this subject back', style:'padding:2px 10px;font-size:12px', onclick: () => { const r = restoreSubject(key); if (!r.ok) { showToast(r.error); return; } renderView('settings'); renderSidebar(); } }, '\u21a9 Restore')
           : el('button', { class:'btn btn-ghost btn-sm', title:'Edit subject', style:'padding:2px 8px;font-size:12px', onclick: () => openSubjectModal(key) }, '\u270e'),
-        isHidden ? null : el('button', { class:'btn btn-ghost btn-sm', title:'Hide (decks keep their tag)', style:'padding:2px 8px;font-size:13px', onclick: () => {
-          const r = removeSubject(key);
-          if (!r.ok) { showToast(r.error); return; }
-          renderView('settings'); renderSidebar();
-          showToast(`Hidden "${s.name}" \u2014 its decks keep their tag`, 4000, { label:'Undo', onClick: () => { restoreSubject(key); renderView('settings'); } });
-        }}, '\ud83e\udee3')
+        isDeleted ? null : el('button', { class:'btn btn-ghost btn-sm', title:`Delete ${s.name}`, style:'padding:2px 8px;font-size:12px', onclick: () => openDeleteSubjectModal(key) }, '\ud83d\uddd1')
       );
       subjectList.appendChild(row);
     });

@@ -1335,11 +1335,13 @@ function addSubject(draft) {
     && name.toLowerCase() === MISC_SUBJECT.name.toLowerCase();
   let key = wantsCatchAll ? DEFAULT_SUBJECT_KEY : subjectKeyFromName(name);
   if (!wantsCatchAll) {
-    // A key that clashes with a built-in (or an existing custom entry) gets a
-    // suffix rather than overwriting it — getEffectiveSubjects() spreads custom
-    // over built-in, so a clash would silently rewrite the other subject.
+    // A key that clashes with a built-in (or an existing LIVE custom entry)
+    // gets a suffix rather than overwriting it — getEffectiveSubjects() spreads
+    // custom over built-in, so a clash would silently rewrite the other subject.
+    // Tombstoned (deleted) entries are skipped: re-adding a subject you deleted
+    // should take its old key back, not mint "biology2".
     let n = 2;
-    while (SUBJECTS[key] || store[key]) key = `${subjectKeyFromName(name)}${n++}`;
+    while (SUBJECTS[key] || (store[key] && !store[key]._removed)) key = `${subjectKeyFromName(name)}${n++}`;
   }
 
   store[key] = normalizeSubjectDraft({ ...draft, name });
@@ -1365,32 +1367,60 @@ function updateSubject(key, draft) {
   return { ok: true, key };
 }
 
-/** Hides a subject. Decks keep their tag (nothing is deleted) — the subject just
- *  stops appearing in pickers, via getEffectiveSubjects()'s _removed filter. */
-function removeSubject(key) {
-  if (!getAllSubjects()[key]) return { ok: false, error: 'That subject no longer exists' };
-  _customSubjectStore()[key] = { ...(_customSubjectStore()[key] || getAllSubjects()[key]), _removed: true };
+/** Deletes a subject — built-ins included. "Delete" is a tombstone
+ *  (`_removed: true` in config.customSubjects) rather than erasing the record,
+ *  for two reasons: getEffectiveSubjects() already filters on that flag so the
+ *  subject vanishes from every picker immediately, and keeping the row lets
+ *  Settings offer ↩ Restore, so a mis-click on a subject with forty decks
+ *  attached is recoverable instead of fatal.
+ *
+ *  Decks and folders tagged with it are reassigned to `opts.reassignTo` (or
+ *  left pointing at the old key when `opts.reassignTo` is null — they keep
+ *  working either way, since getSubjectSafe() resolves unknown keys through
+ *  the anonymous fallback; reassigning just keeps their tag meaningful). */
+function deleteSubject(key, opts = {}) {
+  const subject = getAllSubjects()[key];
+  if (!subject) return { ok: false, error: 'That subject no longer exists' };
+  const reassignTo = opts.reassignTo || null;
+  if (reassignTo && reassignTo !== key && !getAllSubjects()[reassignTo]) {
+    return { ok: false, error: `Can\u2019t move decks to "${reassignTo}" — it isn\u2019t a subject` };
+  }
+  if (reassignTo) {
+    state.decks.forEach(d => { if ((d.subject || DEFAULT_SUBJECT_KEY) === key) d.subject = reassignTo; });
+    state.folders.forEach(f => { if ((f.subjectKey || DEFAULT_SUBJECT_KEY) === key) f.subjectKey = reassignTo; });
+    scheduleSave();
+  }
+  _customSubjectStore()[key] = { ...(_customSubjectStore()[key] || subject), _removed: true };
   saveTrackerState();
-  return { ok: true, key };
+  return { ok: true, key, reassignTo };
 }
 
-/** Undoes removeSubject(). */
+/** Undoes deleteSubject(). */
 function restoreSubject(key) {
   const store = _customSubjectStore();
-  if (!store[key]?._removed) return { ok: false, error: 'That subject isn\u2019t hidden' };
+  if (!store[key]?._removed) return { ok: false, error: 'That subject isn\u2019t deleted' };
   delete store[key]._removed;
   saveTrackerState();
   return { ok: true, key };
 }
 
+/** True when a subject has been deleted and not restored. Distinct from "never
+ *  existed": a tombstone is a deliberate act the migrations below must respect,
+ *  or deleting Miscellaneous would quietly come back on the next page load. */
+function isSubjectDeleted(key) {
+  return !!_customSubjectStore()[key]?._removed;
+}
+
 /** Makes sure `key` resolves to a real, labelled subject, creating a custom
  *  entry for it when it doesn't. For subject keys that arrive from OUTSIDE the
  *  dashboard's own list — a Community import picks from dashboard-community.js's
- *  private mirror of the subject list, which can offer a key the user has hidden
- *  or never created. Returns true if it created/un-hid anything. */
+ *  private mirror of the subject list, which can offer a key the user has never
+ *  created. Returns true if it created anything. A subject the user DELETED is
+ *  left deleted: seeding over a tombstone would resurrect it behind their back. */
 function ensureSubjectKeyExists(key, name) {
   if (!key) return false;
   if (getAllSubjects()[key]) return false; // already resolvable — leave it alone
+  if (isSubjectDeleted(key)) return false; // deliberately deleted — respect that
   const base = SUBJECTS[key] || (key === DEFAULT_SUBJECT_KEY ? MISC_SUBJECT : {});
   const label = String(name || base.name || key).trim();
   _customSubjectStore()[key] = { ...base, ...normalizeSubjectDraft({ ...base, name: label }) };
@@ -1401,8 +1431,10 @@ function ensureSubjectKeyExists(key, name) {
 /** Seeds the catch-all Miscellaneous subject if it's absent — the load-time
  *  migration for installs that predate it being user-created, and the fallback
  *  for anyone who skips the guided tour. Idempotent: returns true only when it
- *  actually created or un-hid something (and persisted it). */
+ *  actually created something (and persisted it). Skips a deleted catch-all on
+ *  purpose — see isSubjectDeleted(). */
 function ensureMiscSubject() {
+  if (isSubjectDeleted(DEFAULT_SUBJECT_KEY)) return false;
   if (typeof ensureDefaultSubject !== 'function') return false;
   const rec = () => JSON.stringify(state.trackerState?.config?.customSubjects?.[DEFAULT_SUBJECT_KEY] ?? null);
   const before = rec();
@@ -2420,6 +2452,27 @@ function renderSidebar() {
       });
       nav.appendChild(drawer);
     }
+  }
+
+  // Build badge at the foot of the nav, directly above the footer divider.
+  // Rendered here (not in each page's static HTML) so it exists on every route
+  // and — more importantly — reports the version of the JS that is ACTUALLY
+  // running in this document. That's the whole point: with one document per
+  // route, a stale cached copy of /#home next to a fresh /#study shows two
+  // different numbers side by side, which is the mismatch this is for.
+  const sb = document.getElementById('sidebar');
+  if (sb) {
+    let badge = document.getElementById('sidebar-version');
+    if (!badge) {
+      badge = el('div', { id: 'sidebar-version' });
+      sb.insertBefore(badge, document.getElementById('sidebar-footer'));
+    }
+    badge.innerHTML = '';
+    badge.title = 'Build version — if two tabs disagree, one of them is serving a cached page from an older deploy. A hard reload fixes it.';
+    badge.append(
+      el('span', { class: 'sv-label' }, 'build'),
+      el('span', { class: 'sv-tag' }, APP_VERSION)
+    );
   }
 
   const fs = document.getElementById('footer-stats');

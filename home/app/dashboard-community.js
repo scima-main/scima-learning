@@ -2792,11 +2792,11 @@ async function checkApiHealth() {
     dot.classList.add('ok');
 
     label.textContent =
-      `API connected (${API_BASE})`;
+      `Server online at ${API_BASE}`;
 
   } catch {
     label.textContent =
-      `API unreachable at ${API_BASE}`;
+      `Server temporarily offline at ${API_BASE}`;
   }
 }
 

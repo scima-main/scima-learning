@@ -171,12 +171,13 @@ body.nav-open #sidebar { transform: translateX(0); visibility: visible;
   transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1); }
 /* Drawer text fades in after the slide starts, and out before it ends. */
 #logo-name, #logo-sub, .nav-label, .nav-section-label, .pinned-deck-name, .pinned-deck-due,
-.foot-stat .fs-lab, .nav-drawer-toggle span:not(.nav-drawer-chevron) {
+.foot-stat .fs-lab, .nav-drawer-toggle span:not(.nav-drawer-chevron), #sidebar-version {
   opacity: 0; transition: opacity 0.12s ease; }
 body.nav-open #logo-name, body.nav-open #logo-sub, body.nav-open .nav-label,
 body.nav-open .nav-section-label, body.nav-open .pinned-deck-name, body.nav-open .pinned-deck-due,
 body.nav-open .foot-stat .fs-lab,
-body.nav-open .nav-drawer-toggle span:not(.nav-drawer-chevron) {
+body.nav-open .nav-drawer-toggle span:not(.nav-drawer-chevron),
+body.nav-open #sidebar-version {
   opacity: 1; transition: opacity 0.2s ease 0.1s; }
 @media (prefers-reduced-motion: reduce) {
   #sidebar, #nav-backdrop, #logo-icon, #page-tabs-float { transition: none !important; }
@@ -281,6 +282,14 @@ body.nav-open .nav-drawer-toggle span:not(.nav-drawer-chevron) {
 .nav-btn-hidden { opacity: 0.8; }
 
 #sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); }
+/* Build badge: last thing in the nav column, sitting directly on the footer's
+   top border. Deliberately quiet — it's a debugging affordance, not chrome —
+   but monospaced so two tabs can be compared at a glance. */
+#sidebar-version { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 6px 16px 8px; color: var(--muted); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.05em; cursor: help; }
+#sidebar-version .sv-label { text-transform: uppercase; opacity: 0.6; }
+#sidebar-version .sv-tag { font-family: 'SF Mono', Consolas, monospace; font-size: 10px; opacity: 0.85; }
 #footer-stats { display: flex; justify-content: space-around; }
 .foot-stat { text-align: center; }
 .foot-stat .fs-val { font-weight: 800; font-size: 13px; }

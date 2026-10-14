@@ -18,6 +18,15 @@
    CONFIGURATION  (edit these constants to tune the system)
 ───────────────────────────────────────────────────────────── */
 
+/** Build version, shown at the foot of the sidebar nav on every page
+ *  (renderSidebarVersion in dashboard-core.js). Kept in sync BY HAND with the
+ *  topmost entry in ABOUT.md's changelog — it has to be a compile-time constant
+ *  rather than fetched, because its whole job is debugging stale cached pages:
+ *  two tabs open on /#home and /#study whose sidebars disagree are two cached
+ *  copies of different deploys, and a fetch would just report whatever the
+ *  (possibly stale) cache says ABOUT.md contains. Bump both together. */
+const APP_VERSION = '2026.10.016-alpha';
+
 /** XP per mark formula: XP = XP_COEFFICIENT × grade⁻² */
 const XP_COEFFICIENT = 1000;
 
