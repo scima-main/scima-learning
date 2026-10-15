@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """serve.py — run the SCIMA Learning frontend locally for tests-and-tools/exploration.
 
-  python tests-and-tools/serve.py                    # static: serves home/ on :8013
+  python tests-and-tools/serve.py                    # static: serves minified/home on :8013
   python tests-and-tools/serve.py --port 9000        # custom port (0 = random free port)
   python tests-and-tools/serve.py --with-backend     # full stack: real FastAPI backend
                                            # (serves home/ + live /api/v1)

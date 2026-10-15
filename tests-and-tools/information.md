@@ -1,6 +1,7 @@
 # SCIMA Learning — frontend test suite (`tests-and-tools/`)
 
-Browser tests + rendering tools for the static frontend in `home/`
+Browser tests + rendering tools for the static frontend (served from
+`minified/home/` by default, falling back to `site/home/`)
 (study.scima-net.com). Python + Playwright; the FastAPI backend is **not**
 required — the site is served statically and `/api/v1` is mocked in-browser
 when needed. Written to be driven (and extended) by LLM agents as well as
@@ -31,7 +32,7 @@ tests-and-tools/
 ├── pytest.ini            markers, default browser
 ├── conftest.py           fixtures: live_server, seeded(), app, demo_app,
 │                         api_mock, page_errors, failure screenshots
-├── serve.py              CLI: static server for home/ (or --with-backend)
+├── serve.py              CLI: static server for minified/home (or --with-backend)
 ├── render.py             CLI: scenario JSON → interactions → PHOTO + trace
 ├── seed.py               CLI+lib: deterministic localStorage seed blobs
 ├── helpers/              server / storage / pages / api_mock / content
@@ -156,7 +157,8 @@ pytest -m content           # content-integrity checkers
   images, and 1000+ char layout stress.
 - Known a11y gap FIXED in this suite's companion commit: Settings' toggle
   knobs are now `role="switch"` buttons with `aria-checked` + `aria-label`
-  (home/app/dashboard-settings.js makeToggle); the checker exempts nothing.
+  (minified/backend serves the same code; source of truth:
+site/home/app/dashboard-settings.js makeToggle); the checker exempts nothing.
 - render.py dimension control: scenario keys `viewport` / `device`,
   steps `set_viewport`, flags `--viewport WxH --device "iPhone 13"`;
   see `scenarios/10-breakpoints.json` and `08-mobile-drawer.json`.
@@ -169,7 +171,8 @@ python serve.py --with-backend --port 8013
 SCIMA_BASE_URL=http://127.0.0.1:8013 pytest ui/
 ```
 
-Serves `home/` at `/` **and** `/dashboard/` with the live registry API.
+Serves the minified frontend at `/` **and** `/dashboard/` with the live
+registry API (run from `minified/backend/`).
 Needs a writable `/data/study/data` (backend's hard-coded `DATA_DIR`).
 
 ## Adding a test — template

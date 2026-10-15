@@ -3,7 +3,8 @@
 Two modes:
 
 1. static  (default everywhere in this suite)
-   Serves the repo's home/ folder over plain HTTP — exactly the files the
+   Serves the repo's preferred frontend (minified/home, falling back to
+   site/home) over plain HTTP — exactly the files the
    FastAPI backend serves at "/" in production, minus the API. Community
    fetches to /api/v1/* then 404, which the frontend handles gracefully
    ("Server temporarily offline"), and tests can mock the API in-browser
@@ -30,8 +31,28 @@ import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-HOME_DIR = REPO_ROOT / "home"
 BACKEND_DIR = REPO_ROOT / "backend"
+
+# Preferred serve root is the minified deploy bundle (./minified/home);
+# fall back to the unminified tree and the historical layout.
+def _find_home() -> Path:
+    for cand in ("minified/home", "site/home", "home"):
+        p = REPO_ROOT / cand
+        if (p / "index.html").exists():
+            return p
+    return REPO_ROOT / "minified" / "home"
+
+
+def _find_backend() -> Path:
+    for cand in ("minified/backend", "backend"):
+        p = REPO_ROOT / cand
+        if (p / "app" / "main.py").exists():
+            return p
+    return REPO_ROOT / "minified" / "backend"
+
+
+HOME_DIR = _find_home()
+BACKEND_DIR = _find_backend()
 
 
 def find_free_port(host: str = "127.0.0.1") -> int:
@@ -78,7 +99,7 @@ def start_static_server(root: str | Path | None = None,
                         host: str = "127.0.0.1",
                         port: int = 0,
                         verbose: bool = False) -> tuple[str, _ThreadingServer]:
-    """Serve `root` (default: <repo>/home) on a background thread.
+    """Serve `root` (default: <repo>/minified/home) on a background thread.
 
     Returns (base_url, server). Call stop_static_server(server) to shut down.
     """
@@ -103,7 +124,8 @@ def stop_static_server(server: _ThreadingServer) -> None:
 def start_backend_server(host: str = "127.0.0.1",
                          port: int = 8013,
                          verbose: bool = False) -> subprocess.Popen:
-    """Launch the real FastAPI backend (serves home/ + /api/v1 together).
+    """Launch the real FastAPI backend (minified/ bundle; serves the
+    frontend + /api/v1 together).
 
     Caller owns the Popen — terminate() it when done.
     """

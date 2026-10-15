@@ -1,5 +1,7 @@
 # SCIMA Learning — Architecture
 
+(all file paths are relative to `./site/`)
+
 How `./home` (the static frontend served at study.scima-net.com) and
 `./backend` (the FastAPI community deck registry) fit together: what each
 side owns, how they are mounted and routed, and the exact contracts that
@@ -61,7 +63,8 @@ makes a network call.
 
 | Path | Role |
 |---|---|
-| `home/` | Static multi-page frontend. Route dirs contain only an `index.html`; all shared assets live at the landing root so every reference can be relative (§3.1). |
+| `site/home/` | Static multi-page frontend (unminified source of truth). Route dirs contain only an `index.html`; all shared assets live at the landing root so every reference can be relative (§3.1). |
+| `minified/` | Deploy bundle: `minified/home/` (transfer-size-minified frontend) + `minified/backend/` (the FastAPI app — the only backend in the tree). `main.py` serves `minified/home` when run from there (§4.2). |
 | `home/shared/` | Cross-context libraries: `shared.js` (sanitizers, rich text), `srs-core.js` + `srs.js` (schedulers), `theme.js` (presets/schedule), `scima-schema.js` (interchange schemas), `translate-shared.js` (define/translate/pinyin). |
 | `home/app/` | The dashboard split: `dashboard-core.js` (must load first) … `dashboard-bootstrap.js` (must load last), plus per-view modules. |
 | `home/lib/` | Vendored bundles: KaTeX (+mhchem), fflate (zip), EPUB/MOBI parsers, process-shim, lazily-loaded pdf.js. |
@@ -224,16 +227,19 @@ a mid-tour replay across route navigations.
    (`schemas.py`) with 413 and streams-counts actual bodies.
 4. Static revalidation middleware — `Cache-Control: no-cache` for
    `.html/.js/.css` so deploys never leave users on heuristic-cached stale
-   assets (ETags still yield 304s).
+   assets (ETags still yield 304s). Minified names are not content-hashed,
+   so this stays no-cache; `GZipMiddleware` (≥1 KiB) provides the transfer-
+   size win on top of minification.
 5. API routes → specific mounts → catch-all mount → 404 handler (below).
 
 ### 4.2 Mounts and URL families
 
 | Mount | Target | Notes |
 |---|---|---|
-| `/dashboard` | `home/` (StaticFiles, html=True) | legacy family; kept for bookmarks and because old community assets reference `/dashboard/shared/…` root-absolute |
+| `/dashboard` | landing dir (StaticFiles, html=True) | legacy family; kept for bookmarks and because old community assets reference `/dashboard/shared/…` root-absolute |
 | `/community` | repo `community/` | deprecated standalone page |
-| `/` | `home/` | canonical family; directory URLs serve each route's `index.html`; `/study` 307s to `/study/` |
+| `/` | landing dir | canonical family; directory URLs serve each route's `index.html`; `/study` 307s to `/study/` |
+| `/community` | legacy page dir | **conditional**: mounted only if a `community[-deprecated]/` dir exists next to (or above) the backend — the minified bundle ships without it and must still boot |
 | 404 handler | — | `/api/*` → honest JSON 404; path-form deep links (`/decks/<subj>/<deck>`, `/library/<a>/<b>`) 302 to the hash form the frontend parses; dotted last segments (assets) → JSON 404; everything else 302 to `/#home` (or `/dashboard/#home` inside that family) |
 
 ### 4.3 API surface (`/api/v1`, all rate-limited per client IP, in-memory)

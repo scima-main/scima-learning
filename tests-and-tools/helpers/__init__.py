@@ -2,7 +2,7 @@
 
 Modules
 -------
-server   static file server for home/ (+ optional real backend launcher)
+server   static file server for minified/home (+ real backend launcher)
 storage  localStorage seeding / reading (mf_state + SCIMATracker)
 pages    navigation + common UI flows (page-object style functions)
 api_mock /api/v1 route mocking for community tests (no backend needed)

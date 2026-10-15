@@ -15,7 +15,7 @@ USAGE
   python tests-and-tools/render.py --list-steps        # full step reference
   python tests-and-tools/render.py --serve-only        # just start a server and print its URL
 
-No base URL given → a throwaway static server for home/ is started
+No base URL given → a throwaway static server for minified/home is started
 automatically (set SCIMA_BASE_URL or --base-url to use a running one, e.g.
 `python tests-and-tools/serve.py` or the real backend).
 
