@@ -1,5 +1,9 @@
 # CHANGELOG (last updated 15th October 2026, UTC)
-
+---
+to implement:
+- swapping back and answer in the study methods
+- create a small browser extension to avoid CORS restrictions on quizlet
+--- 
 #### VERSION 2026.10.017-ALPHA
 
 - quizlet integration added
