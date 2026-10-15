@@ -12,9 +12,10 @@ playwright>=1.47
 pytest>=8.2
 pytest-playwright>=0.5.2
 
-# ── Optional: full-stack mode only (`python tests/serve.py --with-backend`).
-#    The default test mode serves home/ statically and mocks /api/v1 in the
-#    browser, so these are NOT required to run the suite. Pins match
-#    backend/requirements.txt.
+# ── Optional: full-stack mode only (`python tests/serve.py --with-backend`),
+#    the backend Quizlet proxy, and backend/tests. The default test mode
+#    serves home/ statically and mocks /api/v1 in the browser, so these are
+#    NOT required to run the suite. Pins match backend/requirements.txt.
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
+httpx==0.27.2

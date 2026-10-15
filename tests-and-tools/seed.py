@@ -20,9 +20,9 @@ Library use:
     mf = seed.make_mf_state(decks=[seed.make_deck("X", [seed.make_card("a","b")])])
 
 CLI use:
-    python tests/seed.py --list
-    python tests/seed.py --preset demo --print
-    python tests/seed.py --preset demo --out tests/scenarios/seeds/demo.json
+    python tests-and-tools/seed.py --list
+    python tests-and-tools/seed.py --preset demo --print
+    python tests-and-tools/seed.py --preset demo --out tests-and-tools/scenarios/seeds/demo.json
 """
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 """Smoke tests: every page of home/ boots, renders its view, no JS errors.
 
-Run just these first after any change:  pytest tests/ -m smoke
+Run just these first after any change:  pytest tests-and-tools/ -m smoke
 """
 import re
 

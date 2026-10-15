@@ -117,7 +117,8 @@ def read_app_state(page) -> dict:
                 lastRated: c.lastRated ?? null,
             })),
         })),
-        folders: state.folders.map(f => ({ id: f.id, name: f.name })),
+        folders: state.folders.map(f => ({ id: f.id, name: f.name,
+            subjectKey: f.subjectKey || null, parentId: f.parentId || null })),
         sources: state.sources.map(s => ({ id: s.id, name: s.name })),
         reviewHistoryLen: (state.reviewHistory || []).length,
         settings: {

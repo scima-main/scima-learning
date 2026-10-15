@@ -414,3 +414,58 @@ def test_deck_internal_fields_not_promoted_to_metadata(client):
         assert study_state_field not in export["deck"]["cards"][0]
     assert export["deck"]["cards"][0]["front"] == "Hello"
     assert export["deck"]["cards"][0]["back"] == "Hola"
+
+
+# ── /api/v1/import/quizlet (server-side Quizlet proxy) ──────────────────────
+
+class _StubUpstream:
+    def __init__(self, status=200, content=b'{"responses":[]}'):
+        self.status_code = status
+        self.content = content
+
+
+class _StubHttpClient:
+    captured = []
+
+    def __init__(self, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def get(self, url, headers=None):
+        _StubHttpClient.captured.append((url, headers))
+        return _StubUpstream()
+
+
+def test_import_quizlet_proxies_upstream(client, monkeypatch):
+    from app import main as main_module
+    _StubHttpClient.captured = []
+    monkeypatch.setattr(main_module.httpx, "AsyncClient", _StubHttpClient)
+    r = client.get("/api/v1/import/quizlet", params={"set": "12345"})
+    assert r.status_code == 200
+    assert r.json() == {"responses": []}
+    url, headers = _StubHttpClient.captured[0]
+    assert "studiableContainerId%5D=12345" in url
+    assert "perPage=50" in url and "page=1" in url
+    assert headers["referer"] == "https://quizlet.com/12345/"
+
+
+def test_import_quizlet_rejects_non_numeric_set(client):
+    r = client.get("/api/v1/import/quizlet", params={"set": "abc"})
+    assert r.status_code == 422
+
+
+def test_import_quizlet_upstream_block_becomes_502(client, monkeypatch):
+    from app import main as main_module
+
+    class _Blocked(_StubHttpClient):
+        async def get(self, url, headers=None):
+            return _StubUpstream(status=403, content=b"")
+
+    monkeypatch.setattr(main_module.httpx, "AsyncClient", _Blocked)
+    r = client.get("/api/v1/import/quizlet", params={"set": "1"})
+    assert r.status_code == 502

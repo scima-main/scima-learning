@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""serve.py — run the SCIMA Learning frontend locally for tests/exploration.
+"""serve.py — run the SCIMA Learning frontend locally for tests-and-tools/exploration.
 
-  python tests/serve.py                    # static: serves home/ on :8013
-  python tests/serve.py --port 9000        # custom port (0 = random free port)
-  python tests/serve.py --with-backend     # full stack: real FastAPI backend
+  python tests-and-tools/serve.py                    # static: serves home/ on :8013
+  python tests-and-tools/serve.py --port 9000        # custom port (0 = random free port)
+  python tests-and-tools/serve.py --with-backend     # full stack: real FastAPI backend
                                            # (serves home/ + live /api/v1)
 
 Static mode (default) is all the test suite needs: it serves exactly the
@@ -17,7 +17,7 @@ hard-coded DATA_DIR). It serves home/ at BOTH "/" and "/dashboard/", the
 legacy mount families, plus the real registry API.
 
 Point tests at a server you started yourself with:
-  SCIMA_BASE_URL=http://127.0.0.1:8013 pytest tests/
+  SCIMA_BASE_URL=http://127.0.0.1:8013 pytest tests-and-tools/
 """
 from __future__ import annotations
 

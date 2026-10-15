@@ -1,4 +1,4 @@
-# SCIMA Learning — frontend test suite (`tests/`)
+# SCIMA Learning — frontend test suite (`tests-and-tools/`)
 
 Browser tests + rendering tools for the static frontend in `home/`
 (study.scima-net.com). Python + Playwright; the FastAPI backend is **not**
@@ -9,23 +9,23 @@ humans.
 ## Quickstart
 
 ```bash
-pip install -r tests/requirements.txt
+pip install -r tests-and-tools/requirements.txt
 python -m playwright install chromium     # once; add --with-deps on bare Linux
 
-cd tests
-pytest                                    # whole suite (174 tests)
+cd tests-and-tools
+pytest                                    # whole suite (180 tests)
 pytest -m smoke                           # page-load sanity only
 pytest ui/test_study.py -k srs -x         # one file / one test
 python render.py scenarios/02-home-demo.json          # → screenshots/02-home-demo.png
 python serve.py                                       # manual server at :8013
 ```
 
-From the repo root: `pytest tests/` works too (`tests/pytest.ini` is picked up).
+From the repo root: `pytest tests-and-tools/` works too (`tests-and-tools/pytest.ini` is picked up).
 
 ## Layout
 
 ```
-tests/
+tests-and-tools/
 ├── information.md        ← this file
 ├── requirements.txt      playwright + pytest (+ optional backend deps)
 ├── pytest.ini            markers, default browser
@@ -175,7 +175,7 @@ Needs a writable `/data/study/data` (backend's hard-coded `DATA_DIR`).
 ## Adding a test — template
 
 ```python
-# tests/ui/test_my_feature.py
+# tests-and-tools/ui/test_my_feature.py
 import pytest
 from playwright.sync_api import expect
 from helpers import pages
@@ -190,10 +190,15 @@ def test_x(page, base_url, seeded, page_errors):
 
 `ui/test_features.py` covers the post-suite feature wave: timezone day
 boundary (`settings.dayTimezone`), sanitizer-filled imports, move-deck-
-between-subjects, card duplication, deck-segment deep links, the
+between-subjects (and move-folder-between-subjects, subtree included),
+card duplication, deck-segment deep links, the
 Ctrl+Alt+K / Ctrl+Alt+M card-move modals, and the 🎴 Quizlet import tab
-(mock its webapi with `page.route` + an `access-control-allow-origin`
-header; `scenarios/11-quizlet-import.json` shows the same in render.py).
+(fetch chain: same-origin `/api/v1/import/quizlet` backend proxy →
+`settings.quizletProxy` template → direct → public proxies → paste
+fallback of scima JSON or TSV; mock any hop with `page.route` + an
+`access-control-allow-origin` header; `scenarios/11-quizlet-import.json`
+shows the same in render.py). Backend proxy tests live in
+`backend/tests/test_api.py`.
 
 Failing tests automatically leave `screenshots/failures/<test>.png`.
 Prefer the stable ids/classes above over text where possible; use

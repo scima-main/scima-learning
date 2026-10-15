@@ -241,6 +241,7 @@ function renderSubjectView(c, subjectKey) {
         el('div',{class:'folder-actions'},
           btn('▶','ghost',{small:true,onclick:e=>{e.stopPropagation();state.studyScope=[{type:'folder',id:folder.id}];navigate('study');}}),
           btn('⬇','ghost',{small:true,title:'Export folder as JSON',onclick:e=>{e.stopPropagation();exportFolder(folder.id);}}),
+          btn('📚','ghost',{small:true,title:'Move to Subject…',onclick:e=>{e.stopPropagation();openMoveFolderSubjectModal(folder.id);}}),
           btn('✏','ghost',{small:true,onclick:e=>{e.stopPropagation();openRenameFolderModal(folder.id);}}),
           btn('×','danger',{small:true,onclick:e=>{e.stopPropagation();deleteFolder(folder.id);}})
         ),
@@ -299,6 +300,7 @@ function renderFolderView(c, folderId) {
       btn('+ Subfolder','ghost',{onclick:()=>openCreateFolderModal(folder.subjectKey,folderId)}),
       btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal(folder.subjectKey,folderId)}),
       btn('▶ Study Folder','ghost',{onclick:()=>{ state.studyScope=[{type:'folder',id:folderId}]; navigate('study'); }}),
+      btn('📚 Move to Subject…','ghost',{onclick:()=>openMoveFolderSubjectModal(folderId)}),
       btn('⬇️ Export Folder','ghost',{onclick:()=>exportFolder(folderId)})
     )
   );
@@ -313,6 +315,7 @@ function renderFolderView(c, folderId) {
         mkIcon(sf.emoji||'📁',sf.image,'22px','4px'),
         el('div',{style:'flex:1'},el('div',{class:'folder-name'},sf.name),el('div',{class:'folder-meta'},`${sfd.length} deck${sfd.length!==1?'s':''}`)),
         el('div',{class:'folder-actions'},
+          btn('📚','ghost',{small:true,title:'Move to Subject…',onclick:e=>{e.stopPropagation();openMoveFolderSubjectModal(sf.id);}}),
           btn('✏','ghost',{small:true,onclick:e=>{e.stopPropagation();openRenameFolderModal(sf.id);}}),
           btn('×','danger',{small:true,onclick:e=>{e.stopPropagation();deleteFolder(sf.id);}})
         ),
@@ -489,6 +492,54 @@ function openMoveSubjectsModal(deckIds) {
       });
       scheduleSave(); closeModal(); renderView('decks'); renderSidebar();
       showToast(`Moved ${count} deck${count>1?'s':''} to ${subjects[key]?.name||key} 📚`);
+    }}));
+  });
+}
+
+/** Ids of a folder and every descendant folder (subject moves must carry
+ *  the whole subtree — a subfolder can't keep the old subject). */
+function folderSubtreeIds(folderId) {
+  const out = [folderId];
+  const walk = id => state.folders.filter(f=>f.parentId===id).forEach(f=>{ out.push(f.id); walk(f.id); });
+  walk(folderId);
+  return out;
+}
+
+/** Moves a folder (with its subfolder subtree and every deck inside it) to
+ *  another subject. Decks keep their folder; only the subject tagging
+ *  changes, so counts/due rollups stay correct under the new subject. */
+function moveFolderToSubject(folderId, subjectKey) {
+  const ids = new Set(folderSubtreeIds(folderId));
+  state.folders.forEach(f=>{ if(ids.has(f.id)) f.subjectKey = subjectKey; });
+  state.decks.forEach(d=>{ if(d.folderId && ids.has(d.folderId)) d.subject = subjectKey; });
+  const nav = state.deckNav || null;
+  if(nav && nav.folderId && ids.has(nav.folderId)) nav.subjectKey = subjectKey;
+  scheduleSave();
+  if(typeof renderSidebar === 'function') renderSidebar();
+}
+
+/** Folder counterpart of openMoveSubjectsModal(): one subject select, and
+ *  a summary of what travels with the folder. */
+function openMoveFolderSubjectModal(folderId) {
+  const folder = state.folders.find(f=>f.id===folderId); if(!folder) return;
+  const ids = folderSubtreeIds(folderId);
+  const deckCount = state.decks.filter(d=>d.folderId && ids.includes(d.folderId)).length;
+  const subCount = ids.length - 1;
+  openModal(`Move Folder to Subject`, body => {
+    body.appendChild(el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:16px'},
+      `"${folder.name}" moves with ${nOf(deckCount,'deck')}${subCount?` and ${nOf(subCount,'subfolder')}`:''} inside it.`));
+    const subjects = typeof getAllSubjects === 'function' ? getAllSubjects() : {};
+    const sel = el('select',{class:'u-input',style:'margin-bottom:12px'});
+    Object.entries(subjects).forEach(([key,s])=>{
+      sel.appendChild(el('option',{value:key,class:'u-bg'},`${s.name} (${s.board||''})`));
+    });
+    sel.value = folder.subjectKey || DEFAULT_SUBJECT_KEY;
+    body.appendChild(sel);
+    body.appendChild(btn('Move →','primary',{full:true,onclick:()=>{
+      const key = sel.value;
+      moveFolderToSubject(folderId, key);
+      closeModal(); renderView('decks');
+      showToast(`Moved "${folder.name}" to ${subjects[key]?.name||key} 📁`);
     }}));
   });
 }
@@ -1572,39 +1623,53 @@ function qzBuildCards(parsed, opts = {}) {
   return { cards, meta };
 }
 async function qzFetchJson(url) {
-  // direct first (works if Quizlet ever opens CORS / same-origin contexts),
-  // then public read-only proxies. First OK response wins.
-  const attempts = [
-    url,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-  ];
-  let lastErr = null;
-  for (const u of attempts) {
-    try {
-      const r = await fetch(u, { headers: { accept: 'application/json' }, credentials: 'omit' });
-      if (r.ok) return await r.json();
-      lastErr = new Error(`HTTP ${r.status}`);
-    } catch (e) { lastErr = e; }
-  }
-  throw lastErr || new Error('fetch failed');
+  const r = await fetch(url, { headers: { accept: 'application/json' }, credentials: 'omit' });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return await r.json();
 }
-async function qzFetchSet(id, opts = {}) {
-  const { perPage = 50, delay = 120, maxPages = 40 } = opts;
-  const url = (pp, page, token) =>
+/** Ordered fetch strategies for one Quizlet webapi page. Quizlet sends no
+ *  CORS headers and its bot filtering rejects shared public proxies, so the
+ *  same-origin backend proxy (/api/v1/import/quizlet, server-side fetch) is
+ *  tried first; then a user-configured proxy (settings.quizletProxy,
+ *  "{url}" placeholder); then direct; then public proxies as best effort. */
+function qzStrategies(id, pp, page, token) {
+  const qzUrl =
     `https://quizlet.com/webapi/3.4/studiable-item-documents` +
     `?filters%5BstudiableContainerId%5D=${id}&filters%5BstudiableContainerType%5D=1` +
     `&perPage=${pp}&page=${page}` + (token ? `&pagingToken=${encodeURIComponent(token)}` : '');
-  let pp = perPage, page = 1, token = null, items = [], guard = 0;
+  const out = [];
+  const apiBase = window.SCIMA_API_BASE || '/api/v1';
+  out.push(['api', `${apiBase}/import/quizlet?set=${id}&page=${page}&perPage=${pp}`]);
+  const tpl = (typeof state !== 'undefined' && state.settings) ? state.settings.quizletProxy : null;
+  if (typeof tpl === 'string' && tpl.includes('{url}')) {
+    out.push(['userproxy', tpl.replace('{url}', encodeURIComponent(qzUrl))]);
+  }
+  out.push(['direct', qzUrl]);
+  out.push(['allorigins', `https://api.allorigins.win/raw?url=${encodeURIComponent(qzUrl)}`]);
+  out.push(['corsproxy', `https://corsproxy.io/?url=${encodeURIComponent(qzUrl)}`]);
+  return out;
+}
+async function qzFetchSet(id, opts = {}) {
+  const { perPage = 50, delay = 120, maxPages = 40 } = opts;
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let pp = perPage, page = 1, token = null, items = [], guard = 0, lockedName = null;
   while (guard++ < maxPages) {
-    let res;
-    try {
-      res = await qzFetchJson(url(pp, page, token));
-    } catch (e) {
-      if (page === 1 && pp !== 5) { pp = 5; page = 1; token = null; items = []; guard = 1; continue; }
-      throw e;
+    const candidates = qzStrategies(id, pp, page, token)
+      .filter(([name]) => !lockedName || name === lockedName);
+    let res = null, used = null, lastErr = null;
+    for (const [name, url] of candidates) {
+      try {
+        res = await qzFetchJson(url);
+        used = name;
+        break;
+      } catch (e) { lastErr = e; }
     }
+    if (!res) {
+      // Some deployments cap perPage; retry the whole walk at 5.
+      if (page === 1 && pp !== 5) { pp = 5; page = 1; token = null; items = []; guard = 1; lockedName = null; continue; }
+      throw lastErr || new Error('fetch failed');
+    }
+    lockedName = used;                 // stick with whatever worked for page 1
     const r0 = res?.responses?.[0];
     if (!r0?.models) throw new Error('Unexpected Quizlet response shape — the API may have changed.');
     const chunk = r0.models.studiableItem || [];
@@ -1615,6 +1680,32 @@ async function qzFetchSet(id, opts = {}) {
     if (delay) await sleep(delay);
   }
   return items;
+}
+/** Paste fallback: scima JSON (e.g. quizlet-to-scima.js console output) or
+ *  tab-separated term/definition lines. Returns {name, cards}. */
+function qzParsePasted(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return null;
+  if (text[0] === '{' || text[0] === '[') {
+    const data = JSON.parse(text);                       // throws → caller shows ❌
+    const norm = (typeof scimaToFullDeck === 'function') ? scimaToFullDeck(data) : null;
+    const deck = norm || data.deck || data;
+    if (!deck || !Array.isArray(deck.cards)) throw new Error('JSON has no deck.cards');
+    return { name: deck.name || '', cards: deck.cards };
+  }
+  const cards = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const parts = line.split('\t');
+    if (parts.length < 2) continue;
+    const [front, back, ...rest] = parts.map(s => s.trim());
+    if (!front && !back) continue;
+    const card = { type: 'basic', front, back };
+    if (rest.length) card.hint = rest.join('\n');
+    cards.push(card);
+  }
+  if (!cards.length) throw new Error('No tab-separated pairs found');
+  return { name: '', cards };
 }
 
 function openCreateDeckModal(subjectKey, folderId) {
@@ -1980,7 +2071,7 @@ function openCreateDeckModal(subjectKey, folderId) {
     // --- Quizlet import pane ---
     const quizletPane = el('div',{style:'display:none'});
     const qzLinkField = createField('Quizlet set link','text','https://quizlet.com/123456789/set-slug');
-    const qzNameField = createField('Deck Name (optional override)','text','');
+    const qzNameField = createField('Deck Name (optional override)','text','Leave empty for "Quizlet set <id>"');
     const qzDedupe = el('input',{type:'checkbox',style:'width:15px;height:15px;accent-color:var(--blue);cursor:pointer'});
     const qzExtrasSel = el('select',{class:'u-input',style:'width:auto'});
     [['hint','Extra sides → hint'],['back','Extra sides → back'],['drop','Drop extra sides']]
@@ -2005,14 +2096,27 @@ function openCreateDeckModal(subjectKey, folderId) {
           + (built.meta.duplicatesSkipped?` · ${built.meta.duplicatesSkipped} dupes skipped`:'') + `</span>`;
         qzCreateBtn.style.display='';
       } catch(err){
-        qzStatus.innerHTML=`<span style="color:#ef4444">❌ ${escHtml((err && err.message) || 'fetch failed')} — the set may be private or unreachable.</span>`;
+        qzStatus.innerHTML=`<span style="color:#ef4444">❌ ${escHtml((err && err.message) || 'fetch failed')} — Quizlet blocks most browser fetch paths. `
+          + `Set a proxy in Settings, or paste exported JSON / TSV below.</span>`;
       } finally { qzFetchBtn.disabled=false; }
     });
+    const qzPasteField = createField('…or paste exported JSON / TSV (term ⇥ definition per line)','text','Paste quizlet-to-scima JSON or TSV lines…',true);
+    const qzPasteBtn = btn('Use pasted data','ghost',{full:true,onclick:()=>{
+      try {
+        const parsed = qzParsePasted(qzPasteField.querySelector('textarea').value);
+        if(!parsed || !parsed.cards.length){ qzStatus.innerHTML='<span style="color:#ef4444">Nothing parseable in the paste.</span>'; return; }
+        qzParsed = { id: 'pasted', name: parsed.name, cards: parsed.cards, meta: { cards: parsed.cards.length } };
+        qzStatus.innerHTML=`<span style="color:#22c55e">✓ ${parsed.cards.length} card${parsed.cards.length>1?'s':''} from paste</span>`;
+        qzCreateBtn.style.display='';
+      } catch(err){
+        qzStatus.innerHTML=`<span style="color:#ef4444">❌ ${escHtml((err && err.message) || 'unparseable paste')}</span>`;
+      }
+    }});
     qzCreateBtn.addEventListener('click', () => {
       if(!qzParsed) return;
       const override = qzNameField.querySelector('input').value.trim();
       const deck = sanitizeDeck({
-        name: override || `Quizlet set ${qzParsed.id}`,
+        name: override || qzParsed.name || `Quizlet set ${qzParsed.id}`,
         emoji: '🎴',
         subject: subjectKey || DEFAULT_SUBJECT_KEY,
         folderId: folderId || null,
@@ -2026,7 +2130,9 @@ function openCreateDeckModal(subjectKey, folderId) {
       el('div',{style:'display:flex;gap:14px;align-items:center;margin:4px 0 8px'},
         el('label',{style:'font-size:12px;font-weight:700;display:flex;gap:6px;align-items:center;cursor:pointer'},qzDedupe,'Skip duplicates'),
         el('label',{style:'font-size:12px;font-weight:700;display:flex;gap:6px;align-items:center'},'Extras:',qzExtrasSel)),
-      qzFetchBtn, qzStatus, qzCreateBtn);
+      qzFetchBtn, qzStatus, qzCreateBtn,
+      el('div',{style:'border-top:1px solid var(--border);margin-top:14px;padding-top:12px'}),
+      qzPasteField, qzPasteBtn);
 
     body.append(createPane, importPane, textPane, aiPane, quizletPane);
 

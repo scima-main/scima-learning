@@ -7,10 +7,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Sequence
 
+import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import db, ratelimit, scimaschema
@@ -644,6 +645,50 @@ def export_deck(
     return export_data
 
 
+@app.get("/api/v1/import/quizlet")
+async def proxy_quizlet(
+    request: Request,
+    set_id: str = Query(..., alias="set", pattern=r"^[0-9]{1,20}$"),
+    page: int = Query(1, ge=1, le=1000),
+    per_page: int = Query(50, ge=1, le=200),
+):
+    """Same-origin proxy for Quizlet's public studiable-item-documents webapi.
+
+    Browsers cannot call quizlet.com cross-origin (no CORS headers), and
+    Quizlet's bot filtering rejects shared public proxies (403/522/401), so
+    the Create-Deck → 🎴 Quizlet tab calls this endpoint first and the
+    SERVER fetches with browser-like headers. The payload is passed through
+    verbatim; upstream failures surface as 502 so the client can fall back
+    to its other strategies (user proxy, direct, paste).
+    """
+    enforce_rate_limit(request, "quizlet")
+    url = (
+        "https://quizlet.com/webapi/3.4/studiable-item-documents"
+        f"?filters%5BstudiableContainerId%5D={set_id}"
+        "&filters%5BstudiableContainerType%5D=1"
+        f"&perPage={per_page}&page={page}"
+    )
+    headers = {
+        "user-agent": (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "accept": "application/json, text/plain, */*",
+        "accept-language": "en-US,en;q=0.9",
+        "referer": f"https://quizlet.com/{set_id}/",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            upstream = await client.get(url, headers=headers)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502,
+                           detail=f"Quizlet unreachable: {type(exc).__name__}")
+    if upstream.status_code != 200:
+        raise HTTPException(status_code=502,
+                           detail=f"Quizlet answered HTTP {upstream.status_code}")
+    return Response(content=upstream.content, media_type="application/json")
+
+
 @app.post(
     "/api/v1/decks",
     response_model=DeckSummary,
@@ -771,6 +816,12 @@ def create_deck(
 # main.py sits at <repo>/backend/app/main.py, so parents[2] is <repo>.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STUDY_LANDING_DIR = REPO_ROOT / "home"
+# The legacy standalone community page was renamed upstream
+# (community/ → community-deprecated/); accept either name so checkouts
+# from before or after the rename both boot.
+COMMUNITY_DIR = REPO_ROOT / "community-deprecated"
+if not COMMUNITY_DIR.exists():
+    COMMUNITY_DIR = REPO_ROOT / "community"
 
 # Legacy URL family (/dashboard/…). Kept because existing bookmarks use it
 # and the community page loads /dashboard/shared/theme.js root-absolute.
@@ -783,7 +834,7 @@ app.mount(
 app.mount(
     "/community",
     StaticFiles(
-        directory=REPO_ROOT / "community",
+        directory=COMMUNITY_DIR,
         html=True,
     ),
     name="community",

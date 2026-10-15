@@ -1046,6 +1046,10 @@ function btn(label, variant = 'primary', opts = {}) {
   const b = el('button', { class: `btn btn-${variant}${opts.small ? ' btn-sm' : ''}${opts.full ? ' btn-full' : ''}` }, label);
   if (opts.onclick) b.addEventListener('click', opts.onclick);
   if (opts.disabled) b.disabled = true;
+  // Icon-only buttons (▶ ⬇ 📚 ×) have no textual name — title/aria-label are
+  // their only accessible name, so forward them instead of dropping them.
+  if (opts.title) b.title = opts.title;
+  if (opts.ariaLabel) b.setAttribute('aria-label', opts.ariaLabel);
   return b;
 }
 

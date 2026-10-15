@@ -1,4 +1,10 @@
-# CHANGELOG (last updated 14th October 2026, UTC)
+# CHANGELOG (last updated 15th October 2026, UTC)
+
+#### VERSION 2026.10.017-ALPHA
+
+- quizlet integration added
+- more intuitive file management workflows
+- bug fixes
 
 #### VERSION 2026.10.016-ALPHA
 

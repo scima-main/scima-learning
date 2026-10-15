@@ -7,7 +7,7 @@ cross the boundary.
 
 Sibling directories not covered here: `./app` (Android client — independent
 of the home↔backend boundary described here) and `./tests` (browser test
-suite for `home/`; see `tests/information.md`).
+suite for `home/`; see `tests-and-tools/information.md`).
 
 ---
 
@@ -69,7 +69,7 @@ makes a network call.
 | `backend/tests/` | API sanity tests (`test_api.py`) against a throwaway DB. |
 | `community/` | Legacy standalone community page; still mounted at `/community` (§4.2) but superseded by the `#community` hash view inside the landing document. |
 | `app/` | Android client (out of scope). |
-| `tests/` | Playwright/pytest suite + render/serve/seed CLIs for `home/` (`tests/information.md`). |
+| `tests-and-tools/` | Playwright/pytest suite + render/serve/seed CLIs for `home/` (`tests-and-tools/information.md`). |
 
 ---
 
@@ -180,14 +180,23 @@ document and none of the cross-page machinery below runs.
   builds a copy/paste prompt — never to the SCIMA backend.
 - **Quizlet import** (Create Deck modal, 🎴 tab): paste a set link; the
   ported `quizlet-to-scima` pipeline paginates Quizlet's public
-  `studiable-item-documents` webapi (direct attempt, then public CORS
-  proxies), converts rich text/entities, maps custom side labels by
-  label-then-position, sends surplus sides to `hint`, and runs every card
-  through `sanitizeCard()` on create.
-- **Card/deck surgery**: duplicate-card action, move-decks-between-subjects
-  (selection bar), and Ctrl+Alt+K / Ctrl+Alt+M single-textbox modals moving
-  a card selection to a new / existing deck (button keeps the combined
-  modal).
+  `studiable-item-documents` webapi, converts rich text/entities, maps
+  custom side labels by label-then-position, sends surplus sides to
+  `hint`, and runs every card through `sanitizeCard()` on create.
+  Quizlet sends no CORS headers and rejects shared public proxies, so
+  fetches walk a strategy chain: **1)** same-origin backend proxy
+  `GET /api/v1/import/quizlet?set=<digits>` (server-side httpx fetch with
+  browser-like headers, rate-limited 30/min, digits-only set id — no CORS
+  involved), **2)** optional user proxy template `settings.quizletProxy`
+  (`{url}` placeholder), **3)** direct, **4)** public CORS proxies as best
+  effort. The winning strategy locks for the whole paging walk. When every
+  path fails the tab offers a paste fallback: stamped scima JSON (e.g. the
+  `quizlet-to-scima.js` console helper) or tab-separated pairs.
+- **Card/deck/folder surgery**: duplicate-card action, move-decks-between-
+  subjects (deck selection bar), move-folder-between-subjects (📚 row action,
+  folder toolbar, subtree-aware: subfolders and contained decks are retagged
+  together), and Ctrl+Alt+K / Ctrl+Alt+M single-textbox modals moving a card
+  selection to a new / existing deck (button keeps the combined modal).
 - **Interchange schemas**: `shared/scima-schema.js` defines one envelope
   (`{"$schema":"scima", schema, schemaVersion, kind, …}`) with three payload
   grades — `skeletal` (short-key, import-only, LLM-friendly), `share`
@@ -278,7 +287,7 @@ so a statically-hosted frontend can point at a separately-deployed API
 
 Under a static-only host (no API), `/api/v1/health` 404s and the view shows
 "Server temporarily offline at /api/v1" — graceful degradation is a tested
-behaviour (`tests/ui/test_community.py` mocks the API in-browser with the
+behaviour (`tests-and-tools/ui/test_community.py` mocks the API in-browser with the
 `schemas.py` shapes).
 
 ### 5.2 What the backend never sees
@@ -296,7 +305,7 @@ One interchange system, three implementations kept honest by tests:
 home/shared/scima-schema.js  ◀──lockstep──▶  backend/app/scimaschema.py
         │                                            │
         ▼                                            ▼
-  tests/ (seed factories,                    backend/tests/test_api.py
+  tests-and-tools/ (seed factories,                    backend/tests/test_api.py
   community mocks use schemas.py)            (upload/list/search/export)
 ```
 
@@ -305,8 +314,8 @@ home/shared/scima-schema.js  ◀──lockstep──▶  backend/app/scimaschema
 - Production: one uvicorn process serves API **and** both static families;
   relative assets make the mount prefix irrelevant to the frontend.
 - Static-only dev/test: any file server over `home/` works
-  (`python tests/serve.py`); community shows its offline state or a mocked
-  API. Full-stack dev: `python tests/serve.py --with-backend` (needs a
+  (`python tests-and-tools/serve.py`); community shows its offline state or a mocked
+  API. Full-stack dev: `python tests-and-tools/serve.py --with-backend` (needs a
   writable `/data/study/data`, the backend's hard-coded `DATA_DIR`).
 - `TrustedHost` means local testing must use `localhost`/`127.0.0.1` hosts.
 
@@ -355,10 +364,10 @@ Server: `/data/study/data/scima.db` + `/data/study/data/decks/` (§4.4).
 - **Rate limits are process-local** (in-memory deques, per IP with
   X-Forwarded-For last-hop); scaling out needs shared state.
 - **Tour sandbox** means a skipped tour restores pre-tour storage — seeding
-  tools must account for it (`tests/seed.py` presets do).
+  tools must account for it (`tests-and-tools/seed.py` presets do).
 - **Extension parity**: every `home/app/dashboard-*.js` file must keep
   running inside the extension build; site-only behaviour is gated on
   `window.SCIMA_PAGE` / `!isExtension`.
 
-For testing this architecture, see `tests/information.md` (UI suite,
+For testing this architecture, see `tests-and-tools/information.md` (UI suite,
 render/serve/seed CLIs, selector cheat-sheet).

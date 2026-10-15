@@ -8,16 +8,16 @@ Chromium via Playwright, writes a PNG, and prints a machine-readable trace
 of every step (plus console output and any JS page errors).
 
 USAGE
-  python tests/render.py tests/scenarios/02-home-demo.json
-  python tests/render.py tests/scenarios/03-study-session.json --out shot.png
-  python tests/render.py --goto /study/ --seed demo --out study.png \
+  python tests-and-tools/render.py tests-and-tools/scenarios/02-home-demo.json
+  python tests-and-tools/render.py tests-and-tools/scenarios/03-study-session.json --out shot.png
+  python tests-and-tools/render.py --goto /study/ --seed demo --out study.png \
       --steps-json '[{"pause": 800}, {"click": "#tutorial-target-study-start"}, {"pause": 500}]'
-  python tests/render.py --list-steps        # full step reference
-  python tests/render.py --serve-only        # just start a server and print its URL
+  python tests-and-tools/render.py --list-steps        # full step reference
+  python tests-and-tools/render.py --serve-only        # just start a server and print its URL
 
 No base URL given → a throwaway static server for home/ is started
 automatically (set SCIMA_BASE_URL or --base-url to use a running one, e.g.
-`python tests/serve.py` or the real backend).
+`python tests-and-tools/serve.py` or the real backend).
 
 SCENARIO FILE
 {
@@ -32,7 +32,7 @@ SCENARIO FILE
   "seed":         "preset:demo",              // see SEED below
   "block_external": true,                     // abort non-localhost requests (default)
   "video":        false,                      // also save a .webm next to the photo
-  "output":       "screenshots/my.png",       // final photo (relative → tests/)
+  "output":       "screenshots/my.png",       // final photo (relative → tests-and-tools/)
   "full_page":    false,                      // final photo captures whole page
   "steps": [ ... ]                            // any sequence, see --list-steps
 }
@@ -43,15 +43,15 @@ boots straight into it; the first-run tour is suppressed by default):
   "seed": "scenarios/seeds/custom.json"   ({"mf_state":..,"SCIMATracker":..})
   "seed": {"mf_state": {...}, "SCIMATracker": {...}}   (inline)
   "seed": {"decks": [...], ...}                        (inline mf_state)
-Build custom seeds with:  python tests/seed.py  (see its --help / docstring).
+Build custom seeds with:  python tests-and-tools/seed.py  (see its --help / docstring).
 
 STEPS — each step is an object with exactly ONE action key.
-Run `python tests/render.py --list-steps` for the full reference.
+Run `python tests-and-tools/render.py --list-steps` for the full reference.
 Selectors are Playwright selectors: CSS, text=..., role locators via
 {"selector": "..."}, xpath=..., plus #id shortcuts.
 
 OUTPUT
-  <output>.png            the photo (default: tests/screenshots/<name>.png)
+  <output>.png            the photo (default: tests-and-tools/screenshots/<name>.png)
   <output>.trace.json     step-by-step results, console log, page errors
   <output>-FAIL.png       captured automatically when a step fails
 Exit code 0 on success, 1 on any step/assert failure.
@@ -84,7 +84,7 @@ try:
 except ImportError:
     raise SystemExit(
         "Playwright is not installed. Run:\n"
-        "  pip install -r tests/requirements.txt\n"
+        "  pip install -r tests-and-tools/requirements.txt\n"
         "  python -m playwright install chromium"
     )
 
@@ -132,7 +132,7 @@ State & seeding
 
 Output & assertions
   screenshot  "mid.png" | {"path":..., "full_page":true, "selector":"#main"}
-              intermediate photo (relative → tests/screenshots/)
+              intermediate photo (relative → tests-and-tools/screenshots/)
   assert      {"selector": "#view-study", "visible": true,
                "text_contains": "Study Mode", "count": 6,
                "url_contains": "/study/", "title_contains": "SCIMA",

@@ -1,6 +1,6 @@
 """Shared pytest fixtures for the SCIMA frontend (home/) test suite.
 
-What this gives every test under tests/ui/:
+What this gives every test under tests-and-tools/ui/:
 
   live_server / base_url   A static HTTP server for home/ is started once
                            per session on a random free port (override with
@@ -17,7 +17,7 @@ What this gives every test under tests/ui/:
   console_messages         All console messages [{type,text}].
   api_mock(handlers)       Mocks /api/v1/* in-browser (helpers/api_mock.py).
   Failure screenshots      Any failing test leaves a PNG in
-                           tests/screenshots/failures/.
+                           tests-and-tools/screenshots/failures/.
 
 External requests (Google Fonts, etc.) are aborted by default so tests are
 hermetic and fast; set SCIMA_ALLOW_EXTERNAL=1 to let them through.

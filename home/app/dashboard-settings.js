@@ -153,6 +153,17 @@ function renderSettings(c) {
     tzSel);
   studyCard.appendChild(tzWrap);
 
+  // ── Optional Quizlet proxy template (fallback when every built-in fetch path is blocked) ──
+  const proxyWrap=el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'});
+  const proxyInput=el('input',{type:'text',class:'u-input',placeholder:'https://my-proxy.example/?url={url}',style:'margin-top:6px'});
+  proxyInput.value=state.settings.quizletProxy||'';
+  proxyInput.addEventListener('change',()=>{ state.settings.quizletProxy=proxyInput.value.trim(); scheduleSave(); });
+  proxyWrap.append(
+    el('div',{style:'font-size:13px;font-weight:600'},'🔀 Quizlet proxy template (optional)'),
+    el('div',{style:'font-size:11px;color:var(--muted);margin:2px 0 6px'},'If Quizlet blocks the built-in server proxy, route webapi calls through your own proxy. {url} is replaced with the encoded Quizlet request.'),
+    proxyInput);
+  studyCard.appendChild(proxyWrap);
+
   grid.append(aiCard,studyCard);
 
   const dataCard=el('div',{class:'card',style:'padding:20px;margin-top:16px'},

@@ -113,7 +113,7 @@ def start_backend_server(host: str = "127.0.0.1",
     except ImportError as e:
         raise SystemExit(
             "Full-stack mode needs the backend deps:\n"
-            "  pip install -r tests/requirements.txt   (or backend/requirements.txt)\n"
+            "  pip install -r tests-and-tools/requirements.txt   (or backend/requirements.txt)\n"
             f"ImportError was: {e}"
         )
     env = dict(os.environ)
