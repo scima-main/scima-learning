@@ -694,8 +694,10 @@ const dashboardStore = {
   load() { return { decks: state.decks, folders: state.folders, settings: state.settings }; },
   save() { scheduleSave(); },
   addDeckToDashboard(deckExport, deck, subjectKey, folderId) {
-    const cards = (deckExport.deck.cards || []).map(c => ({ ...c, id: c.id || dashUid('c') }));
-    const d = {
+    // Sanitize on the way in: missing/empty non-content fields (scheduling,
+    // ids, flags…) get creation defaults rather than null/undefined.
+    const cards = (deckExport.deck.cards || []).map(c => sanitizeCard({ ...c, id: c.id || dashUid('c') }));
+    const d = sanitizeDeck({
       id: dashUid('d'),
       name: deckExport.deck.name || deck.name,
       emoji: deckExport.deck.emoji || '📖',
@@ -704,7 +706,7 @@ const dashboardStore = {
       folderId: folderId || null,
       color: 'var(--blue)',
       cards,
-    };
+    });
     state.decks.push(d);
     scheduleSave();
     if (typeof renderSidebar === 'function') renderSidebar();

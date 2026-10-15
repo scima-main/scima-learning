@@ -129,6 +129,30 @@ function renderSettings(c) {
       return wrap;
     })(),
     makeRange('Daily Review Goal: ','dailyGoal',5,100,'var(--blue)'),makeRange('New Cards Per Day: ','newCardsPerDay',1,50,'var(--pink)'),makeRange('Leech Threshold: ','leechThreshold',3,20,'#FB923C'));
+
+  // ── Day boundary: timezone in which streaks / daily goal / history roll over ──
+  const tzWrap=el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'});
+  const tzPreview=el('span',{style:'color:var(--muted);font-size:11px;margin-left:6px'},`(today: ${today()})`);
+  const tzSel=el('select',{class:'u-input',style:'margin-top:6px'});
+  let tzSupported=[];
+  try { tzSupported = typeof Intl.supportedValuesOf==='function' ? Intl.supportedValuesOf('timeZone') : []; } catch(e){}
+  const tzCur=state.settings.dayTimezone||'utc';
+  [['utc','UTC (default)'],['local','System local time']]
+    .concat(tzSupported.map(z=>[z,z.replace(/_/g,' ')]))
+    .forEach(([v,t])=>{ const o=el('option',{value:v,class:'u-bg'},t); if(v===tzCur) o.selected=true; tzSel.appendChild(o); });
+  if(!tzSel.querySelector(`option[value="${CSS.escape(tzCur)}"]`)){
+    const o=el('option',{value:tzCur,class:'u-bg'},tzCur); o.selected=true; tzSel.appendChild(o);
+  }
+  tzSel.addEventListener('change',()=>{
+    state.settings.dayTimezone=tzSel.value; scheduleSave();
+    tzPreview.textContent=`(today: ${today()})`;
+  });
+  tzWrap.append(
+    el('div',{style:'font-size:13px;font-weight:600;display:flex;gap:6px;align-items:baseline'},'🌍 Day boundary timezone',tzPreview),
+    el('div',{style:'font-size:11px;color:var(--muted);margin:2px 0 6px'},'Streaks, the daily goal and review history roll over at midnight in this zone instead of UTC.'),
+    tzSel);
+  studyCard.appendChild(tzWrap);
+
   grid.append(aiCard,studyCard);
 
   const dataCard=el('div',{class:'card',style:'padding:20px;margin-top:16px'},

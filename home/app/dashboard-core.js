@@ -969,7 +969,26 @@ function mkCardImagePicker(label,curImg,onChange){
   clr.addEventListener('click',function(){finp.value='';onChange(null);thumb.style.display='none';thumb.innerHTML='';clr.style.display='none';});
   row.append(thumb,fl,clr);wrap.appendChild(row);return wrap;
 }
-function today() { return new Date().toISOString().split('T')[0]; }
+/** Resolves the user's preferred day-boundary timezone (settings.dayTimezone):
+ *  'utc' (default, historical behaviour) | 'local' (system tz) | IANA name.
+ *  Invalid IANA names fall back to UTC rather than throwing. */
+function dayTimezone() {
+  const pref = (state.settings && state.settings.dayTimezone) || 'utc';
+  if (pref === 'local') return null;                 // null = system tz
+  if (pref === 'utc') return 'UTC';
+  try { new Intl.DateTimeFormat('en-CA', { timeZone: pref }).format(new Date()); return pref; }
+  catch (e) { return 'UTC'; }
+}
+/** YYYY-MM-DD day key for a timestamp in the given tz (null → system tz).
+ *  en-CA formats as YYYY-MM-DD — the same shape the rest of the app expects. */
+function dayKeyInTz(tz, ms) {
+  return new Intl.DateTimeFormat('en-CA', tz ? { timeZone: tz } : undefined)
+    .format(new Date(ms));
+}
+/** Today's day key in the user's preferred timezone. Everything keyed by day
+ *  (streaks, reviewHistory, daily goal) resets at midnight in THAT zone —
+ *  i.e. at a specific time of day in UTC terms — instead of always UTC. */
+function today() { return dayKeyInTz(dayTimezone(), Date.now()); }
 
 /** Human-readable "how long ago" for a card's `lastRated` timestamp (ms
  *  epoch). A card that's never been reviewed has `lastRated: null` (see
@@ -997,9 +1016,12 @@ function fmtDateTime(ts) {
 }
 /** Bumps the flashcard study streak at most once per day, resetting if a day was missed. */
 function bumpStreak() {
-  const d = today();
+  const tz = dayTimezone();
+  const d = dayKeyInTz(tz, Date.now());
   if (state.lastStreakDate === d) return;
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  // "yesterday" = the previous day KEY in the same preferred timezone, so the
+  // streak window lines up with the day boundary the user chose.
+  const yesterday = dayKeyInTz(tz, Date.now() - 86400000);
   state.streak = state.lastStreakDate === yesterday ? state.streak + 1 : 1;
   state.lastStreakDate = d;
 }

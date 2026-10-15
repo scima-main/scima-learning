@@ -517,6 +517,8 @@ class Renderer:
             kwargs = {"status": status}
             if content_type:
                 kwargs["content_type"] = content_type
+            if arg.get("headers"):
+                kwargs["headers"] = {str(k): str(v) for k, v in arg["headers"].items()}
             if payload is not None:
                 kwargs["json"] = payload
             elif body is not None:

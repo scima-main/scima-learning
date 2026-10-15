@@ -1,0 +1,34 @@
+{
+  "name": "quizlet-import",
+  "description": "Create Deck → 🎴 Quizlet tab: paste a set link, fetch (mocked webapi), preview, create. The mock needs ACAO because the fetch is cross-origin.",
+  "seed": "preset:empty",
+  "steps": [
+    { "mock_route": {
+        "url": "**/webapi/3.4/studiable-item-documents*",
+        "headers": { "access-control-allow-origin": "*" },
+        "json": { "responses": [ { "models": { "studiableItem": [
+            { "cardSides": [ { "label": "term", "media": [ { "plainText": "Hello" } ] },
+                              { "label": "definition", "media": [ { "richText": "<p>Hola &amp; adi&oacute;s</p>" } ] } ] },
+            { "cardSides": [ { "label": "Country", "media": [ { "plainText": "France" } ] },
+                              { "label": "Capital", "media": [ { "plainText": "Paris" } ] },
+                              { "label": "Note", "media": [ { "plainText": "memo line" } ] } ] }
+        ] }, "paging": { "token": null } } ] } } },
+    { "goto": "/decks/" },
+    { "click": "#tutorial-target-new-deck" },
+    { "wait_for": { "selector": "#modal-box" } },
+    { "click": "text=🎴 Quizlet" },
+    { "pause": 300 },
+    { "screenshot": "quizlet-tab.png" },
+    { "fill": { "selector": "#modal-body input[placeholder^='https://quizlet.com']", "text": "https://quizlet.com/987654321/euro-capitals" } },
+    { "click": "text=Fetch & Preview" },
+    { "wait_for": { "text": "2 cards ready" } },
+    { "pause": 400 },
+    { "screenshot": "quizlet-preview.png" },
+    { "click": "#modal-box button:has-text('Create Deck') >> visible=true" },
+    { "click": ".subject-tile:has-text('Miscellaneous')" },
+    { "wait_for": { "text": "Quizlet set 987654321" } },
+    { "pause": 400 },
+    { "assert": { "js": "state.decks.some(d => d.cards.length === 2 && d.cards[0].back === 'Hola & adiós')", "equals": true } }
+  ],
+  "output": "screenshots/11-quizlet-import.png"
+}

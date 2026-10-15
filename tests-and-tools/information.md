@@ -13,7 +13,7 @@ pip install -r tests/requirements.txt
 python -m playwright install chromium     # once; add --with-deps on bare Linux
 
 cd tests
-pytest                                    # whole suite (159 tests)
+pytest                                    # whole suite (174 tests)
 pytest -m smoke                           # page-load sanity only
 pytest ui/test_study.py -k srs -x         # one file / one test
 python render.py scenarios/02-home-demo.json          # → screenshots/02-home-demo.png
@@ -35,10 +35,10 @@ tests/
 ├── render.py             CLI: scenario JSON → interactions → PHOTO + trace
 ├── seed.py               CLI+lib: deterministic localStorage seed blobs
 ├── helpers/              server / storage / pages / api_mock / content
-├── scenarios/            10 ready-to-run render.py scenarios (numbered)
+├── scenarios/            11 ready-to-run render.py scenarios (numbered)
 ├── ui/                   pytest tests: smoke, navigation, home, decks,
 │                         study, library, analytics, settings, community,
-│                         storage, tour, **viewports**, **content**
+│                         storage, tour, viewports, content, **features**
 └── screenshots/          all output lands here (gitignored)
 ```
 
@@ -187,6 +187,13 @@ def test_x(page, base_url, seeded, page_errors):
     expect(page.locator("#view-decks")).to_contain_text("Spanish Basics")
     assert page_errors == []
 ```
+
+`ui/test_features.py` covers the post-suite feature wave: timezone day
+boundary (`settings.dayTimezone`), sanitizer-filled imports, move-deck-
+between-subjects, card duplication, deck-segment deep links, the
+Ctrl+Alt+K / Ctrl+Alt+M card-move modals, and the 🎴 Quizlet import tab
+(mock its webapi with `page.route` + an `access-control-allow-origin`
+header; `scenarios/11-quizlet-import.json` shows the same in render.py).
 
 Failing tests automatically leave `screenshots/failures/<test>.png`.
 Prefer the stable ids/classes above over text where possible; use

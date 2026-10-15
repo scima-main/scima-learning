@@ -100,33 +100,54 @@ function scDeeksApplyHash() {
     : { view: 'subject', subjectKey: subj.id };
   if (i < segs.length) {
     const deck = matchName(decksIn(parent), segs[i]);
-    if (deck && typeof openDeckDetail === 'function') openDeckDetail(deck.id);
+    // Deferred so renderDecks() finishes building the containing view first;
+    // openDeckDetail() then replaces it with the detail (and mirrors the
+    // deck segment back into the hash).
+    if (deck && typeof openDeckDetail === 'function') setTimeout(()=>openDeckDetail(deck.id), 0);
   }
 }
 // State -> URL mirror (renderView calls window.SCIMA_URL_SYNC.decks after
 // renderDecks) so folder paths survive refreshes and can be shared.
-window.SCIMA_URL_SYNC = window.SCIMA_URL_SYNC || {};
-window.SCIMA_URL_SYNC.decks = function () {
+// Deep links cover decks too: while a deck detail is open its name is
+// appended as the last segment (#decks/<Subject>/<folder…>/<Deck>), and
+// scDeeksApplyHash() re-opens the detail from such a link.
+let _openDeckDetailId = null;
+function scDecksMirrorHash() {
   const nav = state.deckNav || { view: 'subjects' };
   const subjects = typeof getAllSubjects === 'function' ? getAllSubjects() : {};
   const subjName = k => (subjects[k] && subjects[k].name) || k;
   const byId = {};
   state.folders.forEach(f => { byId[f.id] = f; });
+  const folderChain = folderId => {
+    const chain = [];
+    let cur = folderId ? byId[folderId] : null;
+    while (cur) { chain.unshift(scSeg(cur.name)); cur = cur.parentId ? byId[cur.parentId] : null; }
+    return chain;
+  };
   let frag = 'decks';
-  if (nav.view === 'subject' && nav.subjectKey) {
+  const openDeck = _openDeckDetailId ? state.decks.find(d=>d.id===_openDeckDetailId) : null;
+  if (openDeck) {
+    // Full path from the deck itself: subject → folder chain → deck name.
+    const chain = folderChain(openDeck.folderId);
+    frag += '/' + scSeg(subjName(openDeck.subject || 'misc'))
+         + (chain.length ? '/' + chain.join('/') : '')
+         + '/' + scSeg(openDeck.name);
+  } else if (nav.view === 'subject' && nav.subjectKey) {
     frag += '/' + scSeg(subjName(nav.subjectKey));
   } else if (nav.view === 'folder' && nav.folderId) {
-    const chain = [];
-    let cur = byId[nav.folderId];
-    while (cur) { chain.unshift(scSeg(cur.name)); cur = cur.parentId ? byId[cur.parentId] : null; }
+    const chain = folderChain(nav.folderId);
     const f = byId[nav.folderId];
     frag += '/' + scSeg(subjName(f ? f.subjectKey : 'misc')) + (chain.length ? '/' + chain.join('/') : '');
   }
   scReplaceHash(frag);
   _scDecksLastHash = frag;
-};
+}
+window.SCIMA_URL_SYNC = window.SCIMA_URL_SYNC || {};
+window.SCIMA_URL_SYNC.decks = function () { scDecksMirrorHash(); };
 
 function renderDecks(c) {
+  _openDeckDetailId = null;      // list render = no detail open
+  _deckDetailCtx = null;         // and no card selection → shortcuts inert
   scDeeksApplyHash();
   const nav = state.deckNav;
   if (nav.view === 'folder' && nav.folderId) renderFolderView(c, nav.folderId);
@@ -415,7 +436,8 @@ function renderSelectableDeckGrid(container, decks) {
           state.studyScope=[...selected].map(id=>({type:'deck',id}));
           navigate('study');
         }}),
-        btn('Move to Folder…','primary',{small:true,onclick:()=>openMoveDecksModal([...selected])})
+        btn('Move to Folder…','primary',{small:true,onclick:()=>openMoveDecksModal([...selected])}),
+        btn('Move to Subject…','ghost',{small:true,onclick:()=>openMoveSubjectsModal([...selected])})
       )
     );
   }
@@ -441,6 +463,36 @@ function renderSelectableDeckGrid(container, decks) {
 // to an existing folder, a new folder, or the subject's top level. Mirrors
 // openMoveCardsModal's shape (existing-destination select + create-new
 // fallback) but one level up: decks into folders instead of cards into decks.
+/** Move whole decks to a different subject. A deck keeps its folder only if
+ *  that folder belongs to the destination subject — otherwise it is lifted
+ *  to the subject root (a folder can't straddle two subjects). */
+function openMoveSubjectsModal(deckIds) {
+  const decks = state.decks.filter(d=>deckIds.includes(d.id));
+  if(!decks.length) return;
+  const count = decks.length;
+  openModal(`Move ${count} Deck${count>1?'s':''} to Subject`, body => {
+    body.appendChild(el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:16px'},
+      'Choose the destination subject. Decks whose folder belongs to another subject move to the subject root.'));
+    const subjects = typeof getAllSubjects === 'function' ? getAllSubjects() : {};
+    const sel = el('select',{class:'u-input',style:'margin-bottom:12px'});
+    Object.entries(subjects).forEach(([key,s])=>{
+      sel.appendChild(el('option',{value:key,class:'u-bg'},`${s.name} (${s.board||''})`));
+    });
+    sel.value = decks[0].subject || DEFAULT_SUBJECT_KEY;
+    body.appendChild(sel);
+    body.appendChild(btn('Move →','primary',{full:true,onclick:()=>{
+      const key = sel.value;
+      decks.forEach(d=>{
+        d.subject = key;
+        const folder = d.folderId ? state.folders.find(f=>f.id===d.folderId) : null;
+        if(folder && (folder.subjectKey||DEFAULT_SUBJECT_KEY)!==key) d.folderId = null;
+      });
+      scheduleSave(); closeModal(); renderView('decks'); renderSidebar();
+      showToast(`Moved ${count} deck${count>1?'s':''} to ${subjects[key]?.name||key} 📚`);
+    }}));
+  });
+}
+
 function openMoveDecksModal(deckIds) {
   const decks = state.decks.filter(d=>deckIds.includes(d.id));
   if(!decks.length) return;
@@ -1426,6 +1478,145 @@ function renderAICapture(wrap) {
     genControls, errEl, rawDetails, generatedSection);
 }
 
+// ── Quizlet import (port of the quizlet-to-scima.js console reference) ──────
+// Pastes of a set link are fetched from Quizlet's public studiable-item-documents
+// webapi. quizlet.com sends no CORS headers for cross-origin browsers, so the
+// direct attempt is followed by public CORS proxies until one answers.
+const QZ_NAMED_ENTITIES = {
+  amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",nbsp:' ',shy:'',ndash:'–',mdash:'—',
+  hellip:'…',lsquo:'‘',rsquo:'’',ldquo:'“',rdquo:'”',laquo:'«',raquo:'»',
+  euro:'€',pound:'£',yen:'¥',cent:'¢',deg:'°',times:'×',divide:'÷',plusmn:'±',
+  frac12:'½',frac14:'¼',frac34:'¾',sup2:'²',sup3:'³',micro:'µ',middot:'·',bull:'•',
+  dagger:'†',permil:'‰',prime:'′',trade:'™',copy:'©',reg:'®',sect:'§',para:'¶',
+  agrave:'à',aacute:'á',acirc:'â',atilde:'ã',auml:'ä',aring:'å',aelig:'æ',
+  egrave:'è',eacute:'é',ecirc:'ê',euml:'ë',igrave:'ì',iacute:'í',icirc:'î',iuml:'ï',
+  ograve:'ò',oacute:'ó',ocirc:'ô',otilde:'õ',ouml:'ö',oslash:'ø',ugrave:'ù',
+  uacute:'ú',ucirc:'û',uuml:'ü',yacute:'ý',yum:'ÿ',yuml:'ÿ',ntilde:'ñ',ccedil:'ç',
+  szlig:'ß',Agrave:'À',Aacute:'Á',Acirc:'Â',Atilde:'Ã',Auml:'Ä',Aring:'Å',AElig:'Æ',
+  Egrave:'È',Eacute:'É',Ecirc:'Ê',Euml:'Ë',Igrave:'Ì',Iacute:'Í',Icirc:'Î',Iuml:'Ï',
+  Ograve:'Ò',Oacute:'Ó',Ocirc:'Ô',Otilde:'Õ',Ouml:'Ö',Oslash:'Ø',Ugrave:'Ù',
+  Uacute:'Ú',Ucirc:'Û',Uuml:'Ü',Ntilde:'Ñ',Ccedil:'Ç',Yacute:'Ý',
+};
+function qzDecodeEntities(s) {
+  const str = String(s);
+  if (!str.includes('&')) return str;
+  try {
+    const ta = document.createElement('textarea');
+    ta.innerHTML = str;
+    return ta.value;
+  } catch (e) { /* fall through */ }
+  return str.replace(/&(#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]{1,31});/g, (m, body) => {
+    if (body[0] === '#') {
+      const hex = body[1] === 'x' || body[1] === 'X';
+      const code = parseInt(hex ? body.slice(2) : body.slice(1), hex ? 16 : 10);
+      return (Number.isFinite(code) && code > 0 && code <= 0x10ffff) ? String.fromCodePoint(code) : m;
+    }
+    return body in QZ_NAMED_ENTITIES ? QZ_NAMED_ENTITIES[body] : m;
+  });
+}
+function qzHtmlToText(html) {
+  const tagless = String(html)
+    .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, ' ')
+    .replace(/<\s*(?:br|\/\s*p|\/\s*div|\/\s*li|\/\s*h[1-6]|\/\s*tr|\/\s*blockquote)\s*\/?\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, '');
+  return qzDecodeEntities(tagless).split('\n')
+    .map(l => l.replace(/[ \t\r\u00a0\u200b]+/g, ' ').trim()).filter(Boolean).join('\n');
+}
+function qzMediaText(m) {
+  if (!m || typeof m !== 'object') return '';
+  if (typeof m.plainText === 'string' && m.plainText.trim()) return m.plainText.trim();
+  if (m.richText) return qzHtmlToText(m.richText);
+  if (typeof m.ttsOnlyText === 'string' && m.ttsOnlyText.trim()) return m.ttsOnlyText.trim();
+  return '';
+}
+function qzSideText(side) { return (side?.media || []).map(qzMediaText).filter(Boolean).join('\n').trim(); }
+const QZ_FRONT_LABELS = new Set(['word','term','question','front','prompt']);
+const QZ_BACK_LABELS  = new Set(['definition','answer','back','meaning','response','solution']);
+function qzParseItem(item) {
+  const sides = Array.isArray(item?.cardSides) ? item.cardSides : [];
+  const profiled = sides.map((s, i) => ({ i, label: String(s?.label || '').trim().toLowerCase(), text: qzSideText(s) }));
+  const textual = profiled.filter(s => s.text);
+  let front = textual.find(s => QZ_FRONT_LABELS.has(s.label)) || null;
+  let back  = textual.find(s => s !== front && QZ_BACK_LABELS.has(s.label)) || null;
+  if (!front && !back) { front = textual.find(s => s.i === 0) || null; back = textual.find(s => s.i === 1) || null; }
+  else if (!front) { front = textual.find(s => s.i === 0 && s !== back) || null; }
+  else if (!back) { back = textual.find(s => s.i === 1 && s !== front) || textual.find(s => s !== front) || null; }
+  const extras = textual.filter(s => s !== front && s !== back);
+  return { front: front?.text || '', back: back?.text || '', extras: extras.map(s => s.text),
+           oneSided: !front?.text || !back?.text ? 1 : 0 };
+}
+function qzBuildCards(parsed, opts = {}) {
+  const { extras = 'hint', dedupe = false, type = 'basic', tags = [] } = opts;
+  const cards = []; const seen = new Set();
+  const meta = { items: parsed.length, cards: 0, duplicatesSkipped: 0, emptyDropped: 0, oneSided: 0 };
+  for (const p of parsed) {
+    if (!p.front && !p.back) { meta.emptyDropped++; continue; }
+    if (dedupe) {
+      const key = `${p.front}\u0000${p.back}`;
+      if (seen.has(key)) { meta.duplicatesSkipped++; continue; }
+      seen.add(key);
+    }
+    let back = p.back, hint = '';
+    if (p.extras.length) {
+      const joined = p.extras.join('\n');
+      if (extras === 'hint') hint = joined;
+      else if (extras === 'back') back = back ? `${back}\n${joined}` : joined;
+    }
+    const card = { type, front: p.front, back };
+    if (hint) card.hint = hint;
+    if (tags.length) card.tags = [...tags];
+    meta.oneSided += p.oneSided;
+    cards.push(card);
+  }
+  meta.cards = cards.length;
+  return { cards, meta };
+}
+async function qzFetchJson(url) {
+  // direct first (works if Quizlet ever opens CORS / same-origin contexts),
+  // then public read-only proxies. First OK response wins.
+  const attempts = [
+    url,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  ];
+  let lastErr = null;
+  for (const u of attempts) {
+    try {
+      const r = await fetch(u, { headers: { accept: 'application/json' }, credentials: 'omit' });
+      if (r.ok) return await r.json();
+      lastErr = new Error(`HTTP ${r.status}`);
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('fetch failed');
+}
+async function qzFetchSet(id, opts = {}) {
+  const { perPage = 50, delay = 120, maxPages = 40 } = opts;
+  const url = (pp, page, token) =>
+    `https://quizlet.com/webapi/3.4/studiable-item-documents` +
+    `?filters%5BstudiableContainerId%5D=${id}&filters%5BstudiableContainerType%5D=1` +
+    `&perPage=${pp}&page=${page}` + (token ? `&pagingToken=${encodeURIComponent(token)}` : '');
+  let pp = perPage, page = 1, token = null, items = [], guard = 0;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  while (guard++ < maxPages) {
+    let res;
+    try {
+      res = await qzFetchJson(url(pp, page, token));
+    } catch (e) {
+      if (page === 1 && pp !== 5) { pp = 5; page = 1; token = null; items = []; guard = 1; continue; }
+      throw e;
+    }
+    const r0 = res?.responses?.[0];
+    if (!r0?.models) throw new Error('Unexpected Quizlet response shape — the API may have changed.');
+    const chunk = r0.models.studiableItem || [];
+    items.push(...chunk);
+    token = r0.paging?.token ?? null;
+    if (!chunk.length || !token) break;
+    page++;
+    if (delay) await sleep(delay);
+  }
+  return items;
+}
+
 function openCreateDeckModal(subjectKey, folderId) {
   openModal('Create New Deck', body => {
     // Tab bar
@@ -1434,7 +1625,8 @@ function openCreateDeckModal(subjectKey, folderId) {
     const tabImport = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('import')},'⬆ Import JSON');
     const tabText   = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('text')},'📄 Import Text');
     const tabAI     = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('ai')},'✨ AI Capture');
-    tabBar.append(tabCreate, tabImport, tabText, tabAI);
+    const tabQuizlet= el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('quizlet')},'🎴 Quizlet');
+    tabBar.append(tabCreate, tabImport, tabText, tabAI, tabQuizlet);
     body.appendChild(tabBar);
 
     // --- Community deck browser link ---
@@ -1524,11 +1716,16 @@ function openCreateDeckModal(subjectKey, folderId) {
       // Resolve target folder
       const targetFolderId = folderId || null;
       const targetSubject = targetFolderId ? (state.folders.find(f=>f.id===targetFolderId)?.subjectKey||d.deck.subject||DEFAULT_SUBJECT_KEY) : (subjectKey||d.deck.subject||DEFAULT_SUBJECT_KEY);
-      state.decks.push({...d.deck, id:uid('d'), folderId:targetFolderId, subject:targetSubject,
-        cards:(d.deck.cards||[]).map(c=>({...c, id:uid('c'),
+      // Every imported card/deck passes through the sanitizers so missing or
+      // empty NON-CONTENT fields (ease/interval/reps/lapses/due/state/created/
+      // lastRated/suspended/leech/answerCount/… and deck emoji/colour/pinned)
+      // get their creation defaults instead of surviving as null/undefined.
+      state.decks.push(sanitizeDeck({
+        ...d.deck, id:uid('d'), folderId:targetFolderId, subject:targetSubject,
+        cards:(d.deck.cards||[]).map(c=>sanitizeCard({ ...c, id:uid('c'),
           citation:c.citation?{...c.citation,sourceId:sourceIdMap[c.citation.sourceId]||c.citation.sourceId,sourceName:undefined,chapterTitle:undefined,excerpt:undefined}:null
         }))
-      });
+      }));
       scheduleSave(); checkAchievements(); closeModal(); renderView('decks');
       showToast(`"${d.deck.name}" imported — ${nOf(d.deck.cards?.length||0,'card')} ✓`);
     });
@@ -1780,7 +1977,58 @@ function openCreateDeckModal(subjectKey, folderId) {
     const aiPane = el('div',{style:'display:none'});
     let aiBuilt = false;
 
-    body.append(createPane, importPane, textPane, aiPane);
+    // --- Quizlet import pane ---
+    const quizletPane = el('div',{style:'display:none'});
+    const qzLinkField = createField('Quizlet set link','text','https://quizlet.com/123456789/set-slug');
+    const qzNameField = createField('Deck Name (optional override)','text','');
+    const qzDedupe = el('input',{type:'checkbox',style:'width:15px;height:15px;accent-color:var(--blue);cursor:pointer'});
+    const qzExtrasSel = el('select',{class:'u-input',style:'width:auto'});
+    [['hint','Extra sides → hint'],['back','Extra sides → back'],['drop','Drop extra sides']]
+      .forEach(([v,t])=>qzExtrasSel.appendChild(el('option',{value:v,class:'u-bg'},t)));
+    const qzStatus = el('div',{style:'font-size:12px;color:var(--muted);margin:8px 0;min-height:18px'});
+    const qzFetchBtn = btn('Fetch & Preview','ghost',{full:true});
+    const qzCreateBtn = btn('Create Deck','primary',{full:true});
+    qzCreateBtn.style.display='none';
+    let qzParsed = null;
+    qzFetchBtn.addEventListener('click', async () => {
+      const link = qzLinkField.querySelector('input').value.trim();
+      const id = (link.match(/\/(\d+)(?:\/|$)/) || [])[1] || (/^\d+$/.test(link) ? link : null);
+      if(!id){ qzStatus.innerHTML='<span style="color:#ef4444">Paste a Quizlet set link — quizlet.com/&lt;id&gt;/…</span>'; return; }
+      qzStatus.textContent='Fetching set…'; qzFetchBtn.disabled=true; qzCreateBtn.style.display='none'; qzParsed=null;
+      try {
+        const items = await qzFetchSet(id);
+        const built = qzBuildCards(items.map(qzParseItem), { extras: qzExtrasSel.value, dedupe: qzDedupe.checked });
+        if(!built.cards.length){ qzStatus.innerHTML='<span style="color:#ef4444">No text cards found in this set.</span>'; return; }
+        qzParsed = { id, ...built };
+        qzStatus.innerHTML=`<span style="color:#22c55e">✓ ${built.cards.length} card${built.cards.length>1?'s':''} ready`
+          + (built.meta.oneSided?` · ${built.meta.oneSided} one-sided`:'')
+          + (built.meta.duplicatesSkipped?` · ${built.meta.duplicatesSkipped} dupes skipped`:'') + `</span>`;
+        qzCreateBtn.style.display='';
+      } catch(err){
+        qzStatus.innerHTML=`<span style="color:#ef4444">❌ ${escHtml((err && err.message) || 'fetch failed')} — the set may be private or unreachable.</span>`;
+      } finally { qzFetchBtn.disabled=false; }
+    });
+    qzCreateBtn.addEventListener('click', () => {
+      if(!qzParsed) return;
+      const override = qzNameField.querySelector('input').value.trim();
+      const deck = sanitizeDeck({
+        name: override || `Quizlet set ${qzParsed.id}`,
+        emoji: '🎴',
+        subject: subjectKey || DEFAULT_SUBJECT_KEY,
+        folderId: folderId || null,
+        cards: qzParsed.cards.map(c=>sanitizeCard(c)),
+      });
+      state.decks.push(deck);
+      scheduleSave(); checkAchievements(); closeModal(); renderView('decks');
+      showToast(`Imported "${deck.name}" from Quizlet — ${nOf(deck.cards.length,'card')} 🎴`);
+    });
+    quizletPane.append(qzLinkField, qzNameField,
+      el('div',{style:'display:flex;gap:14px;align-items:center;margin:4px 0 8px'},
+        el('label',{style:'font-size:12px;font-weight:700;display:flex;gap:6px;align-items:center;cursor:pointer'},qzDedupe,'Skip duplicates'),
+        el('label',{style:'font-size:12px;font-weight:700;display:flex;gap:6px;align-items:center'},'Extras:',qzExtrasSel)),
+      qzFetchBtn, qzStatus, qzCreateBtn);
+
+    body.append(createPane, importPane, textPane, aiPane, quizletPane);
 
     function switchDeckTab(t) {
       const activeStyle='background:var(--blue);color:#fff';
@@ -1790,10 +2038,12 @@ function openCreateDeckModal(subjectKey, folderId) {
       tabImport.style.cssText=tabStyle+(t==='import'?activeStyle:inactiveStyle);
       tabText.style.cssText  =tabStyle+(t==='text'  ?activeStyle:inactiveStyle);
       tabAI.style.cssText    =tabStyle+(t==='ai'    ?activeStyle:inactiveStyle);
+      tabQuizlet.style.cssText=tabStyle+(t==='quizlet'?activeStyle:inactiveStyle);
       createPane.style.display=t==='create'?'':'none';
       importPane.style.display=t==='import'?'':'none';
       textPane.style.display  =t==='text'  ?'':'none';
       aiPane.style.display    =t==='ai'    ?'':'none';
+      quizletPane.style.display=t==='quizlet'?'':'none';
       if (t==='ai' && !aiBuilt) { aiBuilt=true; renderAICapture(aiPane); }
     }
   });
@@ -1801,12 +2051,16 @@ function openCreateDeckModal(subjectKey, folderId) {
 
 function openDeckDetail(deckId) {
   const deck = state.decks.find(d=>d.id===deckId); if(!deck)return;
+  _openDeckDetailId = deckId;          // mirror appends the deck to the hash
+  scDecksMirrorHash();
+  _deckDetailCtx = { deckId, selected: null };   // filled in below (multiselect)
   const container = document.getElementById('view-decks');
   container.innerHTML = '';
   let search = '';
 
   // ── Multiselect state (file-explorer style: click / shift-click / ctrl-click / drag-select) ──
   const selected = new Set();
+  if (_deckDetailCtx && _deckDetailCtx.deckId === deckId) _deckDetailCtx.selected = selected;
   let anchorId = null;
   const cardElById = new Map();
 
@@ -1856,7 +2110,7 @@ function openDeckDetail(deckId) {
           state.studyRefine.cardIds=[...selected];
           navigate('study');
         }}),
-        btn('Move to Deck…','primary',{small:true,onclick:()=>openMoveCardsModal(deckId,[...selected])})
+        btn('Move to Deck…','primary',{small:true,title:'Combined destination modal · Ctrl+Alt+K = new deck · Ctrl+Alt+M = existing deck',onclick:()=>openMoveCardsModal(deckId,[...selected])})
       )
     );
   }
@@ -1954,6 +2208,7 @@ function openDeckDetail(deckId) {
         ),
         el('div',{style:'display:flex;gap:6px;align-items:center'},
           btn('Edit','ghost',{small:true,onclick:()=>openCardModal(deckId,card.id)}),
+          btn('Duplicate','ghost',{small:true,title:'Duplicate this card',onclick:e=>{ e.stopPropagation(); duplicateCard(deckId,card.id); renderCards(); }}),
           btn('Delete','danger',{small:true,onclick:()=>{ deleteCard(deckId,card.id); selected.delete(card.id); renderCards(); }}),
           card.leech||card.suspended ? btn(card.suspended?'Unsuspend':'Suspend','ghost',{small:true,onclick:()=>{ card.suspended=!card.suspended; scheduleSave(); renderCards(); }}) : null,
           source ? btn('📖 Source','ghost',{small:true,onclick:()=>openCitationViewer(card.citation)}) : null,
@@ -1978,6 +2233,74 @@ function moveCardsToDeck(sourceDeckId, targetDeckId, cardIds) {
   target.cards.push(...moving);
   scheduleSave();
 }
+
+/** Shared by the combined modal and the Ctrl+Alt+K shortcut modal. */
+function createDeckAndMoveCards(deckId, cardIds, name, emoji, img) {
+  const source = state.decks.find(d=>d.id===deckId); if(!source) return null;
+  const newDeck = sanitizeDeck({ id:uid('d'), name, emoji:emoji||'📖', image:img||null,
+    subject:source.subject, folderId:source.folderId, color:'var(--blue)', cards:[] });
+  state.decks.push(newDeck);
+  moveCardsToDeck(deckId, newDeck.id, cardIds);
+  checkAchievements();
+  return newDeck;
+}
+
+/** Ctrl+Alt+K — move the selected cards into a NEW deck: single textbox. */
+function openMoveCardsNewModal(deckId, cardIds) {
+  const source = state.decks.find(d=>d.id===deckId); if(!source||!cardIds.length) return;
+  const count = cardIds.length;
+  openModal(`Move ${count} Card${count>1?'s':''} → New Deck`, body => {
+    const nameField = createField('New Deck Name','text','e.g. Chapter 4 Terms');
+    body.append(nameField, btn('Create & Move','primary',{full:true,onclick:()=>{
+      const name=nameField.querySelector('input').value.trim();
+      if(!name){ showToast('Enter a deck name'); return; }
+      createDeckAndMoveCards(deckId, cardIds, name, '📖', null);
+      closeModal(); showToast(`Created "${name}" and moved ${count} card${count>1?'s':''} 📦`);
+      openDeckDetail(deckId);
+    }}));
+  });
+}
+
+/** Ctrl+Alt+M — move the selected cards into an EXISTING deck named in a
+ *  single textbox (lenient name match, same move logic as the combined modal). */
+function openMoveCardsExistingModal(deckId, cardIds) {
+  const source = state.decks.find(d=>d.id===deckId); if(!source||!cardIds.length) return;
+  const count = cardIds.length;
+  const others = state.decks.filter(d=>d.id!==deckId);
+  openModal(`Move ${count} Card${count>1?'s':''} → Existing Deck`, body => {
+    if(!others.length){
+      body.appendChild(el('div',{style:'font-size:12px;color:var(--muted)'},'No other decks yet — use Ctrl+Alt+K to create one.'));
+      return;
+    }
+    const nameField = createField('Destination Deck Name','text',`e.g. ${others[0].name}`);
+    const status = el('div',{style:'font-size:12px;color:#ef4444;margin-top:8px;min-height:16px'});
+    body.append(nameField, status, btn('Move →','primary',{full:true,onclick:()=>{
+      const want = nameField.querySelector('input').value.trim();
+      if(!want){ status.textContent='Enter a deck name.'; return; }
+      const target = matchName(others.map(d=>({id:d.id,name:d.name})), want);
+      if(!target){ status.textContent=`No deck named "${want}".`; return; }
+      moveCardsToDeck(deckId, target.id, cardIds);
+      closeModal(); showToast(`Moved ${count} card${count>1?'s':''} to "${target.name}" 📦`);
+      openDeckDetail(deckId);
+    }}));
+  });
+}
+
+// ── Card-move shortcuts: Ctrl+Alt+K (new deck) / Ctrl+Alt+M (existing) ──────
+// Active only while a deck detail has a non-empty card selection — the same
+// precondition as the selection-bar button, which keeps the combined modal.
+let _deckDetailCtx = null;
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey)) return;
+  const k = (e.key || '').toLowerCase();
+  if (k !== 'k' && k !== 'm') return;
+  const ctx = _deckDetailCtx;
+  if (!ctx || !ctx.selected || !ctx.selected.size) return;
+  e.preventDefault();
+  const ids = [...ctx.selected];
+  if (k === 'k') openMoveCardsNewModal(ctx.deckId, ids);
+  else openMoveCardsExistingModal(ctx.deckId, ids);
+});
 
 function openMoveCardsModal(deckId, cardIds) {
   const source = state.decks.find(d=>d.id===deckId); if(!source||!cardIds.length) return;
@@ -2008,14 +2331,29 @@ function openMoveCardsModal(deckId, cardIds) {
     body.append(nameField, iconPicker, btn('Create & Move','primary',{full:true,onclick:()=>{
       const name=nameField.querySelector('input').value.trim();
       if(!name){ showToast('Enter a deck name'); return; }
-      const newDeck={id:uid('d'),name,emoji:_emoji,image:_img||null,subject:source.subject,folderId:source.folderId,color:'var(--blue)',cards:[]};
-      state.decks.push(newDeck);
-      moveCardsToDeck(deckId, newDeck.id, cardIds);
-      checkAchievements();
+      createDeckAndMoveCards(deckId, cardIds, name, _emoji, _img);
       closeModal(); showToast(`Created "${name}" and moved ${count} card${count>1?'s':''} 📦`);
       openDeckDetail(deckId);
     }}));
   });
+}
+
+/** Duplicates a card inside its deck: same content, fresh id, scheduling
+ *  reset to creation defaults, inserted directly after the original. */
+function duplicateCard(deckId, cardId) {
+  const deck = state.decks.find(d=>d.id===deckId); if(!deck) return null;
+  const i = deck.cards.findIndex(c=>c.id===cardId); if(i<0) return null;
+  const src = deck.cards[i];
+  const copy = sanitizeCard({
+    ...src,
+    id: uid('c'),
+    created: Date.now(), due: Date.now(),
+    state: 'new', reps: 0, interval: 0, lapses: 0, ease: 2.5,
+    lastRated: null, suspended: false, leech: false,
+  });
+  deck.cards.splice(i+1, 0, copy);
+  scheduleSave();
+  return copy;
 }
 
 function deleteCard(deckId, cardId) {
