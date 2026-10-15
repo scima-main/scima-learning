@@ -1,0 +1,27 @@
+{
+  "name": "study-session",
+  "description": "Full SRS session beat: picker → start → reveal (photo) → rate Good → next card.",
+  "seed": "preset:demo",
+  "steps": [
+    { "goto": "/study/" },
+    { "wait_for": { "text": "Study Mode" } },
+    { "pause": 500 },
+    { "screenshot": "study-picker.png" },
+    { "assert": { "text_contains": "7 total cards · 5 due" } },
+
+    { "click": "#tutorial-target-study-start" },
+    { "wait_for": { "selector": ".flashcard.front" } },
+    { "pause": 800 },
+    { "screenshot": "study-question.png" },
+
+    { "click": "text=Reveal →" },
+    { "wait_for": { "selector": ".rating-btn" } },
+    { "pause": 1200 },
+    { "screenshot": "study-answer.png" },
+
+    { "click": ".rating-btn >> text=Good" },
+    { "wait_for": { "text": "2 / 5" } },
+    { "pause": 600 }
+  ],
+  "output": "screenshots/03-study-session.png"
+}

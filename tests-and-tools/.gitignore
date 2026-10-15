@@ -1,0 +1,9 @@
+# test artifacts (never commit)
+screenshots/*
+!screenshots/.gitkeep
+videos/
+traces/
+__pycache__/
+*.pyc
+.pytest_cache/
+seed-*.local.json

@@ -1,0 +1,17 @@
+{
+  "name": "analytics-quests",
+  "description": "Analytics with 9 days of seeded history, then the merged Quests tab.",
+  "seed": "preset:demo",
+  "steps": [
+    { "goto": "/analytics/" },
+    { "wait_for": { "selector": ".heatmap" } },
+    { "pause": 700 },
+    { "screenshot": { "path": "analytics.png", "full_page": true } },
+    { "click": "#page-tabs .tab-btn[data-view='quests']" },
+    { "wait_for": { "selector": "#view-quests" } },
+    { "pause": 700 },
+    { "assert": { "url_contains": "#quests" } }
+  ],
+  "output": "screenshots/06-analytics-quests.png",
+  "full_page": true
+}

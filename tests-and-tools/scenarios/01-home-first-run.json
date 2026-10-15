@@ -1,0 +1,16 @@
+{
+  "name": "home-first-run",
+  "description": "True first run (no seed): the guided tour fires ~300ms after boot.",
+  "seed": "preset:first_run",
+  "steps": [
+    { "goto": "/" },
+    { "wait_for": { "selector": "#tutorial-overlay", "timeout": 8000 } },
+    { "pause": 900 },
+    { "screenshot": "first-run-tour.png" },
+    { "assert": { "selector": "#tutorial-overlay", "visible": true } },
+    { "click": "text=Skip tutorial" },
+    { "wait_for": { "selector": "#tutorial-overlay", "state": "detached" } },
+    { "pause": 500 }
+  ],
+  "output": "screenshots/01-home-first-run.png"
+}

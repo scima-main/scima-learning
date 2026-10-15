@@ -1,0 +1,17 @@
+{
+  "name": "theme-light",
+  "description": "Switch to the Light theme preset from Settings, then photo the home dashboard in light mode.",
+  "seed": "preset:demo",
+  "steps": [
+    { "goto": "/settings/" },
+    { "wait_for": { "text": "Replay tutorial" } },
+    { "click": "#view-settings button[title='Light']" },
+    { "pause": 800 },
+    { "screenshot": "settings-light.png" },
+    { "assert": { "js": "getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()", "equals": "#F0F4FA" } },
+    { "goto": "/" },
+    { "wait_for": { "selector": "#view-home .deck-card" } },
+    { "pause": 700 }
+  ],
+  "output": "screenshots/09-theme-light.png"
+}

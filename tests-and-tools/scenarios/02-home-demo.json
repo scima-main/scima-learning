@@ -1,0 +1,14 @@
+{
+  "name": "home-demo",
+  "description": "Home dashboard on the demo seed: stats grid, daily goal, 2 deck cards.",
+  "seed": "preset:demo",
+  "steps": [
+    { "goto": "/" },
+    { "wait_for": { "selector": "#view-home .deck-card" } },
+    { "pause": 700 },
+    { "assert": { "selector": ".stat-card", "count": 4 } },
+    { "assert": { "text_contains": "5 cards due across 2 decks" } }
+  ],
+  "output": "screenshots/02-home-demo.png",
+  "full_page": true
+}

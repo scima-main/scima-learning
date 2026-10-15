@@ -22,9 +22,17 @@
 function renderSettings(c) {
   function makeToggle(label,desc,key){
     const knob=el('div',{class:'toggle-knob'});
-    const sw=el('button',{class:`toggle${state.settings[key]?' on':''}`,onclick:()=>{
+    // A11y: the knob is a real switch — role="switch" + aria-checked expose
+    // its state, aria-label names it (the visible label sits in a sibling
+    // div, which alone gives the button no accessible name), and the desc
+    // doubles as a tooltip. Kept in sync with the .on class on every flip.
+    const sw=el('button',{type:'button',role:'switch',
+      class:`toggle${state.settings[key]?' on':''}`,
+      'aria-checked':String(!!state.settings[key]),
+      'aria-label':label,title:desc||label,onclick:()=>{
       state.settings[key]=!state.settings[key];
       sw.classList.toggle('on',state.settings[key]);
+      sw.setAttribute('aria-checked',String(!!state.settings[key]));
       if(key==='powerSaving') document.documentElement.classList.toggle('power-saving',state.settings[key]);
       if(key==='dyslexia') document.documentElement.classList.toggle('dyslexia-mode',state.settings[key]);
       if(key==='highContrast') document.documentElement.classList.toggle('a11y-high-contrast',state.settings[key]);
@@ -275,9 +283,15 @@ function renderSettings(c) {
 
   // Enable toggle
   const schedKnob = el('div', { class:'toggle-knob' });
-  const schedSw   = el('button', { class:`toggle${sched.enabled?' on':''}`, onclick: () => {
+  const schedSw   = el('button', { type:'button', role:'switch',
+    class:`toggle${sched.enabled?' on':''}`,
+    'aria-checked':String(!!sched.enabled),
+    'aria-label':'Enable scheduling',
+    title:'Override manual theme at set times',
+    onclick: () => {
     sched.enabled = !sched.enabled;
     schedSw.classList.toggle('on', sched.enabled);
+    schedSw.setAttribute('aria-checked', String(!!sched.enabled));
     scheduleSave(); tickThemeSchedule(); renderSchedBody();
   }}, schedKnob);
   schedCard.appendChild(el('div', { class:'toggle-row', style:'margin-bottom:14px' },
@@ -901,9 +915,13 @@ function renderSettings(c) {
       const moveRow = el('div', { style:'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px' },
         (() => {
           const knob = el('div', { class:'toggle-knob' });
-          const sw = el('button', { class:`toggle${doReassign ? ' on' : ''}`, onclick: () => {
+          const sw = el('button', { type:'button', role:'switch',
+            class:`toggle${doReassign ? ' on' : ''}`,
+            'aria-checked':String(!!doReassign),
+            'aria-label':'Move its decks & folders to', onclick: () => {
             doReassign = !doReassign;
             sw.classList.toggle('on', doReassign);
+            sw.setAttribute('aria-checked', String(!!doReassign));
           }}, knob);
           return el('div', { style:'display:flex;align-items:center;gap:10px' }, sw,
             el('div', { style:'font-size:12px;font-weight:600' }, 'Move its decks & folders to'));
@@ -1037,9 +1055,13 @@ function renderSettings(c) {
         node)));
     const spToggle = (label, desc, key) => {
       const knob = el('div', { class:'toggle-knob' });
-      const sw = el('button', { class:`toggle${spSetting(key) ? ' on' : ''}`, 'aria-label': label, onclick: () => {
+      const sw = el('button', { type:'button', role:'switch',
+        class:`toggle${spSetting(key) ? ' on' : ''}`,
+        'aria-label': label, 'aria-checked':String(!!spSetting(key)),
+        onclick: () => {
         spSetSetting(key, !spSetting(key));
         sw.classList.toggle('on', !!spSetting(key));
+        sw.setAttribute('aria-checked', String(!!spSetting(key)));
       }}, knob);
       spRow(label, desc, sw);
     };

@@ -1,0 +1,16 @@
+{
+  "name": "mobile-drawer",
+  "description": "Phone viewport: open the nav drawer over the home dashboard.",
+  "seed": "preset:demo",
+  "viewport": { "width": 390, "height": 844 },
+  "steps": [
+    { "goto": "/" },
+    { "wait_for": { "selector": "#view-home .deck-card" } },
+    { "pause": 500 },
+    { "screenshot": "mobile-home.png" },
+    { "click": "#logo-icon" },
+    { "wait_for": { "selector": "#nav .nav-btn" } },
+    { "pause": 700 }
+  ],
+  "output": "screenshots/08-mobile-drawer.png"
+}

@@ -1,0 +1,21 @@
+{
+  "name": "create-deck",
+  "description": "Decks page → + New Deck modal (photo) → create → the new deck card appears.",
+  "seed": "preset:empty",
+  "steps": [
+    { "goto": "/decks/" },
+    { "wait_for": { "selector": "#tutorial-target-new-deck" } },
+    { "pause": 400 },
+    { "click": "#tutorial-target-new-deck" },
+    { "wait_for": { "selector": "#modal-box" } },
+    { "type": { "selector": "#tutorial-target-deck-name-input", "text": "Organic Chemistry", "delay": 45 } },
+    { "pause": 700 },
+    { "screenshot": "create-deck-modal.png" },
+    { "click": "#modal-box button:has-text('Create Deck')" },
+    { "click": ".subject-tile:has-text('Miscellaneous')" },
+    { "wait_for": { "text": "Organic Chemistry" } },
+    { "pause": 600 },
+    { "assert": { "js": "state.decks.some(d => d.name === 'Organic Chemistry')", "equals": true } }
+  ],
+  "output": "screenshots/04-create-deck.png"
+}

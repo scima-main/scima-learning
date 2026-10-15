@@ -1,0 +1,32 @@
+{
+  "name": "breakpoints",
+  "description": "The same seeded dashboard photographed at four display dimensions in one run (set_viewport steps).",
+  "seed": "preset:demo",
+  "steps": [
+    { "goto": "/" },
+    { "wait_for": { "selector": "#view-home .deck-card" } },
+
+    { "set_viewport": { "width": 390, "height": 844 } },
+    { "pause": 500 },
+    { "screenshot": "bp-390-phone.png" },
+    { "click": "#logo-icon" },
+    { "pause": 600 },
+    { "screenshot": "bp-390-drawer.png" },
+    { "press": "Escape" },
+
+    { "set_viewport": { "width": 768, "height": 1024 } },
+    { "pause": 500 },
+    { "screenshot": "bp-768-tablet.png" },
+
+    { "set_viewport": { "width": 1280, "height": 800 } },
+    { "pause": 500 },
+    { "screenshot": "bp-1280-laptop.png" },
+
+    { "set_viewport": { "width": 2560, "height": 1440 } },
+    { "pause": 500 },
+
+    { "assert": { "selector": "#view-home .stat-card", "count": 4 } },
+    { "eval": "document.documentElement.clientWidth" }
+  ],
+  "output": "screenshots/10-breakpoints.png"
+}

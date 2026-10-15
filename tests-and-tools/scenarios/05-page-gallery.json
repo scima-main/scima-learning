@@ -1,0 +1,54 @@
+{
+  "name": "page-gallery",
+  "description": "The 'arbitrary sequence' showcase: one photo of every page in a single run, with pauses for animations to settle.",
+  "seed": "preset:demo",
+  "steps": [
+    { "goto": "/" },
+    { "wait_for": { "selector": "#view-home .deck-card" } },
+    { "pause": 600 },
+    { "screenshot": { "path": "gallery-home.png", "full_page": true } },
+
+    { "goto": "/decks/" },
+    { "wait_for": { "selector": "#view-decks .subject-tile" } },
+    { "pause": 600 },
+    { "screenshot": "gallery-decks.png" },
+    { "click": ".subject-tile:has-text('Miscellaneous')" },
+    { "wait_for": { "text": "Languages" } },
+    { "pause": 400 },
+    { "screenshot": "gallery-decks-subject.png" },
+    { "click": ".folder-item:has-text('Languages')" },
+    { "wait_for": { "text": "Spanish Basics" } },
+    { "pause": 500 },
+    { "screenshot": "gallery-decks-folder.png" },
+
+    { "goto": "/study/" },
+    { "wait_for": { "text": "Study Mode" } },
+    { "pause": 600 },
+    { "screenshot": { "path": "gallery-study.png", "full_page": true } },
+
+    { "goto": "/library/" },
+    { "wait_for": { "text": "Cells - A Short Introduction.txt" } },
+    { "pause": 600 },
+    { "screenshot": "gallery-library.png" },
+
+    { "goto": "/analytics/" },
+    { "wait_for": { "selector": ".heatmap" } },
+    { "pause": 600 },
+    { "screenshot": { "path": "gallery-analytics.png", "full_page": true } },
+    { "click": "#page-tabs .tab-btn[data-view='quests']" },
+    { "wait_for": { "selector": "#view-quests" } },
+    { "pause": 500 },
+    { "screenshot": "gallery-quests.png" },
+
+    { "goto": "/settings/" },
+    { "wait_for": { "text": "Replay tutorial" } },
+    { "pause": 600 },
+    { "screenshot": { "path": "gallery-settings.png", "full_page": true } },
+
+    { "goto": "/about/" },
+    { "wait_for": { "selector": "#view-about" } },
+    { "pause": 600 },
+    { "screenshot": "gallery-about.png" }
+  ],
+  "output": "screenshots/05-page-gallery.png"
+}
