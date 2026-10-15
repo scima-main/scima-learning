@@ -1,0 +1,887 @@
+import json
+import os
+import secrets
+import sqlite3
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional, Sequence
+
+import httpx
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
+
+from . import db, ratelimit, scimaschema
+from .schemas import (
+    DeckListResponse,
+    DeckSearchResponse,
+    DeckSummary,
+    DeckUploadRequest,
+    MAX_REQUEST_BODY_BYTES,
+    MAX_SEARCH_QUERY_CHARS,
+    Rating,
+)
+
+
+app = FastAPI(
+    title="SCIMA Community Deck Registry",
+    version="1.0.0",
+)
+
+
+# ── Middleware ───────────────────────────────────────────────────────
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=[
+        "study.scima-net.com",
+        "localhost",
+        "127.0.0.1",
+    ],
+)
+
+
+# ── Body Size Middleware ─────────────────────────────────────────────
+
+@app.middleware("http")
+async def enforce_max_body_size(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+
+    if content_length is not None:
+        try:
+            if int(content_length) > MAX_REQUEST_BODY_BYTES:
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "detail": (
+                            f"Request body exceeds "
+                            f"{MAX_REQUEST_BODY_BYTES} bytes"
+                        )
+                    },
+                )
+        except ValueError:
+            pass
+
+    received = 0
+    original_receive = request._receive
+
+    async def limited_receive():
+        nonlocal received
+
+        message = await original_receive()
+
+        if message["type"] == "http.request":
+            body = message.get("body", b"")
+            received += len(body)
+
+            if received > MAX_REQUEST_BODY_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"Request body exceeds "
+                        f"{MAX_REQUEST_BODY_BYTES} bytes"
+                    ),
+                )
+
+        return message
+
+    request._receive = limited_receive
+
+    try:
+        return await call_next(request)
+    except HTTPException as exc:
+        if exc.status_code == 413:
+            return JSONResponse(
+                status_code=413,
+                content={"detail": exc.detail},
+            )
+        raise
+
+
+# ── Startup ──────────────────────────────────────────────────────────
+
+# ── Static-asset revalidation ────────────────────────────────────────
+# Starlette's StaticFiles sends no Cache-Control header, so browsers invent
+# a heuristic freshness window from Last-Modified and can keep serving
+# days-old JS/CSS after a deploy (users then see phantom old UI — e.g. the
+# retired pill-shaped page tabs — while the files on disk are current).
+# no-cache forces a revalidation on every use; ETags still make unchanged
+# files cost only a 304, so this is freshness, not extra bandwidth.
+STATIC_REVALIDATE = (".html", ".js", ".css")
+
+
+@app.middleware("http")
+async def revalidate_static(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if request.method in ("GET", "HEAD") and (
+        path.endswith(STATIC_REVALIDATE) or path.endswith("/")
+    ):
+        if "cache-control" not in response.headers:
+            response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+@app.on_event("startup")
+def startup():
+    db.init_db()
+
+
+# ── Helpers ──────────────────────────────────────────────────────────
+
+def enforce_rate_limit(request: Request, bucket: str):
+    allowed, rule, retry_after = ratelimit.check(request, bucket)
+
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Rate limit exceeded: "
+                f"{rule.limit} requests / {rule.window_seconds}s."
+            ),
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+def now() -> str:
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+
+
+def new_id() -> str:
+    # 128-bit random identifier.
+    return f"sd_{secrets.token_hex(16)}"
+
+
+def build_summaries_batch(
+    conn,
+    rows: Sequence,
+) -> list[DeckSummary]:
+    if not rows:
+        return []
+
+    deck_ids = [row["id"] for row in rows]
+    placeholders = ",".join(["?"] * len(deck_ids))
+
+    tag_rows = conn.execute(
+        f"""
+        SELECT deck_id, tag
+        FROM deck_tags
+        WHERE deck_id IN ({placeholders})
+        ORDER BY tag
+        """,
+        deck_ids,
+    ).fetchall()
+
+    tags_map: dict[str, list[str]] = {}
+
+    for tag_row in tag_rows:
+        tags_map.setdefault(tag_row["deck_id"], []).append(
+            tag_row["tag"]
+        )
+
+    summaries = []
+
+    for row in rows:
+        rating_count = row["rating_count"]
+
+        summaries.append(
+            DeckSummary(
+                id=row["id"],
+                name=row["name"],
+                author=row["author"],
+                subject=row["subject"],
+                emoji=row["emoji"],
+                level=row["level"],
+                examBoard=row["exam_board"],
+                description=row["description"],
+                tags=tags_map.get(row["id"], []),
+                cardCount=row["card_count"],
+                downloads=row["downloads"],
+                rating=Rating(
+                    average=(
+                        row["rating_sum"] / rating_count
+                        if rating_count
+                        else None
+                    ),
+                    count=rating_count,
+                ),
+                createdAt=row["created_at"],
+                updatedAt=row["updated_at"],
+            )
+        )
+
+    return summaries
+
+
+def get_export_path(file_path: str) -> Path:
+    path = (db.DATA_DIR.parent / file_path).resolve()
+    base_dir = db.DECKS_DIR.resolve()
+
+    try:
+        path.relative_to(base_dir)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="invalid file path",
+        )
+
+    if not path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="export file missing",
+        )
+
+    return path
+
+
+def write_export_atomic(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=path.parent,
+    )
+
+    temp_path = Path(temp_name)
+
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(
+                payload,
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
+            f.flush()
+            os.fsync(f.fileno())
+
+        os.replace(temp_path, path)
+
+    except Exception:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
+def make_fts_query(query: str) -> str:
+    tokens = query.strip().split()
+    parts = []
+
+    for token in tokens:
+        token = token.replace('"', '""')
+
+        if token:
+            parts.append(f'"{token}"*')
+
+    return " AND ".join(parts)
+
+
+# ── API ──────────────────────────────────────────────────────────────
+
+@app.get("/api/v1/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.get(
+    "/api/v1/decks",
+    response_model=DeckListResponse,
+)
+def list_decks(
+    request: Request,
+    subject: Optional[str] = None,
+    tag: Optional[str] = None,
+    sort: str = Query(
+        "newest",
+        pattern="^(newest|popularity)$",
+    ),
+    limit: int = Query(
+        50,
+        ge=1,
+        le=100,
+    ),
+    offset: int = Query(
+        0,
+        ge=0,
+        le=10000,
+    ),
+):
+    enforce_rate_limit(request, "list_decks")
+
+    where = []
+    params = []
+
+    if subject:
+        where.append("d.subject = ?")
+        params.append(subject)
+
+    if tag:
+        where.append(
+            "d.id IN "
+            "(SELECT deck_id FROM deck_tags WHERE tag = ?)"
+        )
+        params.append(tag.lower())
+
+    where_sql = (
+        "WHERE " + " AND ".join(where)
+        if where
+        else ""
+    )
+
+    if sort == "popularity":
+        order_sql = (
+            "d.downloads DESC, "
+            "d.created_at DESC"
+        )
+    else:
+        order_sql = "d.created_at DESC"
+
+    with db.db_session() as conn:
+        total = conn.execute(
+            f"""
+            SELECT COUNT(*) AS c
+            FROM decks d
+            {where_sql}
+            """,
+            params,
+        ).fetchone()["c"]
+
+        rows = conn.execute(
+            f"""
+            SELECT d.*
+            FROM decks d
+            {where_sql}
+            ORDER BY {order_sql}
+            LIMIT ? OFFSET ?
+            """,
+            [*params, limit, offset],
+        ).fetchall()
+
+        items = build_summaries_batch(conn, rows)
+
+    return DeckListResponse(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get(
+    "/api/v1/search",
+    response_model=DeckSearchResponse,
+)
+def search(
+    request: Request,
+    q: str = "",
+    sort: str = Query(
+        "relevance",
+        pattern="^(relevance|newest|popularity)$",
+    ),
+    limit: int = Query(
+        50,
+        ge=1,
+        le=100,
+    ),
+    offset: int = Query(
+        0,
+        ge=0,
+        le=10000,
+    ),
+):
+    enforce_rate_limit(request, "search")
+
+    if len(q) > MAX_SEARCH_QUERY_CHARS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"search query exceeds "
+                f"{MAX_SEARCH_QUERY_CHARS} characters"
+            ),
+        )
+
+    with db.db_session() as conn:
+        if not q.strip():
+            total = conn.execute(
+                "SELECT COUNT(*) AS c FROM decks"
+            ).fetchone()["c"]
+
+            if sort == "popularity":
+                order_sql = (
+                    "d.downloads DESC, "
+                    "d.created_at DESC"
+                )
+            else:
+                order_sql = "d.created_at DESC"
+
+            rows = conn.execute(
+                f"""
+                SELECT d.*
+                FROM decks d
+                ORDER BY {order_sql}
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset),
+            ).fetchall()
+
+        else:
+            fts_q = make_fts_query(q)
+
+            if not fts_q:
+                return DeckSearchResponse(
+                    items=[],
+                    total=0,
+                    limit=limit,
+                    offset=offset,
+                )
+
+            try:
+                total = conn.execute(
+                    """
+                    SELECT COUNT(*) AS c
+                    FROM decks_fts
+                    WHERE decks_fts MATCH ?
+                    """,
+                    (fts_q,),
+                ).fetchone()["c"]
+
+                if sort == "popularity":
+                    order_sql = (
+                        "d.downloads DESC, "
+                        "d.created_at DESC"
+                    )
+                elif sort == "newest":
+                    order_sql = "d.created_at DESC"
+                else:
+                    order_sql = (
+                        "bm25("
+                        "decks_fts, "
+                        "10.0, 5.0, 3.0, 2.0, 1.0"
+                        ") ASC, "
+                        "d.created_at DESC"
+                    )
+
+                rows = conn.execute(
+                    f"""
+                    SELECT d.*
+                    FROM decks d
+                    JOIN decks_fts
+                      ON decks_fts.rowid = d.rowid
+                    WHERE decks_fts MATCH ?
+                    ORDER BY {order_sql}
+                    LIMIT ? OFFSET ?
+                    """,
+                    (fts_q, limit, offset),
+                ).fetchall()
+
+            except sqlite3.OperationalError as e:
+                error = str(e).lower()
+
+                if "fts5" in error or "syntax error" in error:
+                    pattern = f"%{q.strip()}%"
+
+                    total = conn.execute(
+                        """
+                        SELECT COUNT(DISTINCT d.id) AS c
+                        FROM decks d
+                        LEFT JOIN deck_tags t
+                          ON d.id = t.deck_id
+                        WHERE
+                            d.name LIKE ?
+                            OR d.subject LIKE ?
+                            OR d.author LIKE ?
+                            OR d.description LIKE ?
+                            OR t.tag LIKE ?
+                        """,
+                        (
+                            pattern,
+                            pattern,
+                            pattern,
+                            pattern,
+                            pattern,
+                        ),
+                    ).fetchone()["c"]
+
+                    if sort == "popularity":
+                        order_sql = (
+                            "d.downloads DESC, "
+                            "d.created_at DESC"
+                        )
+                    else:
+                        order_sql = "d.created_at DESC"
+
+                    rows = conn.execute(
+                        f"""
+                        SELECT DISTINCT d.*
+                        FROM decks d
+                        LEFT JOIN deck_tags t
+                          ON d.id = t.deck_id
+                        WHERE
+                            d.name LIKE ?
+                            OR d.subject LIKE ?
+                            OR d.author LIKE ?
+                            OR d.description LIKE ?
+                            OR t.tag LIKE ?
+                        ORDER BY {order_sql}
+                        LIMIT ? OFFSET ?
+                        """,
+                        (
+                            pattern,
+                            pattern,
+                            pattern,
+                            pattern,
+                            pattern,
+                            limit,
+                            offset,
+                        ),
+                    ).fetchall()
+
+                else:
+                    raise
+
+        items = build_summaries_batch(conn, rows)
+
+    return DeckSearchResponse(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get(
+    "/api/v1/decks/{deck_id}",
+    response_model=DeckSummary,
+)
+def get_deck(
+    deck_id: str,
+    request: Request,
+):
+    enforce_rate_limit(request, "get_deck")
+
+    with db.db_session() as conn:
+        row = conn.execute(
+            "SELECT * FROM decks WHERE id = ?",
+            (deck_id,),
+        ).fetchone()
+
+        if row is None:
+            raise HTTPException(
+                status_code=404,
+                detail="deck not found",
+            )
+
+        return build_summaries_batch(
+            conn,
+            [row],
+        )[0]
+
+
+@app.get("/api/v1/decks/{deck_id}/export")
+def export_deck(
+    deck_id: str,
+    request: Request,
+):
+    enforce_rate_limit(request, "export_deck")
+
+    with db.db_session() as conn:
+        row = conn.execute(
+            "SELECT * FROM decks WHERE id = ?",
+            (deck_id,),
+        ).fetchone()
+
+        if row is None:
+            raise HTTPException(
+                status_code=404,
+                detail="deck not found",
+            )
+
+        file_path = get_export_path(row["file_path"])
+
+        try:
+            with file_path.open(
+                "r",
+                encoding="utf-8",
+            ) as f:
+                export_data = json.load(f)
+
+        except (OSError, json.JSONDecodeError):
+            raise HTTPException(
+                status_code=500,
+                detail="export file is corrupt or unreadable",
+            )
+
+        # Backwards compatibility: files written before the three-schema
+        # envelope are normalized to a stamped share payload on read
+        # (idempotent; app.migrate_db stamps them at rest).
+        export_data, _, _ = scimaschema.normalize_export(export_data)
+
+        conn.execute(
+            """
+            UPDATE decks
+            SET downloads = downloads + 1
+            WHERE id = ?
+            """,
+            (deck_id,),
+        )
+
+    return export_data
+
+
+@app.get("/api/v1/import/quizlet")
+async def proxy_quizlet(
+    request: Request,
+    set_id: str = Query(..., alias="set", pattern=r"^[0-9]{1,20}$"),
+    page: int = Query(1, ge=1, le=1000),
+    per_page: int = Query(50, ge=1, le=200),
+):
+    """Same-origin proxy for Quizlet's public studiable-item-documents webapi.
+
+    Browsers cannot call quizlet.com cross-origin (no CORS headers), and
+    Quizlet's bot filtering rejects shared public proxies (403/522/401), so
+    the Create-Deck → 🎴 Quizlet tab calls this endpoint first and the
+    SERVER fetches with browser-like headers. The payload is passed through
+    verbatim; upstream failures surface as 502 so the client can fall back
+    to its other strategies (user proxy, direct, paste).
+    """
+    enforce_rate_limit(request, "quizlet")
+    url = (
+        "https://quizlet.com/webapi/3.4/studiable-item-documents"
+        f"?filters%5BstudiableContainerId%5D={set_id}"
+        "&filters%5BstudiableContainerType%5D=1"
+        f"&perPage={per_page}&page={page}"
+    )
+    headers = {
+        "user-agent": (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "accept": "application/json, text/plain, */*",
+        "accept-language": "en-US,en;q=0.9",
+        "referer": f"https://quizlet.com/{set_id}/",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            upstream = await client.get(url, headers=headers)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502,
+                           detail=f"Quizlet unreachable: {type(exc).__name__}")
+    if upstream.status_code != 200:
+        raise HTTPException(status_code=502,
+                           detail=f"Quizlet answered HTTP {upstream.status_code}")
+    return Response(content=upstream.content, media_type="application/json")
+
+
+@app.post(
+    "/api/v1/decks",
+    response_model=DeckSummary,
+    status_code=201,
+)
+def create_deck(
+    body: DeckUploadRequest,
+    request: Request,
+):
+    enforce_rate_limit(request, "create_deck")
+
+    deck_data = body.deck
+    deck_id = new_id()
+    timestamp = now()
+
+    file_path = db.DECKS_DIR / f"{deck_id}.json"
+
+    rel_path_str = str(
+        file_path.relative_to(
+            db.DATA_DIR.parent
+        )
+    )
+
+    # Storage grade: stamped share/deck envelope (app/scimaschema.py). The
+    # DeckUploadRequest validator has already verified any envelope that
+    # arrived, expanded skeletal short-key cards, and filled legacy
+    # defaults — stamping here is what lands on disk and round-trips
+    # through /export.
+    export_payload = scimaschema.stamp(
+        body.model_dump(
+            mode="json",
+            by_alias=True,
+        ),
+        "share",
+        "deck",
+    )
+
+    write_export_atomic(
+        file_path,
+        export_payload,
+    )
+
+    try:
+        with db.db_session() as conn:
+            conn.execute(
+                """
+                INSERT INTO decks (
+                    id,
+                    source_deck_id,
+                    name,
+                    description,
+                    author,
+                    subject,
+                    emoji,
+                    level,
+                    exam_board,
+                    card_count,
+                    downloads,
+                    rating_sum,
+                    rating_count,
+                    file_path,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    0, 0, 0, ?, ?, ?
+                )
+                """,
+                (
+                    deck_id,
+                    deck_data.id,
+                    deck_data.name,
+                    body.meta.description,
+                    body.meta.author,
+                    deck_data.subject,
+                    deck_data.emoji,
+                    deck_data.level,
+                    deck_data.examBoard,
+                    len(deck_data.cards),
+                    rel_path_str,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+
+            for tag in body.meta.tags:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO deck_tags
+                        (deck_id, tag)
+                    VALUES (?, ?)
+                    """,
+                    (deck_id, tag),
+                )
+
+            row = conn.execute(
+                "SELECT * FROM decks WHERE id = ?",
+                (deck_id,),
+            ).fetchone()
+
+            summary = build_summaries_batch(
+                conn,
+                [row],
+            )[0]
+
+    except Exception:
+        try:
+            file_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+    return summary
+
+
+# ── Static Mounts ────────────────────────────────────────────────────
+# Registration order matters: Starlette matches routes and mounts in the
+# order they were added, so the catch-all "/" mount must stay LAST — every
+# API route above and the two specific mounts below win over it.
+
+# Repo-root-relative locations, derived from this file rather than hardcoded
+# absolute paths — the checkout can live anywhere (/home/scima/study,
+# /home/scima/scima-learning, a dev laptop…) and the mounts follow it.
+# main.py sits at <repo>/backend/app/main.py, so parents[2] is <repo>.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+STUDY_LANDING_DIR = REPO_ROOT / "home"
+# The legacy standalone community page was renamed upstream
+# (community/ → community-deprecated/); accept either name so checkouts
+# from before or after the rename both boot.
+COMMUNITY_DIR = REPO_ROOT / "community-deprecated"
+if not COMMUNITY_DIR.exists():
+    COMMUNITY_DIR = REPO_ROOT / "community"
+
+# Legacy URL family (/dashboard/…). Kept because existing bookmarks use it
+# and the community page loads /dashboard/shared/theme.js root-absolute.
+app.mount(
+    "/dashboard",
+    StaticFiles(directory=STUDY_LANDING_DIR, html=True),
+    name="dashboard",
+)
+
+app.mount(
+    "/community",
+    StaticFiles(
+        directory=COMMUNITY_DIR,
+        html=True,
+    ),
+    name="community",
+)
+
+
+# Canonical URL family: the workflow routes straight off the domain root —
+# / (Home), /study/, /capture/, /insights/, /settings/, /tracker/. Each
+# route is a subdirectory of the landing folder with its own index.html,
+# served for the directory URL by StaticFiles(html=True); a slash-less
+# /study is 307-redirected to /study/ by Starlette. Every in-page reference
+# (scripts, styles, lazy pdf.js, cross-route links) is relative, so the
+# same files work under this mount and the /dashboard mount above without
+# either family leaking into the other.
+app.mount(
+    "/",
+    StaticFiles(directory=STUDY_LANDING_DIR, html=True),
+    name="site",
+)
+
+
+# ── Fallback: unrecognized paths go Home ─────────────────────────────
+# Anything no route and no static mount recognizes sends a browser back to
+# Home ("/#home" — the hash selects the view; the /dashboard/ family stays
+# inside its own family). Two deliberate exceptions keep 404s honest:
+#   * /api/* stays a JSON 404 — API clients parse it;
+#   * requests whose last path segment has a dot look like assets
+#     (.js/.css/.woff2/…), and a redirect would put an HTML body inside a
+#     <script> or <link> tag — a far more confusing failure than a 404.
+# Registered as an int-keyed handler so only 404s are intercepted; every
+# other HTTPException keeps Starlette's default rendering.
+@app.exception_handler(404)
+async def redirect_unknown_to_home(request: Request, exc: HTTPException):
+    path = request.url.path
+    if path.startswith("/api/"):
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    # Deep links in path form (/decks/Biology/My%20Deck, /library/Fics/book)
+    # map onto the hash form the frontend parses — checked before the
+    # asset-looking 404 rule below because deck/book names may contain dots.
+    for prefix in ("/decks/", "/library/"):
+        if path.startswith(prefix):
+            rest = path[len(prefix):].strip("/")
+            if rest:
+                target = f"/{prefix.strip('/')}/#{prefix.strip('/')}/{rest}"
+                return RedirectResponse(target, status_code=302)
+    last = path.rstrip("/").rsplit("/", 1)[-1]
+    if "." in last:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    family = "/dashboard" if path.startswith("/dashboard/") else ""
+    return RedirectResponse(f"{family}/#home", status_code=302)

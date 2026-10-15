@@ -1,0 +1,1 @@
+window.process=window.process||{cwd:function(){return"/"},nextTick:function(e){setTimeout(e,0)},env:{},version:"",versions:{},platform:"browser"}
