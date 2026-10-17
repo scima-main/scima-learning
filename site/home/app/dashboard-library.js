@@ -424,7 +424,7 @@ function renderLibrary(c) {
       const ids=[folder.id,...getLibraryDescendantFolderIds(folder.id)];
       return ids.includes(s.libraryFolderId||'');
     });
-    list.appendChild(el('div',{class:'card source-item',style:'margin-bottom:10px;cursor:pointer',onclick:()=>{state._libraryFolderNav=folder.id;renderView('library');}},
+    list.appendChild(el('div',{class:'card source-item',style:'margin-bottom:10px;cursor:pointer',role:'button',tabindex:'0','aria-label':`Open folder ${folder.name}`,onclick:()=>{state._libraryFolderNav=folder.id;renderView('library');},onkeydown:clickKeys(()=>{state._libraryFolderNav=folder.id;renderView('library');})},
       el('div',{class:'source-icon',style:'font-size:20px'},'\u{1F4C1}'),
       el('div',{style:'flex:1;min-width:0'},
         el('div',{class:'source-name'},folder.name),

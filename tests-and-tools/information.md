@@ -14,7 +14,7 @@ pip install -r tests-and-tools/requirements.txt
 python -m playwright install chromium     # once; add --with-deps on bare Linux
 
 cd tests-and-tools
-pytest                                    # whole suite (201 tests)
+pytest                                    # whole suite (222 tests)
 pytest -m smoke                           # page-load sanity only
 pytest ui/test_study.py -k srs -x         # one file / one test
 python render.py scenarios/02-home-demo.json          # → screenshots/02-home-demo.png

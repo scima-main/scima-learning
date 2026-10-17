@@ -42,7 +42,7 @@ function renderSettings(c) {
   }
   function makeRange(label,key,min,max,color){
     const valSpan=el('span',{},String(state.settings[key]||0));
-    const input=el('input',{type:'range',min:String(min),max:String(max),value:String(state.settings[key]),style:`accent-color:${color}`,oninput:e=>{ state.settings[key]=Number(e.target.value); valSpan.textContent=e.target.value; scheduleSave(); }});
+    const input=el('input',{type:'range','aria-label':label.replace(/[:\s]+$/,''),min:String(min),max:String(max),value:String(state.settings[key]),style:`accent-color:${color}`,oninput:e=>{ state.settings[key]=Number(e.target.value); valSpan.textContent=e.target.value; scheduleSave(); }});
     return el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},el('div',{style:'font-size:13px;font-weight:600;margin-bottom:2px;display:flex;gap:6px'},label,valSpan),input);
   }
 
@@ -55,7 +55,7 @@ function renderSettings(c) {
     btn('Replay tutorial','primary',{onclick:()=>startTutorial(0,'replay')})
   );
   const aiCard=el('div',{class:'card',style:'padding:20px'},el('div',{style:'font-weight:800;margin-bottom:14px;color:var(--blue)'},'🤖 Algorithm & Notifications'));
-  const algoSel=el('select',{class:'u-input',onchange:e=>{ state.settings.algorithm=e.target.value; scheduleSave(); }});
+  const algoSel=el('select',{class:'u-input','aria-label':'SRS scheduling algorithm',onchange:e=>{ state.settings.algorithm=e.target.value; scheduleSave(); }});
   [['fsrs','FSRS (Recommended)'],['sm2','SM-2 (Classic)']].forEach(([v,t])=>{ const o=el('option',{value:v,class:'u-bg'},t); if(state.settings.algorithm===v)o.selected=true; algoSel.appendChild(o); });
   aiCard.append(
     el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},el('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px'},el('div',{style:'font-size:13px;font-weight:600'},'SRS Algorithm'),makeHelpBtn('FSRS vs SM-2 — how reviews get scheduled', ()=>openAlgorithmHelp(), false)),algoSel),
@@ -133,7 +133,7 @@ function renderSettings(c) {
   // ── Day boundary: timezone in which streaks / daily goal / history roll over ──
   const tzWrap=el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'});
   const tzPreview=el('span',{style:'color:var(--muted);font-size:11px;margin-left:6px'},`(today: ${today()})`);
-  const tzSel=el('select',{class:'u-input',style:'margin-top:6px'});
+  const tzSel=el('select',{class:'u-input',style:'margin-top:6px','aria-label':'Day boundary timezone'});
   let tzSupported=[];
   try { tzSupported = typeof Intl.supportedValuesOf==='function' ? Intl.supportedValuesOf('timeZone') : []; } catch(e){}
   const tzCur=state.settings.dayTimezone||'utc';
@@ -155,7 +155,7 @@ function renderSettings(c) {
 
   // ── Optional Quizlet proxy template (fallback when every built-in fetch path is blocked) ──
   const proxyWrap=el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'});
-  const proxyInput=el('input',{type:'text',class:'u-input',placeholder:'https://my-proxy.example/?url={url}',style:'margin-top:6px'});
+  const proxyInput=el('input',{type:'text',class:'u-input','aria-label':'Quizlet proxy template URL',placeholder:'https://my-proxy.example/?url={url}',style:'margin-top:6px'});
   proxyInput.value=state.settings.quizletProxy||'';
   proxyInput.addEventListener('change',()=>{ state.settings.quizletProxy=proxyInput.value.trim(); scheduleSave(); });
   proxyWrap.append(
@@ -577,7 +577,7 @@ function renderSettings(c) {
     });
 
     // "Save current as preset" button
-    presetRow.appendChild(el('button', { class:'btn btn-ghost btn-sm', title:'Save current colours as a new preset', style:'border-radius:99px;width:32px;height:32px;padding:0;font-size:16px;flex-shrink:0', onclick: () => {
+    presetRow.appendChild(el('button', { class:'btn btn-ghost btn-sm', title:'Save current colours as a new preset','aria-label':'Save current colours as a new preset', style:'border-radius:99px;width:32px;height:32px;padding:0;font-size:16px;flex-shrink:0', onclick: () => {
       const name = prompt('Name for this preset:', 'My Preset');
       if (!name) return;
       const key = 'custom_' + Date.now();
@@ -1010,7 +1010,7 @@ function renderSettings(c) {
             `${s.short || '\u2014'} \u00b7 ${s.board || 'N/A'} \u00b7 ${nOf(deckCount, 'deck')}${folderCount ? ` \u00b7 ${nOf(folderCount, 'folder')}` : ''}${isDeleted ? ' \u00b7 deleted' : ''}`)),
         isDeleted
           ? el('button', { class:'btn btn-ghost btn-sm', title:'Bring this subject back', style:'padding:2px 10px;font-size:12px', onclick: () => { const r = restoreSubject(key); if (!r.ok) { showToast(r.error); return; } renderView('settings'); renderSidebar(); } }, '\u21a9 Restore')
-          : el('button', { class:'btn btn-ghost btn-sm', title:'Edit subject', style:'padding:2px 8px;font-size:12px', onclick: () => openSubjectModal(key) }, '\u270e'),
+          : el('button', { class:'btn btn-ghost btn-sm', title:'Edit subject','aria-label':`Edit subject ${s.name}`, style:'padding:2px 8px;font-size:12px', onclick: () => openSubjectModal(key) }, '\u270e'),
         isDeleted ? null : el('button', { class:'btn btn-ghost btn-sm', title:`Delete ${s.name}`, style:'padding:2px 8px;font-size:12px', onclick: () => openDeleteSubjectModal(key) }, '\ud83d\uddd1')
       );
       subjectList.appendChild(row);
@@ -1040,18 +1040,18 @@ function renderSettings(c) {
       const isHidden = hidden.has(item.id);
       const row = el('div', { class:'nav-edit-row', style:`display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;margin-bottom:4px;background:rgba(255,255,255,${isHidden?'0.02':'0.04'});border:1px solid var(--border);opacity:${isHidden?0.55:1}` });
       // Up / Down
-      const upBtn  = el('button', { class:'btn btn-ghost btn-sm', disabled: i === 0, style:'padding:2px 8px;font-size:11px', onclick: () => {
+      const upBtn  = el('button', { class:'btn btn-ghost btn-sm', disabled: i === 0, 'aria-label':`Move ${item.label} tab up`, style:'padding:2px 8px;font-size:11px', onclick: () => {
         const order = getOrderedNavItems().map(n => n.id);
         [order[i-1], order[i]] = [order[i], order[i-1]];
         state.settings.navOrder = order; scheduleSave(); renderSidebar(); renderNavEditor();
       }}, '▲');
-      const downBtn = el('button', { class:'btn btn-ghost btn-sm', disabled: i === ordered.length-1, style:'padding:2px 8px;font-size:11px', onclick: () => {
+      const downBtn = el('button', { class:'btn btn-ghost btn-sm', disabled: i === ordered.length-1, 'aria-label':`Move ${item.label} tab down`, style:'padding:2px 8px;font-size:11px', onclick: () => {
         const order = getOrderedNavItems().map(n => n.id);
         [order[i], order[i+1]] = [order[i+1], order[i]];
         state.settings.navOrder = order; scheduleSave(); renderSidebar(); renderNavEditor();
       }}, '▼');
       // Hide/show toggle
-      const eyeBtn = el('button', { class:'btn btn-ghost btn-sm', title: isHidden ? 'Show in sidebar' : 'Hide (move to drawer)', style:'padding:2px 8px;font-size:13px', onclick: () => {
+      const eyeBtn = el('button', { class:'btn btn-ghost btn-sm', title: isHidden ? 'Show in sidebar' : 'Hide (move to drawer)', 'aria-label': isHidden ? `Show ${item.label} in sidebar` : `Hide ${item.label} (move to drawer)`, style:'padding:2px 8px;font-size:13px', onclick: () => {
         const h = new Set(state.settings.hiddenTabs || []);
         isHidden ? h.delete(item.id) : h.add(item.id);
         state.settings.hiddenTabs = [...h]; scheduleSave(); renderSidebar(); renderNavEditor();

@@ -1025,6 +1025,10 @@ function bumpStreak() {
   state.streak = state.lastStreakDate === yesterday ? state.streak + 1 : 1;
   state.lastStreakDate = d;
 }
+/** keydown twin of a click handler — Enter/Space activate clickable divs. */
+function clickKeys(fn) {
+  return e => { if (e.key === 'Enter' || e.key === ' ' || e.code === 'Space') { e.preventDefault(); fn(e); } };
+}
 function el(tag, attrs = {}, ...children) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -1050,6 +1054,7 @@ function btn(label, variant = 'primary', opts = {}) {
   // their only accessible name, so forward them instead of dropping them.
   if (opts.title) b.title = opts.title;
   if (opts.ariaLabel) b.setAttribute('aria-label', opts.ariaLabel);
+  if (opts['aria-label']) b.setAttribute('aria-label', opts['aria-label']);
   return b;
 }
 
@@ -2412,11 +2417,13 @@ function renderSidebar() {
     pinWrap.appendChild(el('div', { class: 'nav-section-label', style: 'padding-top:8px' }, '📌 Pinned'));
     pinned.forEach(deck => {
       const due = getDueCards(deck.cards).length;
-      pinWrap.appendChild(el('div', { class: 'pinned-deck-row', onclick: () => openDeckDetail(deck.id) },
+      pinWrap.appendChild(el('div', { class: 'pinned-deck-row', role: 'button', tabindex: '0',
+        'aria-label': `Open deck ${deck.name}`, onclick: () => openDeckDetail(deck.id),
+        onkeydown: clickKeys(() => openDeckDetail(deck.id)) },
         el('span', { class: 'pinned-deck-emoji' }, deck.emoji || '📚'),
         el('span', { class: 'pinned-deck-name' }, deck.name),
         due > 0 ? el('span', { class: 'pinned-deck-due' }, String(due)) : null,
-        el('button', { class: 'pinned-deck-study', title: 'Study now', onclick: e => { e.stopPropagation(); state.studyScope = [{ type:'deck', id:deck.id }]; navigate('study'); } }, '▶')
+        el('button', { class: 'pinned-deck-study', title: 'Study now', 'aria-label': `Study ${deck.name} now`, onclick: e => { e.stopPropagation(); state.studyScope = [{ type:'deck', id:deck.id }]; navigate('study'); } }, '▶')
       ));
     });
   }

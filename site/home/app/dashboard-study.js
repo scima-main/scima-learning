@@ -664,7 +664,9 @@ function renderFlashcard(card, citBadge) {
     }
   }
 
-  const flashcard=el('div',{class:`flashcard ${sess.flipped?'back':'front'}`,onclick:()=>{ if(!sess.flipped) reveal(); }});
+  const flashcard=el('div',{class:`flashcard ${sess.flipped?'back':'front'}`,role:'button',tabindex:'0',
+    'aria-label':sess.flipped?'Answer shown — rate it below':'Question shown — activate to reveal the answer',
+    onclick:()=>{ if(!sess.flipped) reveal(); },onkeydown:clickKeys(()=>{ if(!sess.flipped) reveal(); })});
   flashcard.appendChild(el('div',{class:'flashcard-side-label'},sess.flipped?'ANSWER':'QUESTION'));
   const tagsEl=el('div',{class:'flashcard-tags'});
   (card.tags||[]).forEach(t=>tagsEl.appendChild(mkTag(t)));
@@ -1363,7 +1365,7 @@ function renderQuizCard(card, citBadge, scrollArea) {
   const onKeystroke=e=>{ sess._keystrokes++; if(e.key==='Backspace'||e.key==='Delete') sess._backspaces++; };
   if(isMulti){
     for(let i=0;i<requiredAnswers;i++){
-      const box=el('input',{type:'text',class:'quiz-input-area',style:'min-height:unset;margin-bottom:8px',placeholder:`Answer ${i+1}…`});
+      const box=el('input',{type:'text',class:'quiz-input-area','aria-label':`Answer ${i+1}`,style:'min-height:unset;margin-bottom:8px',placeholder:`Answer ${i+1}…`});
       box.value=sess.quizAnswers?.[i]||'';
       box.addEventListener('input',e=>{ sess.quizAnswers[i]=e.target.value; });
       box.addEventListener('keydown',onKeystroke);
@@ -1371,7 +1373,7 @@ function renderQuizCard(card, citBadge, scrollArea) {
       inputAreas.push(box);
     }
   } else {
-    const box=el('textarea',{class:'quiz-input-area',placeholder: isMarkscheme?'Write your answer here…':'Type your answer here…'});
+    const box=el('textarea',{class:'quiz-input-area','aria-label':'Your answer',placeholder: isMarkscheme?'Write your answer here…':'Type your answer here…'});
     box.value=sess.quizAnswer||'';
     box.addEventListener('input',e=>{ sess.quizAnswer=e.target.value; });
     box.addEventListener('keydown',onKeystroke);

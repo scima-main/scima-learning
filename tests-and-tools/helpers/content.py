@@ -70,7 +70,8 @@ _JS_UNNAMED_BUTTONS = """([exempt]) => [...document.querySelectorAll('button')]
     if (r.width < 1 || r.height < 1) return false;
     if (b.closest('.hidden') || b.closest('#sidebar[aria-hidden="true"]')) return false;
     if (exempt && b.matches(exempt)) return false;
-    return !((b.textContent || '').trim() || b.getAttribute('aria-label') || b.getAttribute('title'));
+    const n = (b.getAttribute('aria-label') || b.textContent || b.getAttribute('title') || '').trim();
+    return !n;
   })
   .map(b => b.className || b.id || 'button')"""
 
@@ -117,6 +118,57 @@ def unnamed_visible_buttons(page, exempt: str | None = None) -> list[str]:
     return page.evaluate(_JS_UNNAMED_BUTTONS, [exempt])
 
 
+_JS_POOR_NAMES = """() => {
+  const WORD = /[A-Za-z0-9\\u00C0-\\uFFFF]{2,}/;   // two+ word chars (any script)
+  const out = [];
+  for (const el of document.querySelectorAll('button, a, [role="button"]')) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) continue;
+    if (el.closest('.hidden') || el.closest('#sidebar[aria-hidden="true"]')) continue;
+    const name = ((el.getAttribute('aria-label') || el.textContent || el.getAttribute('title') || '')).trim();
+    if (!name || !WORD.test(name)) {
+      out.push((el.tagName + '.' + String(el.className).split(' ')[0]) + ' name=' + JSON.stringify(name));
+    }
+  }
+  return out.slice(0, 20);
+}"""
+
+_JS_CLICKABLES = """(selectors) => {
+  const out = [];
+  for (const sel of selectors) {
+    for (const el of document.querySelectorAll(sel)) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      if (el.closest('.hidden')) continue;
+      if (!el.getAttribute('role') || !el.hasAttribute('tabindex')) {
+        out.push(sel + ' missing ' + (!el.getAttribute('role') ? 'role ' : '') +
+                 (!el.hasAttribute('tabindex') ? 'tabindex' : '') +
+                 ' label=' + JSON.stringify((el.getAttribute('aria-label') || '').slice(0, 30)));
+      }
+    }
+  }
+  return out.slice(0, 20);
+}"""
+
+#: div-based click targets that must carry role/tabindex/aria-label
+CLICKABLE_SELECTORS = [
+    ".subject-tile", ".folder-item", ".source-item[style*='cursor:pointer']",
+    ".pinned-deck-row", ".flashcard", ".deck-card.card-selectable",
+]
+
+
+def poorly_named_controls(page) -> list[str]:
+    """Visible controls whose accessible name is empty or symbol/emoji-only
+    (e.g. a bare '✏' or '▶') — technically named, practically meaningless."""
+    return page.evaluate(_JS_POOR_NAMES)
+
+
+def clickables_missing_role(page, selectors=None) -> list[str]:
+    """Clickable div-rows (subject tiles, folder rows, flashcard…) that lack
+    role/tabindex — invisible to keyboard and AT navigation."""
+    return page.evaluate(_JS_CLICKABLES, selectors or CLICKABLE_SELECTORS)
+
+
 def bug_markers(page) -> list[str]:
     """Raw JS leakage in rendered text: undefined / NaN / [object Object]."""
     return page.evaluate(_JS_BUG_MARKERS, list(BUG_MARKERS))
@@ -131,5 +183,7 @@ def all_content_checks(page, tolerance: int = 1) -> dict:
         "broken_images": broken_images(page),
         "duplicate_ids": duplicate_ids(page),
         "unnamed_buttons": unnamed_visible_buttons(page),
+        "poorly_named_controls": poorly_named_controls(page),
+        "clickables_missing_role": clickables_missing_role(page),
         "bug_markers": bug_markers(page),
     }

@@ -187,7 +187,9 @@ function renderDecksHome(c) {
     const subjectDecks = state.decks.filter(d=>(d.subject||DEFAULT_SUBJECT_KEY)===sk);
     const subjectFolders = state.folders.filter(f=>f.subjectKey===sk&&!f.parentId);
     const due = getDueCards(subjectDecks.flatMap(d=>d.cards)).length;
-    grid.appendChild(el('div',{class:'card subject-tile',onclick:()=>{ state.deckNav={view:'subject',subjectKey:sk}; renderView('decks'); }},
+    grid.appendChild(el('div',{class:'card subject-tile',role:'button',tabindex:'0',
+      'aria-label':`Open subject ${s.name}`,onclick:()=>{ state.deckNav={view:'subject',subjectKey:sk}; renderView('decks'); },
+      onkeydown:clickKeys(()=>{ state.deckNav={view:'subject',subjectKey:sk}; renderView('decks'); })},
       el('div',{class:'subject-tile-accent',style:`background:${s.defaultColor}`}),
       el('div',{class:'subject-tile-name',style:`color:${s.defaultColor}`},s.name),
       el('div',{class:'subject-tile-meta'},s.board),
@@ -232,18 +234,19 @@ function renderSubjectView(c, subjectKey) {
       const fd = state.decks.filter(d=>d.folderId===folder.id);
       const sf = state.folders.filter(f=>f.parentId===folder.id);
       const due = getDueCards(fd.flatMap(d=>d.cards)).length;
-      const folderEl=el('div',{class:'folder-item',onclick:()=>{ state.deckNav={view:'folder',subjectKey,folderId:folder.id}; renderView('decks'); }},
+      const folderEl=el('div',{class:'folder-item',role:'button',tabindex:'0','aria-label':`Open folder ${folder.name}`,onclick:()=>{ state.deckNav={view:'folder',subjectKey,folderId:folder.id}; renderView('decks'); },
+        onkeydown:clickKeys(()=>{ state.deckNav={view:'folder',subjectKey,folderId:folder.id}; renderView('decks'); })},
         mkIcon(folder.emoji||'📁',folder.image,'22px','4px'),
         el('div',{style:'flex:1;min-width:0'},
           el('div',{class:'folder-name'},folder.name),
           el('div',{class:'folder-meta'},`${fd.length} deck${fd.length!==1?'s':''}${sf.length?` · ${sf.length} subfolder${sf.length!==1?'s':''}`:''} ${due>0?`· ${due} due`:''}`)
         ),
         el('div',{class:'folder-actions'},
-          btn('▶','ghost',{small:true,onclick:e=>{e.stopPropagation();state.studyScope=[{type:'folder',id:folder.id}];navigate('study');}}),
-          btn('⬇','ghost',{small:true,title:'Export folder as JSON',onclick:e=>{e.stopPropagation();exportFolder(folder.id);}}),
-          btn('📚','ghost',{small:true,title:'Move to Subject…',onclick:e=>{e.stopPropagation();openMoveFolderSubjectModal(folder.id);}}),
-          btn('✏','ghost',{small:true,onclick:e=>{e.stopPropagation();openRenameFolderModal(folder.id);}}),
-          btn('×','danger',{small:true,onclick:e=>{e.stopPropagation();deleteFolder(folder.id);}})
+          btn('▶','ghost',{small:true,title:'Study this folder now','aria-label':`Study folder ${folder.name} now`,onclick:e=>{e.stopPropagation();state.studyScope=[{type:'folder',id:folder.id}];navigate('study');}}),
+          btn('⬇','ghost',{small:true,title:'Export folder as JSON','aria-label':`Export folder ${folder.name} as JSON`,onclick:e=>{e.stopPropagation();exportFolder(folder.id);}}),
+          btn('📚','ghost',{small:true,title:'Move to Subject…','aria-label':`Move folder ${folder.name} to another subject`,onclick:e=>{e.stopPropagation();openMoveFolderSubjectModal(folder.id);}}),
+          btn('✏','ghost',{small:true,title:'Rename folder','aria-label':`Rename folder ${folder.name}`,onclick:e=>{e.stopPropagation();openRenameFolderModal(folder.id);}}),
+          btn('×','danger',{small:true,title:'Delete folder','aria-label':`Delete folder ${folder.name}`,onclick:e=>{e.stopPropagation();deleteFolder(folder.id);}})
         ),
         el('span',{style:'color:var(--muted);font-size:16px;margin-left:4px'},'›')
       );
@@ -311,13 +314,14 @@ function renderFolderView(c, folderId) {
     const subList = el('div',{class:'card',style:'margin-bottom:16px;overflow:hidden'});
     subFolders.forEach(sf => {
       const sfd = state.decks.filter(d=>d.folderId===sf.id);
-      const sfEl=el('div',{class:'folder-item',onclick:()=>{ state.deckNav={view:'folder',subjectKey:sf.subjectKey,folderId:sf.id}; renderView('decks'); }},
+      const sfEl=el('div',{class:'folder-item',role:'button',tabindex:'0','aria-label':`Open subfolder ${sf.name}`,onclick:()=>{ state.deckNav={view:'folder',subjectKey:sf.subjectKey,folderId:sf.id}; renderView('decks'); },
+        onkeydown:clickKeys(()=>{ state.deckNav={view:'folder',subjectKey:sf.subjectKey,folderId:sf.id}; renderView('decks'); })},
         mkIcon(sf.emoji||'📁',sf.image,'22px','4px'),
         el('div',{style:'flex:1'},el('div',{class:'folder-name'},sf.name),el('div',{class:'folder-meta'},`${sfd.length} deck${sfd.length!==1?'s':''}`)),
         el('div',{class:'folder-actions'},
-          btn('📚','ghost',{small:true,title:'Move to Subject…',onclick:e=>{e.stopPropagation();openMoveFolderSubjectModal(sf.id);}}),
-          btn('✏','ghost',{small:true,onclick:e=>{e.stopPropagation();openRenameFolderModal(sf.id);}}),
-          btn('×','danger',{small:true,onclick:e=>{e.stopPropagation();deleteFolder(sf.id);}})
+          btn('📚','ghost',{small:true,title:'Move to Subject…','aria-label':`Move subfolder ${sf.name} to another subject`,onclick:e=>{e.stopPropagation();openMoveFolderSubjectModal(sf.id);}}),
+          btn('✏','ghost',{small:true,title:'Rename subfolder','aria-label':`Rename subfolder ${sf.name}`,onclick:e=>{e.stopPropagation();openRenameFolderModal(sf.id);}}),
+          btn('×','danger',{small:true,title:'Delete subfolder','aria-label':`Delete subfolder ${sf.name}`,onclick:e=>{e.stopPropagation();deleteFolder(sf.id);}})
         ),
         el('span',{style:'color:var(--muted);font-size:16px;margin-left:4px'},'›')
       );
@@ -367,8 +371,8 @@ function renderDeckCard(deck, grid) {
       mkIcon(deck.emoji,deck.image,'36px','8px'),
       el('div',{style:'display:flex;gap:4px'},
         pinBtn,
-        btn('✏','ghost',{small:true,onclick:e=>{e.stopPropagation();openEditDeckModal(deck.id);}}),
-        btn('×','danger',{small:true,onclick:e=>{e.stopPropagation();deleteDeck(deck.id);}})
+        btn('✏','ghost',{small:true,title:'Edit deck','aria-label':`Edit deck ${deck.name}`,onclick:e=>{e.stopPropagation();openEditDeckModal(deck.id);}}),
+        btn('×','danger',{small:true,title:'Delete deck','aria-label':`Delete deck ${deck.name}`,onclick:e=>{e.stopPropagation();deleteDeck(deck.id);}})
       )
     ),
     el('div',{class:'deck-name'},deck.name),
@@ -449,12 +453,16 @@ function renderSelectableDeckGrid(container, decks) {
     renderDeckCard(deck, grid);
     const tile = grid.lastElementChild;
     tile.classList.add('card-selectable');
+    tile.setAttribute('role', 'button');
+    tile.setAttribute('tabindex', '0');
+    tile.setAttribute('aria-label', `Select deck ${deck.name}`);
     tile.addEventListener('click', e => {
       if(e.target.closest('button')) return;
       if(e.shiftKey && anchorId) selectRange(deck.id);
       else selectToggle(deck.id);
       syncVisuals();
     });
+    tile.addEventListener('keydown', clickKeys(() => { selectToggle(deck.id); syncVisuals(); }));
     deckElById.set(deck.id, tile);
   });
 
@@ -1740,12 +1748,12 @@ function openCreateDeckModal(subjectKey, folderId) {
     const iconPicker=mkIconPicker('📖',null,function(v){_deckEmoji=v;},function(v){_deckImage=v;});
 
     const subjectWrap = el('div',{class:'field'},el('label',{},'Subject'));
-    const subjectSel = el('select',{class:'u-input'});
+    const subjectSel = el('select',{class:'u-input','aria-label':'Subject'});
     Object.entries(getAllSubjects()).forEach(([key,s]) => { const o=el('option',{value:key,class:'u-bg'},`${s.name} (${s.board})`); if(key===(subjectKey||DEFAULT_SUBJECT_KEY))o.selected=true; subjectSel.appendChild(o); });
     subjectWrap.appendChild(subjectSel);
 
     const folderWrap = el('div',{class:'field'},el('label',{},'Folder (optional)'));
-    const folderSel = el('select',{class:'u-input'});
+    const folderSel = el('select',{class:'u-input','aria-label':'Folder'});
     folderSel.appendChild(el('option',{value:'',class:'u-bg'},'None (root level)'));
     state.folders.forEach(f => { const o=el('option',{value:f.id,class:'u-bg'},`${f.name} (${getAllSubjects()[f.subjectKey]?.short||f.subjectKey})`); if(f.id===folderId)o.selected=true; folderSel.appendChild(o); });
     folderWrap.appendChild(folderSel);
@@ -2170,7 +2178,7 @@ function openDeckDetail(deckId) {
   let anchorId = null;
   const cardElById = new Map();
 
-  const searchInput = el('input',{type:'text',placeholder:'Search cards…',style:'padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text);font-size:12px;font-family:inherit;outline:none;width:200px'});
+  const searchInput = el('input',{type:'text','aria-label':'Search cards in this deck',placeholder:'Search cards…',style:'padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text);font-size:12px;font-family:inherit;outline:none;width:200px'});
   let _searchDebounce = null;
   searchInput.addEventListener('input', e => {
     clearTimeout(_searchDebounce);
@@ -2292,7 +2300,7 @@ function openDeckDetail(deckId) {
     filtered.forEach(card => {
       const stateColor = card.suspended?'#6B7280':card.leech?'#FB923C':card.state==='new'?'#A78BFA':card.state==='review'?'var(--blue)':'var(--pink)';
       const source = card.citation ? state.sources.find(s=>s.id===card.citation.sourceId) : null;
-      const cardEl = el('div',{class:`card card-selectable${selected.has(card.id)?' card-selected':''}`,style:'padding:16px',onclick:e=>{
+      const cardEl = el('div',{class:`card card-selectable${selected.has(card.id)?' card-selected':''}`,style:'padding:16px',role:'button',tabindex:'0','aria-label':`Select card ${(card.front||'').slice(0,40)}`,onclick:e=>{
         if(e.target.closest('button')) return;
         // Sticky multi-select: a plain click toggles this card in/out of the
         // selection (so clicking a selected card deselects it, and picking

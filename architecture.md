@@ -390,5 +390,36 @@ Server: `/data/study/data/scima.db` + `/data/study/data/decks/` (§4.4).
   running inside the extension build; site-only behaviour is gated on
   `window.SCIMA_PAGE` / `!isExtension`.
 
+## 9. Search-engine indexing (ops checklist)
+
+In-repo prerequisites (all served from the landing root): `robots.txt`
+(sitemap pointer; `/api/`, `/dashboard/` and redirect stubs disallowed),
+`sitemap.xml` (the six canonical content routes), unique per-route
+titles/descriptions + canonical + OpenGraph tags, `noindex` on `/settings/`
+and the stubs, and a `<noscript>` summary on indexable pages for non-JS
+crawlers and link previews.
+
+1. **Deploy & verify serving**: `curl -I https://study.scima-net.com/robots.txt`
+   and `/sitemap.xml` must return 200 from the domain root (the backend's
+   catch-all static mount serves them; the 404-handler ignores dotted paths
+   only when the file is absent).
+2. **Prove ownership**: Google Search Console — DNS TXT on `scima-net.com`
+   (preferred, covers subdomains) or URL-prefix with an HTML verification
+   file dropped into `site/home/` (served at `/`); Bing Webmaster Tools can
+   import the GSC property. Commit any verification file so deploys keep it.
+3. **Submit the sitemap** in both consoles, then URL-inspection → *Request
+   indexing* for `/` and `/about/` (fastest wins); the rest follow.
+4. **Keep one canonical host**: https + single hostname; `<link rel=canonical>`
+   and sitemap `<loc>` already agree — don't serve the same pages from
+   `/dashboard/` to crawlers (robots disallows it).
+5. **Set expectations**: Googlebot executes JS (Wave renderer), so the app
+   routes can index, but only the six content routes are advertised;
+   non-JS engines and social crawlers get the static meta + noscript copy.
+   "Discovered – currently not indexed" on app views is normal.
+6. **Maintain**: when routes are added/renamed, update `sitemap.xml`
+   (`<loc>` + `<lastmod>`), the §3.1 table, and the robots stub list. If a
+   truly public content page ever appears (shared deck viewer?), consider
+   prerendering it server-side for richer snippets.
+
 For testing this architecture, see `tests-and-tools/information.md` (UI suite,
 render/serve/seed CLIs, selector cheat-sheet).
