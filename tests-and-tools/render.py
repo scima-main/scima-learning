@@ -77,7 +77,7 @@ sys.path.insert(0, str(TESTS_DIR))
 import seed as seedlib  # noqa: E402
 from helpers import pages as pages_helpers  # noqa: E402
 from helpers import storage  # noqa: E402
-from helpers.server import start_static_server, stop_static_server  # noqa: E402
+from helpers.server import REPO_ROOT, start_static_server, stop_static_server  # noqa: E402
 
 try:
     from playwright.sync_api import sync_playwright
@@ -207,8 +207,12 @@ class Renderer:
 
     def run(self) -> int:
         if not self.base_url:
-            self.base_url, self.own_server = start_static_server()
-            print(f"ℹ started throwaway static server at {self.base_url}")
+            root = self.args.root or self.scenario.get("static_root")
+            if root and not Path(root).is_absolute():
+                root = REPO_ROOT / root
+            self.base_url, self.own_server = start_static_server(root=root)
+            print(f"ℹ started throwaway static server at {self.base_url}"
+                  + (f" (root {root})" if root else ""))
 
         started = time.time()
         with sync_playwright() as pw:
@@ -745,6 +749,8 @@ def main(argv=None) -> int:
     ap.add_argument("--no-block-external", action="store_true",
                     help="allow external requests (Google Fonts etc.)")
     ap.add_argument("--no-trace", action="store_true", help="skip writing the trace JSON")
+    ap.add_argument("--root", help="static-server root when auto-starting (e.g. site/home "
+                                   "for features not yet in the minified bundle)")
     ap.add_argument("--json", action="store_true",
                     help="print the trace JSON to stdout at the end")
     # quick mode (no scenario file)

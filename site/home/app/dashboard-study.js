@@ -32,8 +32,11 @@ function clearQuizTimer(){ if(quizTimerHandle){ clearInterval(quizTimerHandle); 
 // Cap at MAX_SESSION_LOG entries to avoid unbounded storage growth.
 const MAX_SESSION_LOG = 500;
 
-/** Called by finishSession() to push a completed record and persist. */
-function pushSessionLog(sess, elapsed) {
+/** Called by finishSession() (and by the abort paths) to push a record and
+ *  persist. `status` is 'complete' for finished sessions and 'aborted' for
+ *  ones exited/reloaded mid-queue — the latter stay resumable via the
+ *  picker's Session History panel as long as their queueIds survive. */
+function pushSessionLog(sess, elapsed, status = 'complete') {
   if (!state.sessionLog) state.sessionLog = [];
   const total = sess.stats.correct + sess.stats.incorrect;
   const deck = sess.queue[0]
@@ -64,7 +67,16 @@ function pushSessionLog(sess, elapsed) {
 
   const entry = {
     ts: Date.now(),
+    id: (typeof uid === 'function') ? uid('sess') : `sess_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
+    status,
     mode: sess.mode,
+    // Resume/repeat support: the exact queue (card ids, in order) and how far
+    // the session got. Capped so a 500-entry log can't bloat localStorage —
+    // older entries keep their stats but lose replayability (trimmed below).
+    idx: sess.idx || 0,
+    queueIds: (sess.queue || []).map(c => c.id).slice(0, 200),
+    reverse: !!sess.reverse,
+    scope: sess.scope || null,
     durationSec: elapsed,
     totalCards: sess.queue.length,
     cardsAttempted: total + (sess.stats.skipped || 0),
@@ -99,7 +111,115 @@ function pushSessionLog(sess, elapsed) {
   state.sessionLog.unshift(entry);
   if (state.sessionLog.length > MAX_SESSION_LOG)
     state.sessionLog.length = MAX_SESSION_LOG;
+  // Keep replay data for only the newest 40 sessions; older rows remain as
+  // stats-only history (Analytics needs the numbers, not the queues).
+  const withQ = state.sessionLog.filter(e => e.queueIds);
+  if (withQ.length > 40) withQ.slice(40).forEach(e => { delete e.queueIds; delete e.scope; });
   scheduleSave();
+}
+
+/** Records an in-flight session as an 'aborted' (resumable) entry. Used by
+ *  the ← Exit button and the pagehide hook (tab closed mid-queue). */
+function logAbortedSession(sess) {
+  if (!sess || !sess.active || sess._logged) return false;
+  if ((sess.idx || 0) >= (sess.queue || []).length) return false;
+  pushSessionLog(sess, Math.max(0, Math.round((Date.now() - sess.startTime) / 1000)), 'aborted');
+  sess._logged = true;
+  return true;
+}
+
+// Closing or reloading the tab mid-session: write the resumable entry and
+// flush it synchronously — the debounced save would never fire.
+window.addEventListener('pagehide', () => {
+  if (logAbortedSession(studySession)) { try { flushSave(true); } catch (e) {} }
+});
+
+/** Card objects for a stored id list, in stored order (missing ids dropped). */
+function cardsForIds(ids) {
+  const byId = new Map(state.decks.flatMap(d => d.cards).map(c => [c.id, c]));
+  return (ids || []).map(id => byId.get(id)).filter(Boolean);
+}
+
+/** Rebuilds a session from a history entry: resume keeps progress + stats,
+ *  repeat restarts the same queue/mode/orientation from scratch. */
+function startSessionFromEntry(entry, resume) {
+  if (!entry || !Array.isArray(entry.queueIds)) {
+    showToast('No replayable queue for that session'); return false;
+  }
+  const cards = cardsForIds(entry.queueIds);
+  if (!cards.length) { showToast('Those cards no longer exist'); return false; }
+  let idx = 0, stats = { correct: 0, incorrect: 0, skipped: 0 };
+  if (resume) {
+    idx = Math.min(entry.idx || 0, cards.length);
+    if (idx >= cards.length) { showToast('That session had already finished'); return false; }
+    stats = { correct: entry.correct || 0, incorrect: entry.incorrect || 0, skipped: entry.skipped || 0 };
+  }
+  const mode = entry.mode || 'review';
+  const timePerCard = state.settings.timedQuizSeconds || 30;
+  studySession = { active:true, scope: entry.scope || [{type:'all',id:null}], mode, queue: cards, idx,
+    flipped:false, showHint:false, showImages: state.settings.showStudyImages !== false,
+    quizAnswer:'', quizAnswers:[], gapChoice:null, stats, combo:0, maxCombo:0,
+    startTime:Date.now(), matchMode: state.settings.quizMatchMode || 'fuzzy',
+    timePerCard, timeLeft:timePerCard, timedOut:false,
+    timed: mode==='quiz' && !!state.settings.quizTimed, reverse: !!entry.reverse,
+    _cardStart:Date.now(), _firstCardMs:null, _cardTimes:[], _flipTimes:[],
+    _keystrokes:0, _charsTyped:0, _backspaces:0, _timeouts:0,
+    _gap: mode==='gaps' ? {correct:0,close:0,wrong:0} : null };
+  spSessionStart();
+  renderView('study');
+  return true;
+}
+
+// ── Session History panel (picker, under the scheduler info button) ────────
+// Lists past sessions newest-first: completed ones can be Repeat-ed, ones
+// abandoned mid-queue (← Exit, tab closed, reload elsewhere) can also be
+// Resumed from where they stopped. Open/closed state is module-level so it
+// survives picker re-renders within a page load.
+let _studyHistOpen = false;
+const STUDY_MODE_ICONS = { review:'🔄', cram:'💨', quiz:'✍️', gaps:'🧩', weakness:'⚠️', multi:'☑️' };
+
+function renderStudyHistorySection() {
+  const wrap = el('div', { style: 'margin-bottom:16px' });
+  const entries = state.sessionLog || [];
+  const toggle = btn(`🕘 Session History${entries.length ? ` (${entries.length})` : ''}`, 'ghost',
+    { small: true, onclick: () => { _studyHistOpen = !_studyHistOpen; renderView('study'); } });
+  toggle.id = 'session-history-toggle';
+  toggle.setAttribute('aria-expanded', String(_studyHistOpen));
+  const panel = el('div', { id: 'session-history-panel',
+    style: `display:${_studyHistOpen ? 'block' : 'none'};margin-top:10px` });
+
+  if (_studyHistOpen) {
+    if (!entries.length) {
+      panel.appendChild(el('div', { style: 'font-size:12px;color:var(--muted);padding:10px 12px;background:rgba(255,255,255,0.04);border-radius:10px' },
+        'No sessions yet — finish or exit a study session and it will show up here.'));
+    } else {
+      entries.slice(0, 25).forEach(e => {
+        const existing = cardsForIds(e.queueIds);
+        const resumable = e.status === 'aborted' && (e.idx || 0) < existing.length && existing.length > 0;
+        const repeatable = existing.length > 0;
+        const when = new Date(e.ts).toLocaleString(undefined,
+          { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        panel.appendChild(el('div', { class: 'card', style: 'padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap' },
+          el('div', { style: 'flex:1;min-width:160px' },
+            el('div', { style: 'font-weight:800;font-size:12px' },
+              `${STUDY_MODE_ICONS[e.mode] || '📚'} ${e.mode || 'review'} · ${when}`),
+            el('div', { class: 'u-muted-11' },
+              `${e.cardsAttempted || 0}/${e.totalCards || 0} cards · ✅${e.correct || 0} ❌${e.incorrect || 0}` +
+              (e.accuracyPct != null ? ` · ${e.accuracyPct}%` : ''))),
+          mkTag(e.status === 'aborted' ? 'Incomplete' : 'Complete',
+            e.status === 'aborted' ? '#FB923C' : '#22c55e'),
+          el('div', { style: 'display:flex;gap:6px' },
+            resumable ? btn('Resume', 'primary', { small: true, onclick: () => startSessionFromEntry(e, true) }) : null,
+            repeatable ? btn('Repeat', 'ghost', { small: true, onclick: () => startSessionFromEntry(e, false) }) : null)
+        ));
+      });
+      panel.appendChild(btn('Clear history', 'ghost', { small: true, onclick: () => {
+        state.sessionLog = []; scheduleSave(); renderView('study');
+      } }));
+    }
+  }
+  wrap.append(toggle, panel);
+  return wrap;
 }
 
 function renderStudy(c) {
@@ -206,6 +326,14 @@ function renderStudyPicker(c) {
   });
   timerRow.append(timedChk,el('label',{for:'quiz-timed',style:'font-size:12px;font-weight:700;color:var(--text);cursor:pointer'},'⏱️ Timed'),el('label',{for:'timed-quiz-seconds',style:'font-size:12px;font-weight:700;color:var(--muted)'},'Seconds per card:'),timerInput,el('span',{style:'font-size:11px;color:var(--muted);margin-left:auto'},'Applies to Written Quiz · auto-submits when time runs out'));
 
+  // Reverse orientation: show the back (definition), recall the front (term).
+  if(state.settings.studyReverse===undefined)state.settings.studyReverse=false;
+  const revRow=el('div',{style:'display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:10px;'});
+  const revChk=el('input',{type:'checkbox',id:'reverse-toggle',style:'width:16px;height:16px;accent-color:var(--pink);cursor:pointer'});
+  revChk.checked=!!state.settings.studyReverse;
+  revChk.addEventListener('change',function(){state.settings.studyReverse=revChk.checked;scheduleSave();});
+  revRow.append(revChk,el('label',{for:'reverse-toggle',style:'font-size:12px;font-weight:700;cursor:pointer;color:var(--text)'},'🔁 Reverse cards (see the back, answer the front)'),el('span',{style:'font-size:11px;color:var(--muted);margin-left:auto'},'Basic cards study definition → term'));
+
 
 // "How it works" copy for the six study modes — opened from the ⓘ button in
 // each mode card's top-right corner, complementing the card's one-line desc.
@@ -266,6 +394,7 @@ function openModeHelp(id) {
     el('div',{style:'display:flex;align-items:flex-start;justify-content:space-between;gap:12px'},
       el('div',{},el('div',{class:'section-title'},'Study Mode'),el('div',{class:'section-sub'},'Pick a scope and mode to begin')),
       makeHelpBtn('How scheduling works (FSRS vs SM-2)', ()=>openAlgorithmHelp(), false)),
+    renderStudyHistorySection(),
     el('div',{class:'u-section-label'},'Recents'),
     recentsRow,
     scopeSummaryBar,
@@ -273,6 +402,7 @@ function openModeHelp(id) {
     el('div',{class:'u-section-label'},'Options'),
     imgToggleRow,
     timerRow,
+    revRow,
     el('div',{style:'font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px'},'Mode'),
     modeGrid
   );
@@ -348,6 +478,23 @@ function openCardPickerModal(scopedCards, refine) {
   });
 }
 
+// ── Reverse study (see the back, answer the front) ─────────────────────────
+// Orientation is captured onto the session at start (settings.studyReverse)
+// so flipping the picker toggle mid-session can't retarget an active queue.
+// Applies to 'basic' cards only — cloze/markscheme/process/calculation/table
+// have directional semantics (blanks, mark pools, step chains, grids) that a
+// blind flip would break, so they always study forward.
+function sessIsReversed(card){
+  const sess=studySession;
+  return !!(sess && sess.reverse && card && card.type==='basic');
+}
+function studyQuestionText(card){ return sessIsReversed(card)?formatCardBack(card):formatCardFront(card); }
+function studyAnswerText(card){ return sessIsReversed(card)?formatCardFront(card):formatCardBack(card); }
+function studyAnswers(card){
+  if(!sessIsReversed(card)) return getCardAnswers(card);
+  return String(card.front||'').split('\n').map(s=>s.trim()).filter(Boolean);
+}
+
 function startStudySession(scopes, mode) {
   const scopedCards = getScopeSetCards(scopes);
   let cards = applyStudyRefine(scopedCards, state.studyRefine);
@@ -371,7 +518,7 @@ function startStudySession(scopes, mode) {
   if(mode==='multi') cards = cards.filter(c=>c.type==='basic');
   pushRecentScope(scopes);
   const timePerCard=state.settings.timedQuizSeconds||30;
-  studySession={active:true,scope:scopes,mode,queue:[...cards].sort(()=>Math.random()-0.5),idx:0,flipped:false,showHint:false,showImages:state.settings.showStudyImages!==false,quizAnswer:'',quizAnswers:[],gapChoice:null,stats:{correct:0,incorrect:0,skipped:0},combo:0,maxCombo:0,startTime:Date.now(),matchMode:state.settings.quizMatchMode||'fuzzy',timePerCard,timeLeft:timePerCard,timedOut:false,timed:mode==='quiz'&&!!state.settings.quizTimed,
+  studySession={active:true,scope:scopes,mode,queue:[...cards].sort(()=>Math.random()-0.5),idx:0,flipped:false,showHint:false,showImages:state.settings.showStudyImages!==false,quizAnswer:'',quizAnswers:[],gapChoice:null,stats:{correct:0,incorrect:0,skipped:0},combo:0,maxCombo:0,startTime:Date.now(),matchMode:state.settings.quizMatchMode||'fuzzy',timePerCard,timeLeft:timePerCard,timedOut:false,timed:mode==='quiz'&&!!state.settings.quizTimed,reverse:!!state.settings.studyReverse,
     // ── per-session stat accumulators (prefixed _ to distinguish from display fields) ──
     _cardStart: Date.now(),   // timestamp when current card was shown
     _firstCardMs: null,       // ms until first card was answered/rated
@@ -403,7 +550,7 @@ function renderStudySession(c) {
   c.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;padding:0';
 
   const progress=el('div',{style:'display:flex;align-items:center;gap:12px;margin-bottom:20px'},
-    btn('← Exit','ghost',{small:true,onclick:()=>{ clearQuizTimer(); if(window.speechSynthesis) window.speechSynthesis.cancel(); spSessionEnd(); studySession=null; renderView('study'); }}),
+    btn('← Exit','ghost',{small:true,onclick:()=>{ clearQuizTimer(); if(window.speechSynthesis) window.speechSynthesis.cancel(); spSessionEnd(); logAbortedSession(studySession); studySession=null; renderView('study'); }}),
     el('div',{style:'flex:1'},
       el('div',{style:'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'},
         el('span',{style:'font-size:12px;font-weight:700;color:var(--muted)'},`${sess.idx+1} / ${sess.queue.length}`),
@@ -446,19 +593,21 @@ function renderStudySession(c) {
 function shuffleArr(arr) { return [...arr].sort(()=>Math.random()-0.5); }
 function renderMultiChoiceCard(card, citBadge) {
   const sess=studySession;
+  const rev=sessIsReversed(card);
+  const sideOf=c=>rev?(c.front||''):(c.back||'');
   const qChildren=[el('div',{class:'flashcard-side-label'},'QUESTION'),el('div',{class:'flashcard-tags'},...(card.tags||[]).map(t=>mkTag(t)))];
-  if(card.frontImage&&sess.showImages!==false)qChildren.push(el('img',{src:card.frontImage,style:'max-width:100%;max-height:160px;object-fit:contain;border-radius:8px;margin-bottom:10px'}));
-  qChildren.push(setRichText(el('div',{class:'flashcard-front-text'}),formatCardFront(card)));
+  if((rev?card.backImage:card.frontImage)&&sess.showImages!==false)qChildren.push(el('img',{src:rev?card.backImage:card.frontImage,style:'max-width:100%;max-height:160px;object-fit:contain;border-radius:8px;margin-bottom:10px'}));
+  qChildren.push(setRichText(el('div',{class:'flashcard-front-text'}),studyQuestionText(card)));
   const questionCard=el('div',{class:'flashcard front',style:'cursor:default'},...qChildren);
 
   const deck = state.decks.find(d=>d.cards.some(c=>c.id===card.id));
-  const deckPool = (deck?.cards||[]).filter(c=>c.type==='basic'&&c.id!==card.id&&c.back!==card.back);
-  const scopePool = sess.queue.filter(c=>c.id!==card.id&&c.back!==card.back);
-  const distractors=[]; const seenBacks=new Set();
+  const deckPool = (deck?.cards||[]).filter(c=>c.type==='basic'&&c.id!==card.id&&sideOf(c)!==sideOf(card));
+  const scopePool = sess.queue.filter(c=>c.id!==card.id&&c.type==='basic'&&sideOf(c)!==sideOf(card));
+  const distractors=[]; const seenSides=new Set();
   [...shuffleArr(deckPool),...shuffleArr(scopePool)].forEach(c=>{
-    if(distractors.length<3 && !seenBacks.has(c.back)){ seenBacks.add(c.back); distractors.push(c.back); }
+    if(distractors.length<3 && !seenSides.has(sideOf(c))){ seenSides.add(sideOf(c)); distractors.push(sideOf(c)); }
   });
-  const options = shuffleArr([{text:card.back,correct:true},...distractors.map(back=>({text:back,correct:false}))]);
+  const options = shuffleArr([{text:sideOf(card),correct:true},...distractors.map(t=>({text:t,correct:false}))]);
 
   const optsWrap=el('div',{style:'display:flex;flex-direction:column;gap:8px;margin-top:16px'});
   let answered=false;
@@ -511,7 +660,7 @@ function renderFlashcard(card, citBadge) {
     const ttsMarker = card.id + ':' + (sess.flipped ? 'back' : 'front');
     if (sess._ttsSpoken !== ttsMarker) {
       sess._ttsSpoken = ttsMarker;
-      speakText(sess.flipped ? formatCardBack(card) : formatCardFront(card));
+      speakText(sess.flipped ? studyAnswerText(card) : studyQuestionText(card));
     }
   }
 
@@ -522,11 +671,11 @@ function renderFlashcard(card, citBadge) {
   flashcard.appendChild(tagsEl);
 
   if(!sess.flipped){
-    if(card.frontImage&&sess.showImages!==false)flashcard.appendChild(el('img',{src:card.frontImage,style:'max-width:100%;max-height:160px;object-fit:contain;border-radius:8px;margin-bottom:10px'}));
-    flashcard.appendChild(setRichText(el('div',{class:'flashcard-front-text'}),formatCardFront(card)));
+    if((sessIsReversed(card)?card.backImage:card.frontImage)&&sess.showImages!==false)flashcard.appendChild(el('img',{src:sessIsReversed(card)?card.backImage:card.frontImage,style:'max-width:100%;max-height:160px;object-fit:contain;border-radius:8px;margin-bottom:10px'}));
+    flashcard.appendChild(setRichText(el('div',{class:'flashcard-front-text'}),studyQuestionText(card)));
     if(!sess.showHint) flashcard.appendChild(el('div',{class:'flashcard-tap'},'Click to reveal'));
   } else {
-    if(card.backImage&&sess.showImages!==false)flashcard.appendChild(el('img',{src:card.backImage,style:'max-width:100%;max-height:160px;object-fit:contain;border-radius:8px;margin-bottom:10px'}));
+    if((sessIsReversed(card)?card.frontImage:card.backImage)&&sess.showImages!==false)flashcard.appendChild(el('img',{src:sessIsReversed(card)?card.frontImage:card.backImage,style:'max-width:100%;max-height:160px;object-fit:contain;border-radius:8px;margin-bottom:10px'}));
     if(card.type==='markscheme'){
       const marks=Math.min(Math.max(card.answerCount||1,1),Math.max(1,card.requiredAnswers||card.answerCount||1));
       flashcard.appendChild(el('div',{style:'font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px'},`Mark scheme · ${marks} mark${marks===1?'':'s'}`));
@@ -551,7 +700,7 @@ function renderFlashcard(card, citBadge) {
         ));
       }
     } else {
-      flashcard.appendChild(setRichText(el('div',{class:'flashcard-back-text'}),formatCardBack(card)));
+      flashcard.appendChild(setRichText(el('div',{class:'flashcard-back-text'}),studyAnswerText(card)));
     }
     if(citBadge) flashcard.appendChild(citBadge);
   }
@@ -665,13 +814,16 @@ function renderGapCard(card, citBadge) {
   // A card whose answerCount says >1 but only has one real answer line (bad/edited
   // data) falls back to the classic word-blank flow below.
   const answerCount = Math.min(8, Math.max(1, card.answerCount || 1));
-  const multiAnswers = answerCount > 1 ? getCardAnswers(card) : null;
+  const multiAnswers = answerCount > 1 ? studyAnswers(card) : null;
   const isMulti = multiAnswers && multiAnswers.length > 1;
+  // Reverse mode blanks a word out of the QUESTION (the front) instead of
+  // the answer — "complete the question" from the definition you're shown.
+  const gapSource = sessIsReversed(card) ? (card.front||'') : (card.back||'');
 
   if(!sess.gapChoice||sess.gapChoice.cardId!==card.id){
     sess.gapChoice = isMulti
       ? {cardId:card.id, removedIndex: Math.floor(Math.random()*multiAnswers.length)}
-      : {cardId:card.id, gap: pickGapWord(card.back||'')};
+      : {cardId:card.id, gap: pickGapWord(gapSource)};
   }
 
   // answerToCheck: the single value the input is matched against.
@@ -690,16 +842,16 @@ function renderGapCard(card, citBadge) {
     const gap = sess.gapChoice.gap;
     if(!gap) return renderFlashcard(card, citBadge);
     answerToCheck = gap.word;
-    contextLabel = 'Complete the answer:';
+    contextLabel = sessIsReversed(card) ? 'Complete the question:' : 'Complete the answer:';
     // Fixed-width blank rather than one sized to the missing word, so the blank
     // itself doesn't leak the answer's length.
-    contextText = card.back.slice(0,gap.start)+'▁▁▁▁▁▁▁'+card.back.slice(gap.end);
-    fullAnswerText = card.back;
+    contextText = gapSource.slice(0,gap.start)+'▁▁▁▁▁▁▁'+gapSource.slice(gap.end);
+    fullAnswerText = gapSource;
   }
 
   const qChildren=[el('div',{class:'flashcard-side-label'},'FILL IN THE GAP'),el('div',{class:'flashcard-tags'},...(card.tags||[]).map(t=>mkTag(t)))];
-  if(card.frontImage&&sess.showImages!==false)qChildren.push(el('img',{src:card.frontImage,style:'max-width:100%;max-height:140px;object-fit:contain;border-radius:8px;margin-bottom:8px'}));
-  qChildren.push(setRichText(el('div',{class:'flashcard-front-text',style:'font-size:18px'}),formatCardFront(card)));
+  if((sessIsReversed(card)?card.backImage:card.frontImage)&&sess.showImages!==false)qChildren.push(el('img',{src:sessIsReversed(card)?card.backImage:card.frontImage,style:'max-width:100%;max-height:140px;object-fit:contain;border-radius:8px;margin-bottom:8px'}));
+  qChildren.push(setRichText(el('div',{class:'flashcard-front-text',style:'font-size:18px'}),studyQuestionText(card)));
   qChildren.push(el('div',{style:'font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-top:10px'},contextLabel));
   qChildren.push(el('div',{class:'flashcard-back-text',style:'font-size:15px'},contextText));
   const questionCard=el('div',{class:'flashcard front',style:'cursor:default;min-height:160px'},...qChildren);
@@ -1125,8 +1277,8 @@ function renderQuizCard(card, citBadge, scrollArea) {
   const sess=studySession;
   const wrap=el('div',{});
   const qChildren=[el('div',{class:'flashcard-side-label'},'QUESTION'),el('div',{class:'flashcard-tags'},...(card.tags||[]).map(t=>mkTag(t)))];
-  if(card.frontImage&&sess.showImages!==false)qChildren.push(el('img',{src:card.frontImage,style:'max-width:100%;max-height:140px;object-fit:contain;border-radius:8px;margin-bottom:8px'}));
-  qChildren.push(setRichText(el('div',{class:'flashcard-front-text',style:'font-size:18px'}),formatCardFront(card)));
+  if((sessIsReversed(card)?card.backImage:card.frontImage)&&sess.showImages!==false)qChildren.push(el('img',{src:sessIsReversed(card)?card.backImage:card.frontImage,style:'max-width:100%;max-height:140px;object-fit:contain;border-radius:8px;margin-bottom:8px'}));
+  qChildren.push(setRichText(el('div',{class:'flashcard-front-text',style:'font-size:18px'}),studyQuestionText(card)));
   const questionCard=el('div',{class:'flashcard front',style:'cursor:default;min-height:160px'},...qChildren);
 
   // Optional Written Quiz timer (⏱️ Timed checkbox): per-card countdown, ticks
@@ -1200,8 +1352,8 @@ function renderQuizCard(card, citBadge, scrollArea) {
   // dashboard-core.js) rather than matching one box per pool entry.
   const isMarkscheme = card.type === 'markscheme';
   const answerCount = Math.min(8, Math.max(1, card.answerCount || 1));
-  const isMulti = !isMarkscheme && answerCount > 1;
-  const expectedAnswers = (isMulti || isMarkscheme) ? getCardAnswers(card) : [card.back];
+  const isMulti = !isMarkscheme && answerCount > 1 && !sessIsReversed(card);
+  const expectedAnswers = studyAnswers(card);
   const requiredAnswers = (isMulti || isMarkscheme) ? Math.min(answerCount, Math.max(1, card.requiredAnswers || answerCount)) : 1;
 
   const inputWrap=el('div',{});
@@ -1264,14 +1416,14 @@ function renderQuizCard(card, citBadge, scrollArea) {
       const userAnswer=sess.quizAnswer.trim();
       sess._charsTyped += userAnswer.length;
       if (sess.timedOut) sess._timeouts++;
-      result=(userAnswer&&!sess.timedOut)?matcher(userAnswer,card.back):'wrong';
+      result=(userAnswer&&!sess.timedOut)?matcher(userAnswer,expectedAnswers[0]||''):'wrong';
       resultChildren=[
         isExact&&result!=='correct'&&!sess.timedOut
           ? el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:4px;font-style:italic'},'Tip: exact mode requires a perfect match')
           : null,
         el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em'},'Expected answer:'),
-        (card.backImage&&sess.showImages!==false)?el('img',{src:card.backImage,style:'max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-bottom:8px'}):null,
-        el('div',{class:'quiz-answer-text'},card.back)
+        ((sessIsReversed(card)?card.frontImage:card.backImage)&&sess.showImages!==false)?el('img',{src:sessIsReversed(card)?card.frontImage:card.backImage,style:'max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-bottom:8px'}):null,
+        el('div',{class:'quiz-answer-text'},expectedAnswers[0]||'')
       ];
     } else {
       // Greedily pair each typed answer with the closest still-unmatched expected
@@ -1381,7 +1533,8 @@ function finishSession(){
   const sess=studySession; addXP(50); sess.active=false;
   checkAchievements();
   const elapsed=Math.round((Date.now()-sess.startTime)/1000);
-  pushSessionLog(sess, elapsed);
+  pushSessionLog(sess, elapsed, 'complete');
+  sess._logged=true;
   const c=document.getElementById('view-study'); c.innerHTML=''; c.style.cssText='';
   const total=sess.stats.correct+sess.stats.incorrect;
   const pct=total>0?Math.round((sess.stats.correct/total)*100):0;

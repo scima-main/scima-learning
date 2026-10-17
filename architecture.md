@@ -195,6 +195,21 @@ document and none of the cross-page machinery below runs.
   effort. The winning strategy locks for the whole paging walk. When every
   path fails the tab offers a paste fallback: stamped scima JSON (e.g. the
   `quizlet-to-scima.js` console helper) or tab-separated pairs.
+- **Session history**: `state.sessionLog` records every session —
+  completed ones via `finishSession()`, abandoned ones (← Exit, tab closed,
+  reload) as `status:'aborted'` with a `queueIds` snapshot — surfaced in the
+  picker's 🕘 Session History panel (under the scheduler help button) with
+  Resume (incomplete, restores idx + stats) and Repeat (same queue/mode/
+  orientation, fresh stats). Replay data kept for the newest 40 entries.
+- **SEO layer**: `robots.txt` + `sitemap.xml` at the landing root; unique
+  per-page titles/descriptions, canonical + OpenGraph tags on the six
+  content routes; `noindex` on `/settings/` and the redirect stubs;
+  `/api/`, `/dashboard/` and stubs disallowed in robots.
+- **Reverse study**: `settings.studyReverse` (🔁 picker toggle) is captured
+  onto the session at start; basic cards then render back-as-question and
+  front-as-answer across flashcard, written quiz, multiple choice and
+  fill-the-gap (which blanks the question instead). Directional types
+  (cloze/markscheme/process/calculation/table) always study forward.
 - **Card/deck/folder surgery**: duplicate-card action, move-decks-between-
   subjects (deck selection bar), move-folder-between-subjects (📚 row action,
   folder toolbar, subtree-aware: subfolders and contained decks are retagged

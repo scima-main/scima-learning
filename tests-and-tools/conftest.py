@@ -39,7 +39,7 @@ if str(TESTS_DIR) not in sys.path:
 import seed as seedlib                     # noqa: E402
 from helpers import api_mock as api_mock_helpers  # noqa: E402
 from helpers import pages, storage         # noqa: E402
-from helpers.server import start_static_server, stop_static_server  # noqa: E402
+from helpers.server import start_static_server, stop_static_server, SITE_DIR  # noqa: E402
 
 FAILURE_SHOTS_DIR = TESTS_DIR / "screenshots" / "failures"
 
@@ -152,6 +152,19 @@ def demo_app(page, base_url, seeded):
     seeded(mf_state=blob["mf_state"], tracker=blob["SCIMATracker"])
     pages.goto_app(page, base_url, "/")
     return page
+
+
+@pytest.fixture(scope="session")
+def site_base():
+    """Static server for the UNMINIFIED source frontend (site/home).
+
+    The default suite runs against the minified deploy bundle; features
+    that haven't been re-minified yet (see `minify` run) are tested here
+    against the source of truth instead.
+    """
+    base, httpd = start_static_server(root=SITE_DIR)
+    yield base
+    stop_static_server(httpd)
 
 
 @pytest.fixture

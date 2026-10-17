@@ -1,0 +1,15 @@
+# SCIMA Learning — study.scima-net.com
+# The product is a client-side app: everything a user stores lives in their
+# own browser (localStorage), so crawled pages show the empty-state UI. The
+# registry API and the legacy /dashboard/ mount are deliberately excluded
+# (not content / duplicate content).
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /capture/
+Disallow: /insights/
+Disallow: /tracker/
+
+Sitemap: https://study.scima-net.com/sitemap.xml

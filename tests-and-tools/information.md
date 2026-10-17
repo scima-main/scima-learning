@@ -14,7 +14,7 @@ pip install -r tests-and-tools/requirements.txt
 python -m playwright install chromium     # once; add --with-deps on bare Linux
 
 cd tests-and-tools
-pytest                                    # whole suite (180 tests)
+pytest                                    # whole suite (201 tests)
 pytest -m smoke                           # page-load sanity only
 pytest ui/test_study.py -k srs -x         # one file / one test
 python render.py scenarios/02-home-demo.json          # → screenshots/02-home-demo.png
@@ -195,13 +195,23 @@ def test_x(page, base_url, seeded, page_errors):
 boundary (`settings.dayTimezone`), sanitizer-filled imports, move-deck-
 between-subjects (and move-folder-between-subjects, subtree included),
 card duplication, deck-segment deep links, the
-Ctrl+Alt+K / Ctrl+Alt+M card-move modals, and the 🎴 Quizlet import tab
+Ctrl+Alt+K / Ctrl+Alt+M card-move modals, the 🎴 Quizlet import tab,
+reverse study orientation (🔁 picker toggle / settings.studyReverse:
+see the back, answer the front — basic cards, all modes), the 🕘 Session
+History panel (resume incomplete / repeat past sessions), and the SEO
+layer (robots.txt, sitemap.xml, per-page titles/meta, noindex app views)
 (fetch chain: same-origin `/api/v1/import/quizlet` backend proxy →
 `settings.quizletProxy` template → direct → public proxies → paste
 fallback of scima JSON or TSV; mock any hop with `page.route` + an
 `access-control-allow-origin` header; `scenarios/11-quizlet-import.json`
 shows the same in render.py). Backend proxy tests live in
-`backend/tests/test_api.py`.
+`minified/backend/tests/test_api.py`.
+
+Features land in `site/home/` first; the deploy bundle (`minified/home/`)
+catches up at the next `minify` run. Until then, tests for un-minified
+features use the `site_base` fixture (server for `site/home`), and
+render.py scenarios set `"static_root": "site/home"` (or `--root`); see
+`ui/test_reverse.py` and `scenarios/12-reverse-study.json`.
 
 Failing tests automatically leave `screenshots/failures/<test>.png`.
 Prefer the stable ids/classes above over text where possible; use

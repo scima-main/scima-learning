@@ -53,6 +53,10 @@ def _find_backend() -> Path:
 
 HOME_DIR = _find_home()
 BACKEND_DIR = _find_backend()
+# Unminified source frontend — tests for features not yet re-minified into
+# the deploy bundle run against this tree (conftest's `site_base` fixture).
+SITE_DIR = next((p for p in (REPO_ROOT / "site" / "home", REPO_ROOT / "home")
+                 if (p / "index.html").exists()), REPO_ROOT / "site" / "home")
 
 
 def find_free_port(host: str = "127.0.0.1") -> int:

@@ -1,9 +1,11 @@
-# CHANGELOG (last updated 15th October 2026, UTC)
----
-to implement:
-- swapping back and answer in the study methods
-- create a small browser extension to avoid CORS restrictions on quizlet
---- 
+# CHANGELOG (last updated 17th October 2026, UTC)
+
+#### VERSION 2026.10.018-ALPHA
+
+- study history and resuming added
+- reverse card studying (back as front, front as back) added
+- accessibility additions
+
 #### VERSION 2026.10.017-ALPHA
 
 - quizlet integration added
@@ -57,5 +59,7 @@ to implement:
 - moved ./home/scima-standalone-landing/* to ./home/
 
 *=*
-
+to implement:
+- separated quizlet program (likely chrome extension) that outputs .json because scraping blocked at quizlet
+*=*
 source code: https://www.github.com/scima-main/scima-learning

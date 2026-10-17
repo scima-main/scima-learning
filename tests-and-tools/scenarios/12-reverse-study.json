@@ -1,0 +1,22 @@
+{
+  "name": "reverse-study",
+  "description": "Reverse orientation on the UNMINIFIED source tree: tick 🔁 Reverse, start SRS, and the definition shows first — reveal answers with the term. (static_root until the next `minify` refresh.)",
+  "static_root": "site/home",
+  "seed": "preset:demo",
+  "steps": [
+    { "goto": "/study/" },
+    { "wait_for": { "text": "Study Mode" } },
+    { "check": "#reverse-toggle" },
+    { "pause": 400 },
+    { "screenshot": "reverse-picker.png" },
+    { "click": "#tutorial-target-study-start" },
+    { "wait_for": { "selector": ".flashcard.front" } },
+    { "pause": 600 },
+    { "screenshot": "reverse-question.png" },
+    { "click": "text=Reveal →" },
+    { "wait_for": { "selector": ".rating-btn" } },
+    { "pause": 800 },
+    { "assert": { "js": "studySession.reverse", "equals": true } }
+  ],
+  "output": "screenshots/12-reverse-study.png"
+}
