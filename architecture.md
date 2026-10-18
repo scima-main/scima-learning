@@ -213,6 +213,11 @@ document and none of the cross-page machinery below runs.
   per-page titles/descriptions, canonical + OpenGraph tags on the six
   content routes; `noindex` on `/settings/` and the redirect stubs;
   `/api/`, `/dashboard/` and stubs disallowed in robots.
+- **Fill in the Gaps, multi-blank**: authored `card.gaps` (exact
+  substrings, deterministic, set in the card editor) blank first;
+  otherwise `settings.gapPercent` of the answer's words (capped
+  `settings.gapMax`) blank at random. One input per blank, graded
+  individually (all/some/none → Correct/Close/Incorrect).
 - **Reverse study**: `settings.studyReverse` (🔁 picker toggle) is captured
   onto the session at start; basic cards then render back-as-question and
   front-as-answer across flashcard, written quiz, multiple choice and

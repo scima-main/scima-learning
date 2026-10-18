@@ -98,7 +98,8 @@ def test_reverse_gap_blanks_the_question(page, site_base, seeded):
     expect(page.locator("#view-study")).to_contain_text("Complete the question:")
     # submit empty → the missing word is revealed; it must come from a FRONT
     page.get_by_role("button", name=re.compile(r"Check Answer")).click()
-    missing = page.locator(".quiz-answer-text").inner_text().strip()
+    missing = page.locator(".quiz-answer-text").first.inner_text().strip()
+    missing = re.sub(r"^[⬜✅]\s*", "", missing)
     fronts = " || ".join(f for f, _ in CARDS)
     assert missing and missing in fronts, f"{missing!r} not a term"
 

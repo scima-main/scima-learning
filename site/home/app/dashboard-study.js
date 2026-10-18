@@ -787,6 +787,41 @@ function pickGapCandidates(text) {
  * rather than calling this again, or the blank would jump to a different word
  * out from under a half-typed answer — see renderGapCard's sess.gapChoice cache.
  */
+/** Blanks for Fill in the Gaps.
+ *  1. Authored: card.gaps (substrings set in the card editor) are blanked
+ *     deterministically — first non-overlapping occurrence each — so a card
+ *     author controls exactly which term(s) get tested.
+ *  2. Automatic: density = settings.gapPercent of the answer's word tokens,
+ *     capped by settings.gapMax. A single automatic gap keeps the classic
+ *     "most significant word" heuristic (pickGapWord). */
+function pickGaps(text, card, settings) {
+  const authored = (card && Array.isArray(card.gaps) ? card.gaps : [])
+    .filter(g => typeof g === 'string' && g && text.includes(g));
+  if (authored.length) {
+    const out = [];
+    for (const g of authored.slice(0, 8)) {
+      let from = 0, idx = -1;
+      while ((idx = text.indexOf(g, from)) !== -1) {
+        if (!out.some(o => idx < o.end && idx + g.length > o.start)) { out.push({ word: g, start: idx, end: idx + g.length }); break; }
+        from = idx + 1;
+      }
+    }
+    return out.sort((a, b) => a.start - b.start);
+  }
+  const pct = Math.min(100, Math.max(1, (settings && settings.gapPercent) ?? 20));
+  const cap = Math.min(8, Math.max(1, (settings && settings.gapMax) ?? 4));
+  const allWords = (text.match(/[A-Za-z0-9]+/g) || []);
+  const n = Math.min(cap, Math.max(1, Math.round(allWords.length * pct / 100)));
+  if (n === 1) { const g = pickGapWord(text); return g ? [g] : []; }
+  const tokens = [...text.matchAll(/[A-Za-z0-9]+/g)]
+    .filter(m => m[0].length >= 3 && !GAP_STOPWORDS.has(m[0].toLowerCase()));
+  const pool = tokens.length ? tokens : [...text.matchAll(/[A-Za-z0-9]+/g)];
+  if (!pool.length) return [];
+  return [...pool].sort(() => Math.random() - 0.5).slice(0, n)
+    .map(m => ({ word: m[0], start: m.index, end: m.index + m[0].length }))
+    .sort((a, b) => a.start - b.start);
+}
+
 function pickGapWord(text) {
   const candidates = pickGapCandidates(text);
   if (!candidates.length) return null;
@@ -825,7 +860,7 @@ function renderGapCard(card, citBadge) {
   if(!sess.gapChoice||sess.gapChoice.cardId!==card.id){
     sess.gapChoice = isMulti
       ? {cardId:card.id, removedIndex: Math.floor(Math.random()*multiAnswers.length)}
-      : {cardId:card.id, gap: pickGapWord(gapSource)};
+      : {cardId:card.id, gaps: pickGaps(gapSource, card, state.settings)};
   }
 
   // answerToCheck: the single value the input is matched against.
@@ -833,21 +868,24 @@ function renderGapCard(card, citBadge) {
   // multi-answer cards, the other answers plus a fixed-width blank standing in
   // for the removed one (so its length isn't leaked, same rationale as before).
   const isMarkscheme = card.type === 'markscheme';
-  let answerToCheck, contextLabel, contextText, fullAnswerText;
+  let answersToCheck, contextLabel, contextText, fullAnswerText;
   if(isMulti){
     const removedIndex = sess.gapChoice.removedIndex;
-    answerToCheck = multiAnswers[removedIndex];
+    answersToCheck = [multiAnswers[removedIndex]];
     contextLabel = isMarkscheme ? 'Other marking points:' : 'Other answers:';
     contextText = [...multiAnswers.filter((_,i)=>i!==removedIndex), '▁▁▁▁▁▁▁'].join(', ');
     fullAnswerText = multiAnswers.join(', ');
   } else {
-    const gap = sess.gapChoice.gap;
-    if(!gap) return renderFlashcard(card, citBadge);
-    answerToCheck = gap.word;
-    contextLabel = sessIsReversed(card) ? 'Complete the question:' : 'Complete the answer:';
-    // Fixed-width blank rather than one sized to the missing word, so the blank
-    // itself doesn't leak the answer's length.
-    contextText = gapSource.slice(0,gap.start)+'▁▁▁▁▁▁▁'+gapSource.slice(gap.end);
+    const gapList = sess.gapChoice.gaps || [];
+    if(!gapList.length) return renderFlashcard(card, citBadge);
+    answersToCheck = gapList.map(g=>g.word);
+    contextLabel = (sessIsReversed(card) ? 'Complete the question:' : 'Complete the answer:')
+      + (gapList.length>1 ? ` — ${gapList.length} gaps` : '');
+    // Fixed-width blanks rather than word-sized ones, so a blank never leaks
+    // its answer's length.
+    contextText = gapSource;
+    for(const g of [...gapList].sort((a,b)=>b.start-a.start))
+      contextText = contextText.slice(0,g.start)+'▁▁▁▁▁▁▁'+contextText.slice(g.end);
     fullAnswerText = gapSource;
   }
 
@@ -858,36 +896,51 @@ function renderGapCard(card, citBadge) {
   qChildren.push(el('div',{class:'flashcard-back-text',style:'font-size:15px'},contextText));
   const questionCard=el('div',{class:'flashcard front',style:'cursor:default;min-height:160px'},...qChildren);
 
-  const inputArea=el('input',{type:'text',class:'quiz-input-area',style:'min-height:unset',placeholder: isMulti?(isMarkscheme?'Type the missing marking point…':'Type the missing answer…'):'Type the missing word…'});
-  inputArea.value=sess.quizAnswer||'';
-  inputArea.addEventListener('input',e=>{ sess.quizAnswer=e.target.value; });
-  inputArea.addEventListener('keydown',e=>{
-    sess._keystrokes++;
-    if(e.key==='Backspace'||e.key==='Delete') sess._backspaces++;
-  });
+  const inputAreas=[];
+  for(let i=0;i<answersToCheck.length;i++){
+    const inp=el('input',{type:'text',class:'quiz-input-area gap-input',
+      'aria-label': answersToCheck.length>1 ? `Gap ${i+1} of ${answersToCheck.length}` : 'The missing word',
+      style:'min-height:unset;margin-bottom:8px',
+      placeholder: isMulti ? (isMarkscheme?'Type the missing marking point…':'Type the missing answer…')
+                           : (answersToCheck.length>1 ? `Gap ${i+1}…` : 'Type the missing word…')});
+    inp.value=sess.quizAnswers[i]||'';
+    inp.addEventListener('input',e=>{ sess.quizAnswers[i]=e.target.value; });
+    inp.addEventListener('keydown',e=>{
+      sess._keystrokes++;
+      if(e.key==='Backspace'||e.key==='Delete') sess._backspaces++;
+      if(e.key==='Enter') checkGapAnswer();
+    });
+    inputAreas.push(inp);
+  }
 
   const compareEl=el('div',{style:'display:none'});
   let checked=false;
   const checkBtn=btn('Check Answer (↵)','primary',{full:true,onclick:checkGapAnswer});
   const stickyFooter=el('div',{class:'quiz-sticky-footer'});
-  stickyFooter.append(inputArea,checkBtn);
+  stickyFooter.append(...inputAreas,checkBtn);
 
   function checkGapAnswer(){
     if(checked)return; checked=true;
     const cardMs = Date.now() - (sess._cardStart || Date.now());
     sess._cardTimes.push(cardMs);
     if (sess._firstCardMs === null) sess._firstCardMs = cardMs;
-    sess._charsTyped += sess.quizAnswer.trim().length;
-    const userAnswer=sess.quizAnswer.trim();
-    const result=userAnswer?quizMatch(userAnswer,answerToCheck):'wrong';
+    const userAnswers = inputAreas.map(inp=>inp.value.trim());
+    sess._charsTyped += userAnswers.reduce((a,b)=>a+b.length,0);
+    // Per-gap grading; the card result is all / some / none.
+    const hits = userAnswers.map((u,i)=> (u && !sess.timedOut) ? quizMatch(u, answersToCheck[i]) : 'wrong');
+    const nCorrect = hits.filter(h=>h==='correct').length;
+    const result = nCorrect===hits.length ? 'correct' : nCorrect>0 ? 'close' : 'wrong';
     if(sess._gap) sess._gap[result==='correct'?'correct':result==='close'?'close':'wrong']++;
+    inputAreas.forEach((inp,i)=>{ inp.disabled=true;
+      inp.style.borderColor = hits[i]==='correct' ? '#22c55e' : hits[i]==='close' ? '#FB923C' : '#ef4444'; });
     compareEl.style.display=''; compareEl.className=`quiz-compare ${result}`; compareEl.innerHTML='';
     const emoji=result==='correct'?'✅':result==='close'?'🟡':'❌';
-    const label=result==='correct'?'Correct!':result==='close'?'Close — review below':'Incorrect';
+    const label=result==='correct'?'Correct!':result==='close'?`Close — ${nCorrect}/${hits.length} gaps`:'Incorrect';
     compareEl.append(
       el('div',{class:`quiz-label ${result}`},`${emoji} ${label}`),
-      el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em'},isMulti?(isMarkscheme?'Missing marking point:':'Missing answer:'):'Missing word:'),
-      setRichText(el('div',{class:'quiz-answer-text'}),answerToCheck),
+      el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em'},
+        (isMulti?(isMarkscheme?'Missing marking point:':'Missing answer:'):'Missing word:')+(hits.length>1?'s':'')),
+      ...answersToCheck.map((a,i)=>el('div',{class:'quiz-answer-text',style:`margin-bottom:2px;color:${hits[i]==='correct'?'#22c55e':hits[i]==='close'?'#FB923C':'var(--text)'}`},`${hits[i]==='correct'?'✅ ':hits[i]==='close'?'🟡 ':'⬜ '}${a}`)),
       setRichText(el('div',{style:'font-size:12px;color:var(--muted);margin-top:8px'}),fullAnswerText)
     );
     if(citBadge) compareEl.appendChild(citBadge);
@@ -897,13 +950,12 @@ function renderGapCard(card, citBadge) {
     });
     stickyFooter.appendChild(rateRow);
     if(result==='correct') setTimeout(()=>rateCard(4),50);
-    inputArea.disabled=true; checkBtn.style.display='none';
+    checkBtn.style.display='none';
   }
-  inputArea.addEventListener('keydown',e=>{ if(e.key==='Enter') checkGapAnswer(); });
 
   const scrollContent=el('div',{style:'padding-bottom:8px'});
   scrollContent.append(questionCard,compareEl);
-  setTimeout(()=>inputArea.focus(),50);
+  setTimeout(()=>{ if(inputAreas[0]) inputAreas[0].focus(); },50);
   return {scrollContent,stickyFooter};
 }
 

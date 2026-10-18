@@ -148,6 +148,7 @@ const state = {
   achievements: [],
   settings: {
     dailyGoal: 20, newCardsPerDay: 10,
+    gapPercent: 20, gapMax: 4,   // Fill in the Gaps: automatic blank density / cap
     algorithm: 'fsrs', autoSuspend: true, leechThreshold: 8,
     tts: false, dyslexia: false, highContrast: false, notifications: true, powerSaving: false,
     defineLang: 'en', showPinyin: true, singleWordDefinition: true,

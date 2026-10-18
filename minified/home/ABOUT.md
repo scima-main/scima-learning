@@ -1,4 +1,9 @@
-# CHANGELOG (last updated 17th October 2026, UTC)
+# CHANGELOG (last updated 18th October 2026, UTC)
+
+#### VERSION 2026.10.019-ALPHA
+
+- fill in the gaps now customizable with gap count
+- optionally deterministic gaps in deck creation
 
 #### VERSION 2026.10.018-ALPHA
 

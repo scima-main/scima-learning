@@ -128,7 +128,8 @@ function renderSettings(c) {
       wrap.append(lbl,sel);
       return wrap;
     })(),
-    makeRange('Daily Review Goal: ','dailyGoal',5,100,'var(--blue)'),makeRange('New Cards Per Day: ','newCardsPerDay',1,50,'var(--pink)'),makeRange('Leech Threshold: ','leechThreshold',3,20,'#FB923C'));
+    makeRange('Daily Review Goal: ','dailyGoal',5,100,'var(--blue)'),makeRange('New Cards Per Day: ','newCardsPerDay',1,50,'var(--pink)'),makeRange('Leech Threshold: ','leechThreshold',3,20,'#FB923C'),
+    makeRange('Gap density %: ','gapPercent',5,100,'#34D399'),makeRange('Max gaps per card: ','gapMax',1,8,'#34D399'));
 
   // ── Day boundary: timezone in which streaks / daily goal / history roll over ──
   const tzWrap=el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'});

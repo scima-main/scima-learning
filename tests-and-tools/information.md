@@ -14,7 +14,7 @@ pip install -r tests-and-tools/requirements.txt
 python -m playwright install chromium     # once; add --with-deps on bare Linux
 
 cd tests-and-tools
-pytest                                    # whole suite (233 tests)
+pytest                                    # whole suite (241 tests)
 pytest -m smoke                           # page-load sanity only
 pytest ui/test_study.py -k srs -x         # one file / one test
 python render.py scenarios/02-home-demo.json          # → screenshots/02-home-demo.png
@@ -198,7 +198,9 @@ between-subjects (and move-folder-between-subjects, subtree included),
 card duplication, deck-segment deep links, the
 Ctrl+Alt+K / Ctrl+Alt+M card-move modals, the 🎴 Quizlet import tab,
 reverse study orientation (🔁 picker toggle / settings.studyReverse:
-see the back, answer the front — basic cards, all modes), the 🕘 Session
+see the back, answer the front — basic cards, all modes), multi-gap
+Fill-in-the-Gaps (authored card.gaps blanks, automatic density via
+settings.gapPercent/gapMax, per-gap grading), the 🕘 Session
 History panel (resume incomplete / repeat past sessions), and the SEO
 layer (robots.txt, sitemap.xml, per-page titles/meta, noindex app views)
 (fetch chain: same-origin `/api/v1/import/quizlet` backend proxy →

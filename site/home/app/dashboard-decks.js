@@ -2490,9 +2490,13 @@ function openCardModal(deckId, cardId) {
     const backImgPicker=mkCardImagePicker('Back image (optional)',_backImage,function(v){_backImage=v;});
     const hintField  = createField('Hint (optional)','text','Brief clue…');
     const tagsField  = createField('Tags (comma-separated)','text','biology, cell');
+    const gapsField  = createField('Gaps to blank (Fill in the Gaps; one per line; empty = automatic)','text','',true);
+    gapsField.querySelector('textarea').rows = 2;
+    gapsField.querySelector('textarea').id = 'card-gaps-input';
     if(existing){
       frontField.querySelector('textarea').value = existing.front;
       backField.querySelector('textarea').value  = existing.back;
+      gapsField.querySelector('textarea').value  = (existing.gaps || []).join('\n');
       hintField.querySelector('input').value     = existing.hint||'';
       tagsField.querySelector('input').value     = (existing.tags||[]).join(', ');
     }
@@ -3844,7 +3848,7 @@ function openCardModal(deckId, cardId) {
     formWrap.addEventListener('input',()=>{ if(previewVisible) refreshPreview(); });
     formWrap.addEventListener('click',()=>{ if(previewVisible) refreshPreview(); });
 
-    formWrap.append(frontField,frontPreview,frontImgPicker,backField,backImgPicker,modeRow,poolSection,requiredField,requiredPreview,calcSection,tableSection,hintField,tagsField,citSection,
+    formWrap.append(frontField,frontPreview,frontImgPicker,backField,backImgPicker,modeRow,poolSection,requiredField,requiredPreview,calcSection,tableSection,hintField,tagsField,gapsField,citSection,
       previewToggleBtn,
       btn(isEdit?'Save Changes':'Add Card','primary',{full:true,onclick:()=>{
         const front=frontField.querySelector('textarea').value.trim();
@@ -3886,7 +3890,8 @@ function openCardModal(deckId, cardId) {
         if(!front||(!back&&cardMode!=='table')){ showToast('Front and back are required'); return; }
         const tags=tagsField.querySelector('input').value.split(',').map(t=>t.trim()).filter(Boolean);
         const hint=hintField.querySelector('input').value.trim();
-        const typeFields={front,back,answerCount,requiredAnswers,type,synonyms,calcUnit,calcTolerance,calcToleranceMode,methodPool,methodRequired,tableData,tableTolerance,tableToleranceMode,hint,tags,citation:citation||null};
+        const gaps=gapsField.querySelector('textarea').value.split('\n').map(g=>g.trim()).filter(Boolean).slice(0,8);
+        const typeFields={front,back,answerCount,requiredAnswers,type,synonyms,calcUnit,calcTolerance,calcToleranceMode,methodPool,methodRequired,tableData,tableTolerance,tableToleranceMode,hint,tags,gaps,citation:citation||null};
         if(isEdit){ Object.assign(existing,typeFields,{frontImage:_frontImage,backImage:_backImage}); }
         else {
           deck.cards.push({id:uid('c'),...typeFields,frontImage:_frontImage||null,backImage:_backImage||null,ease:2.5,interval:0,reps:0,lapses:0,due:Date.now(),state:'new',created:Date.now()});

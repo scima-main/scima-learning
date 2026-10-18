@@ -819,7 +819,7 @@ STUDY_LANDING_DIR = REPO_ROOT / "home"
 # The legacy standalone community page was renamed upstream
 # (community/ → community-deprecated/); accept either name so checkouts
 # from before or after the rename both boot.
-COMMUNITY_DIR = REPO_ROOT / "community-deprecated"
+COMMUNITY_DIR = REPO_ROOT / "/archive/community-deprecated"
 if not COMMUNITY_DIR.exists():
     COMMUNITY_DIR = REPO_ROOT / "community"
 
