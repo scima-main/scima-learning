@@ -234,13 +234,57 @@ function _refreshPlayHud() {
   const hud = document.getElementById('game-hud'); if (!hud) return;
   const s = _gamesPlaySess.sess;
   hud.innerHTML = '';
-  hud.append(
+  hud.append(...[
     el('span', {}, `⭐ ${s.score}`),
     el('span', { style: 'color:#FB923C' }, `❤ ${Math.max(0, s.lives)}`),
     el('span', { style: 'color:var(--blue)' }, `🔥 ${s.combo}`),
     s.timeLeft !== null ? el('span', {}, `⏱ ${Math.ceil(s.timeLeft)}s`) : null,
     el('span', { class: 'u-muted-11' }, `step ${s.step} · ✅${s.correct} ❌${s.misses}`),
-    s.tokens.length ? el('span', {}, s.tokens.join('')) : null);
+    s.tokens.length ? el('span', {}, s.tokens.join('')) : null,
+  ].filter(Boolean));
+}
+
+// ── Digit/char track renderer (the intuitive bit) ─────────────────────────
+// Green = digits you've already typed correctly, blue cursor = the one
+// you're on (hidden in recall mode), red wrong chars hang under the cell
+// where you missed, and on game-over the next 25 digits fill in red so you
+// can see exactly how far the run got. Cells are aria-hidden; the wrapper
+// carries a descriptive aria-label for screen readers.
+function _trackCellStyle(cls) {
+  const base = 'display:inline-flex;flex-direction:column;align-items:center;padding:0 1.5px;border-radius:4px;';
+  if (cls === 'done')   return base + 'color:#22c55e;font-weight:700';
+  if (cls === 'reveal') return base + 'color:#ef4444;font-weight:700;background:rgba(239,68,68,0.10)';
+  if (cls === 'cursor') return base + 'color:var(--text);box-shadow:0 0 0 2px var(--blue);background:rgba(91,206,250,0.10)';
+  return base + 'color:rgba(169,185,201,0.30)';
+}
+function _renderGameTrack(sess, reveal) {
+  const seq = sess.seq || [];
+  const missAt = {};
+  (sess.missLog || []).forEach(m => { (missAt[m.at] = missAt[m.at] || []).push(m.ch); });
+  const revealTo = reveal ? Math.min(seq.length, sess.idx + 25) : 0;
+  const total = Math.min(seq.length, Math.max(sess.idx + 1, revealTo, 30));
+  const wrap = el('div', { id: 'game-track', role: 'img',
+    'aria-label': `Digit track: ${sess.idx} correct, ${sess.misses} missed` +
+      (reveal ? `. Next digits: ${seq.slice(sess.idx, revealTo).join('')}` : ''),
+    style: 'display:flex;flex-wrap:wrap;justify-content:center;gap:1px 0;margin:6px 0 14px;' +
+           'font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:17px;line-height:1.55' });
+  for (let i = 0; i < total; i++) {
+    if (i > 0 && i % 5 === 0) wrap.appendChild(el('span', { style: 'width:12px' }, ' '));
+    let cls, ch;
+    if (i < sess.idx) { cls = 'done'; ch = seq[i]; }
+    else if (reveal && i < revealTo) { cls = 'reveal'; ch = seq[i]; }
+    else if (i === sess.idx && !reveal) { cls = 'cursor'; ch = '•'; }
+    else { cls = 'hidden'; ch = '•'; }
+    const misses = missAt[i] || [];
+    const cell = el('span', { class: 'gt-' + cls, 'data-i': String(i), 'aria-hidden': 'true',
+      style: _trackCellStyle(cls) },
+      el('span', {}, ch),
+      el('span', { class: 'gt-miss', style: 'font-size:9px;line-height:1;color:#ef4444;min-height:9px;font-weight:800' },
+        misses.join('') || '\u00a0'));
+    wrap.appendChild(cell);
+  }
+  if (seq.length > total) wrap.appendChild(el('span', { class: 'u-muted-11', style: 'align-self:center;margin-left:6px' }, `… +${seq.length - total}`));
+  return wrap;
 }
 
 function _renderPlayStage(store) {
@@ -254,8 +298,9 @@ function _renderPlayStage(store) {
     stage.appendChild(el('div', { style: 'font-size:22px;font-weight:900;text-align:center;padding:18px' },
       setRichText(el('div', {}), String(s.expected ?? '—'))));
   } else {
-    stage.appendChild(el('div', { style: 'text-align:center;padding:18px;color:var(--muted);font-size:13px' },
-      `Recall mode — digit #${s.idx + 1} of the sequence · ${s.expected ? s.expected.length : 0} char(s) per round`));
+    stage.appendChild(_renderGameTrack(s, false));
+    stage.appendChild(el('div', { style: 'text-align:center;color:var(--muted);font-size:12px;margin-bottom:10px' },
+      `Recall from digit #${s.idx + 1} — green is banked, the outlined cell is next`));
   }
   if (s.inputType === 'input.choice' && s.choiceOptions) {
     s.choiceOptions.forEach(opt => controls.appendChild(
@@ -304,6 +349,7 @@ function _finishPlay(store) {
   const controls = document.getElementById('game-controls');
   if (stage) {
     stage.innerHTML = '';
+    if ((s.seq || []).length) stage.appendChild(_renderGameTrack(s, true));
     stage.appendChild(el('div', { style: 'text-align:center;padding:10px' },
       el('div', { style: 'font-size:34px;font-weight:900;margin-bottom:6px' },
         s.endReason === 'lives' ? '💥 Out of lives' : s.endReason === 'timer' ? '⏱ Time!' : s.endReason === 'abort' ? '🏳️ Quit' : '🏁 Complete'),

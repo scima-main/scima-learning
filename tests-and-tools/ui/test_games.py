@@ -160,6 +160,50 @@ def test_remix_attribution_chain(page, site_base, seeded):
     expect(page.locator("#view-games")).to_contain_text("Bo (remix)")
 
 
+# ── the digit track ────────────────────────────────────────────────────────
+
+def test_track_shows_banked_digits_and_cursor(page, site_base, seeded):
+    goto_games(page, site_base, seeded, "preset:empty")
+    page.locator(".card", has_text="Pi Recall").first.get_by_role(
+        "button", name="▶ Play").click()
+    box = page.locator("#game-controls input")
+    for ch in "1415":
+        box.type(ch, delay=20)
+    track = page.locator("#game-track")
+    expect(track).to_be_visible()
+    done = track.locator(".gt-done")
+    expect(done).to_have_count(4)
+    assert "".join(t.split("\n")[0] for t in done.all_inner_texts()) == "1415"
+    expect(track.locator(".gt-cursor")).to_have_count(1)
+    # upcoming digits stay hidden during play…
+    assert "9265" not in track.inner_text()
+    # …a wrong key hangs under the cell where it was missed
+    box.type("0", delay=20)
+    expect(track.locator(".gt-miss", has_text="0").first).to_be_visible()
+
+
+def test_gameover_reveals_next_25_digits_in_red(page, site_base, seeded):
+    goto_games(page, site_base, seeded, "preset:empty")
+    page.locator(".card", has_text="Pi Recall").first.get_by_role(
+        "button", name="▶ Play").click()
+    box = page.locator("#game-controls input")
+    for ch in "1415":
+        box.type(ch, delay=20)
+    for _ in range(3):
+        box.type("0", delay=20)
+    expect(page.locator("#game-stage")).to_contain_text("Out of lives", timeout=5000)
+
+    track = page.locator("#game-track")
+    reveal = track.locator(".gt-reveal")
+    expect(reveal).to_have_count(25)
+    # π decimals from position 4: the run ended right before these
+    # (cell text = digit + miss-row, so take the first line of each)
+    joined = "".join(t.split("\n")[0] for t in reveal.all_inner_texts())
+    assert joined == "9265358979323846264338327"
+    # banked digits still green beside the reveal
+    expect(track.locator(".gt-done")).to_have_count(4)
+
+
 # ── gamekit CLI ────────────────────────────────────────────────────────────
 
 def test_gamekit_validate_add_hash_remix(tmp_path):

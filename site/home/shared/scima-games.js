@@ -157,6 +157,7 @@ function createGameSession(spec, opts = {}) {
     correct: 0, misses: 0, elapsedMs: 0,
     status: 'running', endReason: null, buffer: '',
     tokens: [], round: 0,
+    missLog: [],            // [{at, ch}] — wrong chars, for the track renderer
     _at: at, _active: active,
     seed: opts.seed || 1,
   };
@@ -238,6 +239,7 @@ function _gameMiss(sess) {
   const match = sess._at(sess.step)('match.prefix') || sess._at(sess.step)('match.exact');
   const cost = match ? match.props.missCost : 1;
   sess.misses += 1; sess.combo = 0; sess.lives -= cost;
+  if (sess.missLog.length < 500) sess.missLog.push({ at: sess.idx, ch: sess.lastInput || '' });
 }
 
 /** feedGameSession(sess, event) — pure-ish reducer (mutates a copy).
@@ -246,6 +248,7 @@ function feedGameSession(prev, event) {
   if (prev.status !== 'running') return prev;
   const sess = Object.assign(Object.create(Object.getPrototypeOf(prev)), prev);
   sess.tokens = [...prev.tokens];
+  sess.missLog = [...prev.missLog];
   if (event.type === 'abort') { _gameEnd(sess, 'abort'); return sess; }
   if (event.type === 'tick') {
     if (sess.pace !== 'time') return sess;
@@ -267,6 +270,7 @@ function feedGameSession(prev, event) {
     const input = sess._at(sess.step)('input.typed') || sess._at(sess.step)('input.choice');
     if (sess.inputType === 'input.choice') {
       if (sess.choiceOptions && sess.choiceOptions.includes(event.v)) {
+        sess.lastInput = event.v;
         if (event.v === sess.expected) _gameHit(sess, 1); else _gameMiss(sess);
         _gameAfterCommit(sess);
       }
@@ -277,6 +281,7 @@ function feedGameSession(prev, event) {
       const ch = String(event.v || '').slice(0, 1);
       if (!ch) return sess;
       const want = (sess.expected || '').slice(0, 1);
+      sess.lastInput = ch;
       if (ch === want) _gameHit(sess, 1); else _gameMiss(sess);
       _gameAfterCommit(sess);
       return sess;
@@ -288,7 +293,7 @@ function feedGameSession(prev, event) {
     if (sess.commit === 'perSubmit') {
       const want = sess.expected || '';
       if (sess.buffer.trim() && sess.buffer.trim() === String(want).trim()) _gameHit(sess, want.length || 1);
-      else _gameMiss(sess);
+      else { sess.lastInput = sess.buffer; _gameMiss(sess); }
       sess.buffer = '';
     }
     _gameAfterCommit(sess);
