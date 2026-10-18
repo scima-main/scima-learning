@@ -130,7 +130,7 @@ def test_delete_deck(page, base_url, seeded):
     card = page.locator(".deck-card", has_text="Biology - Cells")
     expect(card).to_be_visible()
 
-    card.get_by_role("button", name="×", exact=True).click()
+    card.locator("button[title='Delete deck']").click()
 
     expect(page.locator(".deck-card", has_text="Biology - Cells")).to_have_count(0,
                                                                                 timeout=5000)

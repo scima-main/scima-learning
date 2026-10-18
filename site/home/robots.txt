@@ -11,5 +11,6 @@ Disallow: /dashboard/
 Disallow: /capture/
 Disallow: /insights/
 Disallow: /tracker/
+Disallow: /games/
 
 Sitemap: https://study.scima-net.com/sitemap.xml

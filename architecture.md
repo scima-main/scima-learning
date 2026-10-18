@@ -195,6 +195,14 @@ document and none of the cross-page machinery below runs.
   effort. The winning strategy locks for the whole paging walk. When every
   path fails the tab offers a paste fallback: stamped scima JSON (e.g. the
   `quizlet-to-scima.js` console helper) or tab-separated pairs.
+- **Arcade (hidden route)**: `/games/` (noindex, absent from nav until launch)
+  hosts the Tier-0/0.5 game system: `shared/scima-games.js` holds the object
+  catalog + pure reducer (`createGameSession`/`feedGameSession`), and
+  `app/dashboard-games.js` the play runner, the list+inspector editor MVP,
+  skeletal `SCIMAGAME1-…` share strings (zlib+base64url, mirrored by
+  `tests-and-tools/gamekit.py`), and Scratch/GD-style remix attribution
+  (remixable by default; forks extend the chain). Charts are declarative
+  data — no author code executes. Design rationale: `game-packages-design.md`.
 - **Session history**: `state.sessionLog` records every session —
   completed ones via `finishSession()`, abandoned ones (← Exit, tab closed,
   reload) as `status:'aborted'` with a `queueIds` snapshot — surfaced in the
