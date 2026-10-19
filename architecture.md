@@ -203,6 +203,10 @@ document and none of the cross-page machinery below runs.
   `tests-and-tools/gamekit.py`), and Scratch/GD-style remix attribution
   (remixable by default; forks extend the chain). Charts are declarative
   data — no author code executes. Design rationale: `game-packages-design.md`.
+- **Manual advance**: graded answers (quiz/gaps/multiple-choice) never
+  auto-next — a Next/Finish button appears after marking; `settings.
+  autoNextSeconds` (0 = off, default) adds a visible countdown to it.
+  Countdowns are cleared on re-render/exit/finish.
 - **Session history**: `state.sessionLog` records every session —
   completed ones via `finishSession()`, abandoned ones (← Exit, tab closed,
   reload) as `status:'aborted'` with a `queueIds` snapshot — surfaced in the

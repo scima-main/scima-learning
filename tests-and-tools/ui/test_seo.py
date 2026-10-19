@@ -98,3 +98,24 @@ def test_every_served_page_has_meta_description(tree, minimum):
         assert m, f"{html} has no (or too short) meta description"
         audited += 1
     assert audited >= minimum
+
+
+def test_static_h1_and_description_length_every_page():
+    """Bing's scanner parses served HTML without running the app: every page
+    needs exactly one (visually-hidden, static) <h1> and a description inside
+    Bing's 50-160 char window."""
+    import re as _re
+    from pathlib import Path as _Path
+    root = _Path(__file__).resolve().parents[2] / "site/home"
+    audited = 0
+    for html in sorted(root.rglob("index.html")):
+        txt = html.read_text(encoding="utf-8")
+        assert txt.count("<h1") == 1 and 'class="seo-h1"' in txt, f"{html}: h1"
+        m = _re.search(r'<meta\s+name=["\']?description["\']?\s+content=["\']([^"\']*)',
+                       txt, _re.I)
+        assert m, f"{html}: description"
+        assert 50 <= len(m.group(1)) <= 160, f"{html}: desc {len(m.group(1))} chars"
+        audited += 1
+    assert audited >= 10
+    css = (root / "app" / "dashboard.css").read_text(encoding="utf-8")
+    assert ".seo-h1" in css

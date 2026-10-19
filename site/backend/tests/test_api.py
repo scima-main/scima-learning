@@ -492,3 +492,14 @@ def test_meta_description_safety_net(client):
 def test_meta_description_not_duplicated(client):
     r = client.get("/")
     assert r.text.lower().count('name="description"') == 1
+
+
+def test_http_to_https_redirect(client):
+    r = client.get("/", headers={"x-forwarded-proto": "http"}, follow_redirects=False)
+    assert r.status_code == 301
+    assert r.headers["location"].startswith("https://")
+
+
+def test_no_redirect_without_proxy_header(client):
+    r = client.get("/", follow_redirects=False)
+    assert r.status_code == 200

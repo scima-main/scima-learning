@@ -1338,3 +1338,8 @@ input[type="number"]:focus { border-color: rgba(var(--blue-rgb),0.5); }
 .sc-root .sc-modal-status { font-size: 12px; margin-top: 10px; min-height: 16px; }
 .sc-root .sc-modal-status.ok { color: #22c55e; }
 .sc-root .sc-modal-status.err { color: #ef4444; }
+
+/* Static per-page H1 for crawlers/screen readers: present in the served
+   HTML (the app's own headings render later), visually hidden layout-wise. */
+.seo-h1 { position:absolute; width:1px; height:1px; margin:-1px; padding:0;
+          overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }

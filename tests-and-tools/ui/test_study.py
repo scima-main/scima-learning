@@ -134,7 +134,11 @@ def test_multiple_choice_marks_option(page, base_url, seeded):
     front, back = current_card(page)
     options.filter(has_text=re.compile(f"^{re.escape(back)}$")).first.click()
 
-    # auto rateCard() after 450ms → progress advances to card 2
+    # newer builds wait for an explicit Next; older minified bundles still
+    # auto-advance — accept either, then assert we're on card 2
+    nxt = page.get_by_role("button", name=re.compile(r"^(Next|Finish) →$"))
+    if nxt.count():
+        nxt.first.click()
     expect(page.locator("#view-study span",
                         has_text=re.compile(r"^2 / 7$")).first).to_be_visible(timeout=8000)
 

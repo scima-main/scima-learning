@@ -11,6 +11,36 @@
 let quizTimerHandle = null;
 function clearQuizTimer(){ if(quizTimerHandle){ clearInterval(quizTimerHandle); quizTimerHandle=null; } }
 
+// ── Manual advance (NEVER auto-next) ──────────────────────────────────────
+// Graded answers always wait for the learner: a Next/Finish button appears,
+// and only if settings.autoNextSeconds > 0 does a visible countdown tick
+// down to it (0 = purely manual). Every timer is cleared on re-render, exit
+// and finish so a countdown can never fire into a different card.
+let nextTimerHandle = null;
+function clearNextTimer(){ if(nextTimerHandle){ clearInterval(nextTimerHandle); nextTimerHandle=null; } }
+function attachNextControls(container, rating){
+  clearNextTimer();
+  const sess = studySession;
+  const secs = Math.max(0, Math.min(60, (state.settings.autoNextSeconds|0) || 0));
+  const row = el('div',{class:'quiz-next-row',style:'display:flex;gap:12px;align-items:center;justify-content:center;margin-top:12px'});
+  const last = sess && (sess.idx + 1 >= sess.queue.length);
+  const countdown = secs > 0
+    ? el('span',{class:'u-muted-11',style:'font-size:12px;font-weight:800;min-width:74px'},`Next in ${secs}s`)
+    : null;
+  row.appendChild(btn(last ? 'Finish →' : 'Next →','primary',{
+    onclick:()=>{ clearNextTimer(); rateCard(rating); }}));
+  if(countdown) row.appendChild(countdown);
+  container.appendChild(row);
+  if(secs > 0){
+    let left = secs;
+    nextTimerHandle = setInterval(()=>{
+      left -= 1;
+      if(countdown) countdown.textContent = `Next in ${Math.max(0,left)}s`;
+      if(left <= 0){ clearNextTimer(); rateCard(rating); }
+    }, 1000);
+  }
+}
+
 // ── Session statistics log ────────────────────────────────────────────────
 // state.sessionLog is an array of completed-session records, saved alongside
 // state. Each entry captures everything interesting about a single study
@@ -348,6 +378,7 @@ const MODE_HELP = {
   quiz: { icon:'✍️', title:'Written Quiz', blurb:'Type the answer from memory; it\u2019s marked for you.', tips:[
     'Instead of flipping, you type the answer; it\u2019s marked against the card\u2019s accepted answers using the session\u2019s Match mode (fuzzy tolerates case/whitespace/latex-readable forms, exact doesn\u2019t).',
     '⌘/Ctrl+Enter submits. With ⏱️ Timed ticked, each card auto-submits when its per-card countdown runs out (counts as a timeout if empty).',
+    'Nothing advances on its own: after marking, use Next/Finish (or the self-rate row). Settings → Auto-next countdown can add a visible N-second timer to that button.',
     'The session summary gains typing stats: WPM, keystrokes/second, backspaces, timeouts.']},
   gaps: { icon:'🧩', title:'Fill in the Gaps', blurb:'A key word from the answer is blanked in its sentence — recall it in context.', tips:[
     'One content word (stopwords skipped) is hidden from the back text and shown as a blank inside the full sentence.',
@@ -538,6 +569,7 @@ function startStudySession(scopes, mode) {
 function renderStudySession(c) {
   const sess=studySession;
   clearQuizTimer();
+  clearNextTimer();
   if(sess.idx>=sess.queue.length){ finishSession(); return; }
   const card=sess.queue[sess.idx];
   spOnCardRender(card);     // ✍️ scratchpad: bind/rebind the pad to this question (spec §20 restore)
@@ -550,7 +582,7 @@ function renderStudySession(c) {
   c.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;padding:0';
 
   const progress=el('div',{style:'display:flex;align-items:center;gap:12px;margin-bottom:20px'},
-    btn('← Exit','ghost',{small:true,onclick:()=>{ clearQuizTimer(); if(window.speechSynthesis) window.speechSynthesis.cancel(); spSessionEnd(); logAbortedSession(studySession); studySession=null; renderView('study'); }}),
+    btn('← Exit','ghost',{small:true,onclick:()=>{ clearQuizTimer(); clearNextTimer(); if(window.speechSynthesis) window.speechSynthesis.cancel(); spSessionEnd(); logAbortedSession(studySession); studySession=null; renderView('study'); }}),
     el('div',{style:'flex:1'},
       el('div',{style:'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'},
         el('span',{style:'font-size:12px;font-weight:700;color:var(--muted)'},`${sess.idx+1} / ${sess.queue.length}`),
@@ -626,7 +658,7 @@ function renderMultiChoiceCard(card, citBadge) {
       if(!opt.correct) b.style.cssText+=';border-color:#ef4444;background:rgba(239,68,68,0.12);color:#ef4444';
       if(sess._gap===null) sess._gap={correct:0,close:0,wrong:0};
       sess._gap[opt.correct?'correct':'wrong']++;
-      setTimeout(()=>rateCard(opt.correct?4:1),450);
+      attachNextControls(optsWrap, opt.correct?4:1);
     });
     return b;
   });
@@ -949,7 +981,7 @@ function renderGapCard(card, citBadge) {
       rateRow.appendChild(el('button',{class:'btn btn-sm',style:`background:color-mix(in srgb, ${rb.color} 8%, transparent);color:${rb.color};border:1px solid color-mix(in srgb, ${rb.color} 20%, transparent)`,onclick:()=>rateCard(rb.rating)},rb.label));
     });
     stickyFooter.appendChild(rateRow);
-    if(result==='correct') setTimeout(()=>rateCard(4),50);
+    if(result==='correct') attachNextControls(compareEl, 4);
     checkBtn.style.display='none';
   }
 
@@ -1031,7 +1063,7 @@ function renderProcessGapCard(card, citBadge) {
       rateRow.appendChild(el('button',{class:'btn btn-sm',style:`background:color-mix(in srgb, ${rb.color} 8%, transparent);color:${rb.color};border:1px solid color-mix(in srgb, ${rb.color} 20%, transparent)`,onclick:()=>rateCard(rb.rating)},rb.label));
     });
     stickyFooter.appendChild(rateRow);
-    if(result==='correct') setTimeout(()=>rateCard(4),50);
+    if(result==='correct') attachNextControls(compareEl, 4);
     inputArea.disabled=true; checkBtn.style.display='none';
   }
   inputArea.addEventListener('keydown',e=>{ if(e.key==='Enter') checkStep(); });
@@ -1203,7 +1235,7 @@ function renderCalcQuizCard(card, citBadge) {
       rateRow.appendChild(el('button',{class:'btn btn-sm',style:`background:color-mix(in srgb, ${rb.color} 8%, transparent);color:${rb.color};border:1px solid color-mix(in srgb, ${rb.color} 20%, transparent)`,onclick:()=>rateCard(rb.rating)},rb.label));
     });
     stickyFooter.appendChild(rateRow);
-    if(result==='correct') setTimeout(()=>rateCard(4),50);
+    if(result==='correct') attachNextControls(compareEl, 4);
     answerInput.disabled=true; if(workingInput) workingInput.disabled=true; checkBtn.style.display='none';
   }
   answerInput.addEventListener('keydown',e=>{ if(e.key==='Enter') checkCalcAnswer(); });
@@ -1311,7 +1343,7 @@ function renderTableQuizCard(card, citBadge) {
       rateRow.appendChild(el('button',{class:'btn btn-sm',style:`background:color-mix(in srgb, ${rb.color} 8%, transparent);color:${rb.color};border:1px solid color-mix(in srgb, ${rb.color} 20%, transparent)`,onclick:()=>rateCard(rb.rating)},rb.label));
     });
     stickyFooter.appendChild(rateRow);
-    if(result==='correct') setTimeout(()=>rateCard(4),50);
+    if(result==='correct') attachNextControls(compareEl, 4);
     checkBtn.style.display='none';
   }
   if(inputRefs.length) inputRefs[inputRefs.length-1].input.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)) checkTableAnswers(); });
@@ -1521,7 +1553,7 @@ function renderQuizCard(card, citBadge, scrollArea) {
       rateRow.appendChild(el('button',{class:'btn btn-sm',style:`background:color-mix(in srgb, ${rb.color} 8%, transparent);color:${rb.color};border:1px solid color-mix(in srgb, ${rb.color} 20%, transparent)`,onclick:()=>rateCard(rb.rating)},rb.label));
     });
     compareEl.appendChild(rateRow);
-    if(result==='correct') setTimeout(()=>rateCard(4),50);
+    if(result==='correct') attachNextControls(compareEl, 4);
     inputAreas.forEach(box=>box.disabled=true); checkBtn.style.display='none';
     // Re-disable mode toggle after check
     modeToggleRow.querySelectorAll('button').forEach(b=>{ b.disabled=true; b.style.opacity='0.5'; b.style.cursor='default'; });
@@ -1582,6 +1614,7 @@ function nextCard(){
 }
 
 function finishSession(){
+  clearNextTimer();
   if(window.speechSynthesis) window.speechSynthesis.cancel();
   spSessionEnd();           // ✍️ scratchpad: session over ⇒ every pad is wiped (spec §31)
   const sess=studySession; addXP(50); sess.active=false;

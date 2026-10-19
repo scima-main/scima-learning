@@ -70,7 +70,7 @@ function renderHome(c) {
   c.append(
     el('div',{style:'margin-bottom:28px'},
       el('div',{style:'font-size:13px;color:var(--muted);margin-bottom:4px'},'Good day, Scholar 👋'),
-      el('h1',{style:'font-size:28px;font-weight:900;letter-spacing:-0.03em;line-height:1.1;margin-bottom:8px'},'Ready to forge some ',gradText('memories'),'?'),
+      el('div',{style:'font-size:28px;font-weight:900;letter-spacing:-0.03em;line-height:1.1;margin-bottom:8px'},'Ready to forge some ',gradText('memories'),'?'),
       el('p',{style:'font-size:14px;color:var(--muted)'},'You have ',el('span',{style:'color:var(--pink);font-weight:700'},`${nOf(due,'card')} due`),` across ${state.decks.length} deck${state.decks.length!==1?'s':''}`)
     ),
     statsGrid,

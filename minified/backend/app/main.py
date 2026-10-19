@@ -85,6 +85,18 @@ async def ensure_meta_description(request: Request, call_next):
 
 
 
+@app.middleware("http")
+async def redirect_http_to_https(request: Request, call_next):
+    """Behind Cloudflare the edge terminates TLS, so enforce the redirect
+    here: plain-http hits (Bing flags missing https redirect + duplicate
+    scheme content) 301 to the https URL. Direct dev uvicorn sends no
+    x-forwarded-proto and keeps serving plain http."""
+    if request.headers.get("x-forwarded-proto") == "http":
+        return RedirectResponse(url=str(request.url.replace(scheme="https")),
+                                status_code=301)
+    return await call_next(request)
+
+
 # ── Middleware ───────────────────────────────────────────────────────
 
 # Minified assets still compress ~70% further on the wire (JS/CSS/JSON are
