@@ -469,3 +469,26 @@ def test_import_quizlet_upstream_block_becomes_502(client, monkeypatch):
     monkeypatch.setattr(main_module.httpx, "AsyncClient", _Blocked)
     r = client.get("/api/v1/import/quizlet", params={"set": "1"})
     assert r.status_code == 502
+
+
+def test_meta_description_safety_net(client):
+    """HTML served without a meta description gets the site default injected."""
+    from fastapi.responses import HTMLResponse
+    from fastapi.routing import APIRoute
+    from app import main as m
+
+    def _nd():
+        return HTMLResponse("<html><head><title>x</title></head><body>hi</body></html>")
+
+    # the catch-all static mount outranks late-added routes → insert first
+    m.app.routes.insert(0, APIRoute("/tmp-nodesc", _nd, include_in_schema=False))
+    r = client.get("/tmp-nodesc")
+    assert r.status_code == 200
+    assert 'name="description"' in r.text
+    assert "SCIMA Learning is a private" in r.text
+    assert r.text.index('name="description"') < r.text.index("<title>")
+
+
+def test_meta_description_not_duplicated(client):
+    r = client.get("/")
+    assert r.text.lower().count('name="description"') == 1

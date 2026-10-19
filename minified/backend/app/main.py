@@ -32,6 +32,58 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Site-default meta description, injected by the safety-net middleware below
+# into any HTML response that lacks one (legacy mounts, future pages).
+DEFAULT_META_DESCRIPTION = (
+    "SCIMA Learning is a private, client-side study app: spaced-repetition "
+    "flashcards, written quizzes, a citation-aware reading library and "
+    "progress analytics — your data never leaves your browser."
+)
+
+
+@app.middleware("http")
+async def ensure_meta_description(request: Request, call_next):
+    """SEO safety net: every text/html response must carry a meta
+    description. Registered FIRST (innermost) so it sees plaintext before
+    GZipMiddleware compresses; content-length is dropped and recomputed."""
+    response = await call_next(request)
+    ctype = response.headers.get("content-type", "")
+    if "text/html" not in ctype or response.status_code >= 400:
+        return response
+    body = b""
+    async for chunk in response.body_iterator:
+        body += chunk
+    low = body.lower()
+    headers = dict(response.headers)
+    media = ctype.split(";")[0]
+    if b'name="description"' in low or b"name=description" in low or b"name='description'" in low:
+        headers.pop("content-length", None)
+        return Response(content=body, status_code=response.status_code,
+                        headers=headers, media_type=media)
+    tag = b'<meta name="description" content="' + DEFAULT_META_DESCRIPTION.encode("utf-8") + b'">'
+    injected = False
+    for anchor in (b"<head>", b"<head "):
+        i = low.find(anchor)
+        if i != -1:
+            j = body.find(b">", i) + 1
+            body = body[:j] + b"\n" + tag + body[j:]
+            injected = True
+            break
+    if not injected:
+        for anchor in (b"<html>", b"<html "):
+            i = low.find(anchor)
+            if i != -1:
+                j = body.find(b">", i) + 1
+                body = body[:j] + tag + body[j:]
+                injected = True
+                break
+    if not injected:
+        body = tag + body
+    headers.pop("content-length", None)
+    return Response(content=body, status_code=response.status_code,
+                    headers=headers, media_type=media)
+
+
 
 # ── Middleware ───────────────────────────────────────────────────────
 
@@ -836,8 +888,11 @@ STUDY_LANDING_DIR = Path(os.environ["SCIMA_STATIC_ROOT"]) \
 # every place it may live; if absent, the /community mount is skipped below
 # (StaticFiles would raise at import on a missing directory).
 COMMUNITY_DIR = next((p for p in (
-    REPO_ROOT / "community-deprecated", REPO_ROOT / "community",
-    REPO_ROOT.parent / "community-deprecated", REPO_ROOT.parent / "community",
+    REPO_ROOT / "archive" / "community-deprecated",
+    REPO_ROOT / "community-deprecated",
+    REPO_ROOT / "community",
+    REPO_ROOT.parent / "community-deprecated",
+    REPO_ROOT.parent / "archive" / "community-deprecated",
 ) if p.exists()), None)
 
 # Legacy URL family (/dashboard/…). Kept because existing bookmarks use it

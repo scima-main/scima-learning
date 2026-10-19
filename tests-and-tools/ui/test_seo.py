@@ -78,3 +78,23 @@ def test_redirect_stubs_are_noindex(site_base):
         status, body = _get(site_base, stub)
         assert status == 200
         assert 'name="robots" content="noindex"' in body, stub
+
+
+@pytest.mark.parametrize("tree,minimum", [("site/home", 10), ("minified/home", 10),
+                                          ("archive/community-deprecated", 1)])
+def test_every_served_page_has_meta_description(tree, minimum):
+    """Static audit of every index.html in both served trees (+ legacy
+    community under archive/): a scanner-parseable, non-empty description
+    must exist. Pins the fix for the 2026-10 site scan (minify had stripped
+    the attribute quotes; minify.sh now passes --html-keep-quotes)."""
+    import re as _re
+    from pathlib import Path as _Path
+    root = _Path(__file__).resolve().parents[2] / tree
+    audited = 0
+    for html in sorted(root.rglob("index.html")):
+        txt = html.read_text(encoding="utf-8")
+        m = _re.search(r'<meta\s+name=["\']?description["\']?\s+content=["\']([^"\']{20,})',
+                       txt, _re.I)
+        assert m, f"{html} has no (or too short) meta description"
+        audited += 1
+    assert audited >= minimum

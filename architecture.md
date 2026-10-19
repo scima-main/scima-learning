@@ -429,7 +429,16 @@ crawlers and link previews.
    routes can index, but only the six content routes are advertised;
    non-JS engines and social crawlers get the static meta + noscript copy.
    "Discovered – currently not indexed" on app views is normal.
-6. **Maintain**: when routes are added/renamed, update `sitemap.xml`
+6. **Meta-description safety net**: `minify` strips attribute quotes, which
+   broke quote-matching scanners (2026-10 site scan); `minify.sh` now passes
+   `--html-keep-quotes` (with fallback), current minified heads were
+   re-quoted, every served page (incl. stubs, `/games/`, `/settings/`,
+   legacy community under `archive/`) carries a description, and the
+   backend's innermost `ensure_meta_description` middleware injects a site
+   default into any HTML response that lacks one — future pages can't
+   regress. After deploying, purge the Cloudflare cache or scanners keep
+   reading stale HTML.
+7. **Maintain**: when routes are added/renamed, update `sitemap.xml`
    (`<loc>` + `<lastmod>`), the §3.1 table, and the robots stub list. If a
    truly public content page ever appears (shared deck viewer?), consider
    prerendering it server-side for richer snippets.
