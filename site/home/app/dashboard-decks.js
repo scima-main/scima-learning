@@ -499,8 +499,12 @@ const CASE_SMALL_WORDS = new Set(['a','an','the','and','but','or','nor','for','s
   'into','onto','upon','than','till','until','like','near','past']);
 const CASE_WORD_RE = /\p{L}[\p{L}\p{N}'’-]*/gu;
 
-/** Split into [{math, text}] segments so transforms skip TeX spans. */
+/** Split into [{math, text}] segments so transforms skip TeX spans.
+ *  Delegates to shared.js's currency-aware splitter — the same one
+ *  renderRichText() uses — so "$1.20" is money (case-changeable text) here
+ *  exactly where it is money on screen, and "$x^2$" is protected math. */
 function scCaseSegments(text) {
+  if (typeof scRichMathSegments === 'function') return scRichMathSegments(text);
   return String(text).split(/(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g)
     .filter(seg => seg !== '')
     .map((seg, i) => ({ math: i % 2 === 1, text: seg }));

@@ -313,6 +313,59 @@ function makeDefaultState() {
 function escapeHtmlText(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+// ── Currency-aware TeX delimiters ──────────────────────────────────────────
+// "a currency buys more of another: £1 = $1.20 changes to £1 = $1.50" must
+// render as typed — but a naive $…$ inline-math pass pairs the two dollar
+// SIGNS and feeds "1.20 changes to £1 = " to KaTeX. A "$" that opens a plain
+// numeric amount ($1.20, $1,200) ended by whitespace, sentence punctuation or
+// end-of-string is MONEY, not a delimiter: it can neither open nor close an
+// inline math span. Real math is unaffected because its amount never ends that
+// way: "$2\pi r^2$" has a backslash after the digits, "$3 = x$" an equals.
+const SC_MONEY_RE = /^\$\d+(?:[.,]\d+)*(?=[\s.,;:!?)\]}'"&]|$)/;
+function scMoneyAt(s, i) {           // s[i] === '$' → the money run or null
+  const m = s.slice(i, i + 32).match(SC_MONEY_RE);
+  return m ? m[0] : null;
+}
+/** Splits text into [{math, text}] segments: display $$…$$ and inline $…$
+ *  become math segments, currency amounts stay ordinary text. Shared by
+ *  renderRichText() and the case-standardiser's TeX protection so "$1.20"
+ *  is money everywhere and "$x^2$" is math everywhere. */
+function scRichMathSegments(text) {
+  const s = String(text);
+  const segs = [];
+  let buf = '', i = 0;
+  const flush = () => { if (buf) { segs.push({ math: false, text: buf }); buf = ''; } };
+  while (i < s.length) {
+    const d = s.indexOf('$', i);
+    if (d < 0) { buf += s.slice(i); break; }
+    if (s.startsWith('$$', d)) {
+      const close = s.indexOf('$$', d + 2);
+      if (close > 0) { buf += s.slice(i, d); flush(); segs.push({ math: true, text: s.slice(d, close + 2) }); i = close + 2; }
+      else { buf += s.slice(i, d + 2); i = d + 2; }        // unclosed $$ → literal
+      continue;
+    }
+    const money = scMoneyAt(s, d);
+    if (money) { buf += s.slice(i, d + money.length); i = d + money.length; continue; }
+    // Inline opener: the closer is the next "$" that is not itself a money
+    // sign, with no newline in between (same rule the old regex had).
+    let close = -1, j = d + 1;
+    for (;;) {
+      j = s.indexOf('$', j);
+      if (j < 0) break;
+      if (s.slice(d + 1, j).includes('\n')) break;
+      if (!scMoneyAt(s, j)) { close = j; break; }
+      j += 1;
+    }
+    if (close < 0) { buf += s.slice(i, d + 1); i = d + 1; continue; }  // stray $ → literal
+    buf += s.slice(i, d);
+    flush();
+    segs.push({ math: true, text: s.slice(d, close + 1) });
+    i = close + 1;
+  }
+  flush();
+  return segs;
+}
+
 function renderRichText(str) {
   if (str == null || str === '') return '';
   const unescapeHtmlText = t => t.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
@@ -324,8 +377,12 @@ function renderRichText(str) {
     catch (e) { return escapeHtmlText(display ? `$$${raw}$$` : `$${raw}$`); }
   };
   let s = escapeHtmlText(String(str));
-  s = s.replace(/\$\$([\s\S]+?)\$\$/g, (m, expr) => mathRender(expr, true));
-  s = s.replace(/\$([^$\n]+?)\$/g, (m, expr) => mathRender(expr, false));
+  s = scRichMathSegments(s).map(seg => {
+    if (!seg.math) return seg.text;
+    return seg.text.startsWith('$$')
+      ? mathRender(seg.text.slice(2, -2), true)
+      : mathRender(seg.text.slice(1, -1), false);
+  }).join('');
   s = s.replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/__([\s\S]+?)__/g, '<u>$1</u>');
   s = s.replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>');

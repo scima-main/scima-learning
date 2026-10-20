@@ -181,7 +181,13 @@ button; and bootstrap's init() resolves the hash's FIRST path
   quiz, fill-the-gaps, weakness, multiple choice; session queues are
   shuffled; ratings mutate card ease/interval/due and append
   `reviewHistory`, streaks, XP and achievements.
-- **Rich text**: `renderRichText()` — `$…$`/`$$…$$` → KaTeX, `**bold**`,
+- **Rich text**: `renderRichText()` — `$…$`/`$$…$$` → KaTeX (currency-aware:
+  a `$` opening a plain numeric amount ended by whitespace/sentence
+  punctuation/end — `$1.20`, `$1,200` — is money, not a delimiter, and can
+  neither open nor close a math span, so "£1 = $1.20 changes to £1 = $1.50"
+  renders as typed while `$2\pi r^2$` still renders; `scRichMathSegments()`
+  in shared.js is the single splitter, also used by the case tool's TeX
+  protection), `**bold**`,
   `__underline__`, `*italic*`, HTML-escaped first (markup can never inject
   nodes). KaTeX+mhchem ship in `home/lib/katex/`.
 - **Theming**: `theme.js` presets + timed/sun schedule; `applyThemeVars()`
