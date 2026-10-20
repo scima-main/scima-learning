@@ -1074,7 +1074,9 @@ function exportFolder(folderId) {
   if (!folder) return;
   const allFolderIds = [folderId, ...getDescendantFolderIds(folderId)];
   const decks = state.decks.filter(d=>allFolderIds.includes(d.folderId));
-  const subFolders = state.folders.filter(f=>allFolderIds.includes(f.id));
+  // The root travels in `folder` — listing it in subFolders too made every
+  // importer (which treats the two as disjoint) create the folder twice.
+  const subFolders = state.folders.filter(f=>f.id!==folderId&&allFolderIds.includes(f.id));
   const citedSourceIds = new Set(decks.flatMap(d=>d.cards).map(c=>c.citation?.sourceId).filter(Boolean));
   const citedSources = (state.sources||[]).filter(s=>citedSourceIds.has(s.id));
   const a = document.createElement('a');
@@ -1595,7 +1597,10 @@ function openCreateFolderModal(subjectKey, parentId) {
       const d=parsedImport;
       // Remap IDs to avoid collisions
       const folderIdMap={};
-      const allFolders=[d.folder,...(d.subFolders||[])];
+      // Dedupe by id: exports made before the subFolders fix list the root
+      // folder in BOTH `folder` and `subFolders` — importing one of those
+      // files must still create a single folder.
+      const allFolders=[d.folder,...(d.subFolders||[])].filter((f,i,arr)=>f&&arr.findIndex(x=>x&&x.id===f.id)===i);
       allFolders.forEach(f=>{ const newId=uid('f'); folderIdMap[f.id]=newId; });
       allFolders.forEach(f=>{
         state.folders.push({...f, id:folderIdMap[f.id], parentId:f.parentId?(folderIdMap[f.parentId]||null):(parentId||null), subjectKey:subjectKey||f.subjectKey});
@@ -3012,10 +3017,13 @@ function openCardModal(deckId, cardId) {
     let cardMode = initialCardMode();
     function minPoolSize(){ return cardMode==='markscheme' ? 1 : cardMode==='process' ? 2 : 2; }
 
-    const modeRow = el('div',{style:'display:flex;flex-wrap:wrap;flex-shrink:0;gap:0;margin:4px 0 10px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.1)'});
+    // Six card types as a 3×2 grid (the old flex-wrap row stranded "Table"
+    // alone on a second line); the 1px gap over the container's background
+    // draws the cell separators. The ✂ split button sits to its right.
+    const modeRow = el('div',{style:'display:grid;grid-template-columns:repeat(3,1fr);gap:1px;flex:1;background:rgba(255,255,255,0.1);border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.1)'});
     const modeButtons = {};
     function mkModeBtn(id,label,title){
-      const b = el('button',{type:'button',title,style:'flex:1;min-width:96px;padding:8px 4px;font-size:11px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)'},label);
+      const b = el('button',{type:'button',title,style:'padding:8px 4px;font-size:11px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)'},label);
       b.addEventListener('click',()=>setCardMode(id));
       modeButtons[id]=b;
       return b;
@@ -3035,6 +3043,32 @@ function openCardModal(deckId, cardId) {
         b.style.color = active ? '#fff' : 'var(--muted)';
       });
     }
+
+    // ── ✂ Create multi-answer — split a comma-list Basic back into a pool ──
+    // "income tax, national insurance contributions, inheritance tax, …"
+    // becomes five Multi-answer entries in one click (mode switch + pool
+    // seed + required-count), instead of retyping each answer by hand.
+    const createMultiBtn = el('button',{type:'button',
+      title:'Split the Basic back text on commas into a Multi-answer pool',
+      style:'flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:8px 12px;font-size:11px;font-weight:800;font-family:inherit;cursor:pointer;border:1px solid rgba(255,255,255,0.12);border-radius:8px;background:rgba(255,255,255,0.06);color:var(--text);transition:background 0.15s,border-color 0.15s',
+      onclick:()=>{
+        if (cardMode !== 'basic') {
+          showToast('Switch to Basic first — the split reads the back text');
+          return;
+        }
+        const raw = backField.querySelector('textarea').value;
+        const parts = raw.split(',').map(x=>x.trim()).filter(Boolean);
+        if (parts.length < 2) {
+          showToast('No comma-separated list in the back — nothing to split');
+          return;
+        }
+        setCardMode('multi');          // carries the back into the pool…
+        initPool(parts);               // …which the split then replaces
+        requiredInput.value = String(parts.length);
+        showToast(`Split into ${parts.length} answers ✓`);
+      }},'✂ Create multi-answer');
+    const modeBlock = el('div',{style:'display:flex;gap:8px;align-items:stretch;flex-shrink:0;margin:4px 0 10px'},
+      modeRow, createMultiBtn);
 
     const poolLabel = el('div',{style:'font-size:12px;font-weight:600;margin-bottom:6px'},'Valid answers');
     const answerPoolList = el('div',{});
@@ -4316,7 +4350,7 @@ function openCardModal(deckId, cardId) {
     formWrap.addEventListener('input',()=>{ if(previewVisible) refreshPreview(); });
     formWrap.addEventListener('click',()=>{ if(previewVisible) refreshPreview(); });
 
-    formWrap.append(frontField,frontPreview,frontImgPicker,backField,backImgPicker,modeRow,poolSection,requiredField,requiredPreview,calcSection,tableSection,hintField,tagsField,gapsField,citSection,
+    formWrap.append(frontField,frontPreview,frontImgPicker,backField,backImgPicker,modeBlock,poolSection,requiredField,requiredPreview,calcSection,tableSection,hintField,tagsField,gapsField,citSection,
       previewToggleBtn,
       btn(isEdit?'Save Changes':'Add Card','primary',{full:true,onclick:()=>{
         const front=frontField.querySelector('textarea').value.trim();

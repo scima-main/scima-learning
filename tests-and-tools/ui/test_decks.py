@@ -5,6 +5,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
+import seed as seedlib
 from helpers import pages, storage
 
 pytestmark = [pytest.mark.decks]
@@ -150,3 +151,176 @@ def test_study_now_scopes_to_deck(page, base_url, seeded):
     pages.app_ready(page)
     expect(page.locator("#view-study")).to_contain_text("Spanish Basics")
     expect(page.locator("#view-study")).to_contain_text("4 total cards · 4 due")
+
+
+# ── Folder export/import must not duplicate the root folder ─────────────────
+# exportFolder used to list the root in BOTH `folder` and `subFolders`;
+# importers treat those as disjoint → every import created the folder twice
+# (one holding the decks, one empty). Export is fixed AND import dedupes by
+# id so files already in the wild still import single.
+
+def _folder_state():
+    folder = seedlib.make_folder("Langs", folder_id="f_src")
+    deck = seedlib.make_deck("D1", [seedlib.make_card("a", "b"),
+                                    seedlib.make_card("c", "d")],
+                             deck_id="d_src", folder_id="f_src")
+    return seedlib.make_mf_state(decks=[deck], folders=[folder])
+
+
+def _import_file_via_modal(page, path):
+    page.click("#view-decks button:has-text('+ New Folder')") \
+        if page.locator("#view-decks button", has_text="+ New Folder").count() \
+        else page.get_by_role("button", name="+ New Folder").click()
+    pages.expect_modal(page)
+    page.locator("#modal-body button", has_text="⬆ Import Folder").click()
+    page.locator("#modal-body input[type=file][accept='.json']") \
+        .set_input_files(path)
+    page.locator("#modal-body button", has_text="Import Folder JSON").click()
+    page.wait_for_timeout(400)
+
+
+def test_folder_export_round_trip_creates_single_folder(page, site_base, seeded,
+                                                        tmp_path):
+    seeded(mf_state=_folder_state())
+    pages.goto_app(page, site_base, "/decks/")
+    with page.expect_download(timeout=10000) as dl:
+        page.evaluate("() => exportFolder('f_src')")
+    path = tmp_path / "folder-export.json"
+    dl.value.save_as(str(path))
+    import json as _json
+    payload = _json.loads(path.read_text())
+    body = payload.get("payload", payload)
+    # new exports: root lives only in `folder`, never repeated in subFolders
+    assert body["folder"]["id"] == "f_src"
+    assert all(f["id"] != "f_src" for f in body.get("subFolders", []))
+
+    _import_file_via_modal(page, str(path))
+    folders = page.evaluate("() => state.folders")
+    named = [f for f in folders if f["name"] == "Langs"]
+    assert len(named) == 2, named          # original + exactly one import
+    new_id = next(f["id"] for f in named if f["id"] != "f_src")
+    decks = page.evaluate("() => state.decks")
+    in_new = [d for d in decks if d["folderId"] == new_id]
+    assert len(in_new) == 1                # decks travelled with the import
+    assert not [f for f in folders if f["name"] == "Langs"
+                and f["id"] not in ("f_src", new_id)]
+
+
+def test_legacy_duplicate_root_file_imports_single_folder(page, site_base,
+                                                          seeded, tmp_path):
+    """A file exported by the OLD buggy exporter (root in folder AND
+    subFolders) must still import as one folder + its child + its decks."""
+    import json as _json
+    legacy = {
+        "version": 2,
+        "exportedAt": "2026-10-20T00:00:00.000Z",
+        "folder": {"id": "fX", "name": "Legacy", "emoji": "📁", "image": None,
+                   "subjectKey": "misc", "parentId": None,
+                   "color": "var(--blue)"},
+        "subFolders": [
+            {"id": "fX", "name": "Legacy", "emoji": "📁", "image": None,
+             "subjectKey": "misc", "parentId": None, "color": "var(--blue)"},
+            {"id": "fY", "name": "Child", "emoji": "📁", "image": None,
+             "subjectKey": "misc", "parentId": "fX", "color": "var(--blue)"},
+        ],
+        "decks": [{"id": "dX", "name": "LD", "emoji": "📖", "image": None,
+                   "subject": "misc", "folderId": "fX",
+                   "color": "var(--blue)", "pinned": False,
+                   "cards": [{"id": "cX", "front": "q", "back": "a",
+                              "type": "basic", "ease": 2.5, "interval": 0,
+                              "reps": 0, "lapses": 0, "due": 0,
+                              "state": "new", "suspended": False,
+                              "leech": False, "created": 0,
+                              "lastRated": None}]}],
+    }
+    path = tmp_path / "legacy-folder.json"
+    path.write_text(_json.dumps(legacy))
+    seeded("preset:empty")
+    pages.goto_app(page, site_base, "/decks/")
+    _import_file_via_modal(page, str(path))
+    st = page.evaluate("() => ({folders: state.folders, decks: state.decks})")
+    legacy_folders = [f for f in st["folders"] if f["name"] == "Legacy"]
+    child = [f for f in st["folders"] if f["name"] == "Child"]
+    assert len(legacy_folders) == 1, legacy_folders
+    assert len(child) == 1
+    root_id = legacy_folders[0]["id"]
+    assert child[0]["parentId"] == root_id          # nesting survived
+    deck = st["decks"][0]
+    assert deck["folderId"] == root_id              # decks in the real folder
+
+
+# ── Card editor: 3×2 mode grid + "✂ Create multi-answer" split ──────────────
+
+TAX_BACK = ("income tax, national insurance contributions, inheritance tax, "
+            "capital gains tax, corporation tax")
+
+
+def _tax_state():
+    card = seedlib.make_card("Name the five main UK taxes", TAX_BACK,
+                             card_id="c_tax")
+    deck = seedlib.make_deck("Taxes", [card], deck_id="d_tax")
+    return seedlib.make_mf_state(decks=[deck])
+
+
+def _open_tax_editor(page, site_base, seeded):
+    seeded(mf_state=_tax_state())
+    pages.goto_app(page, site_base, "/decks/")
+    page.evaluate("() => openCardModal('d_tax', 'c_tax')")
+    pages.expect_modal(page, "Edit Card")
+
+
+def test_mode_buttons_are_three_by_two_with_split_button_right(page, site_base,
+                                                                seeded):
+    _open_tax_editor(page, site_base, seeded)
+    cols = page.evaluate("""() => {
+        const b = [...document.querySelectorAll('#modal-body button')]
+            .find(b => b.textContent === 'Multi-answer');
+        return getComputedStyle(b.parentElement).gridTemplateColumns;
+    }""")
+    assert len(cols.split()) == 3, cols          # 3 wide → 2 tall for 6 modes
+    grid_box = page.evaluate("""() => {
+        const b = [...document.querySelectorAll('#modal-body button')]
+            .find(b => b.textContent === 'Multi-answer');
+        const r = b.parentElement.getBoundingClientRect();
+        return {x: r.x, w: r.width};
+    }""")
+    split = page.locator("#modal-body button", has_text="Create multi-answer")
+    expect(split).to_be_visible()
+    sb = split.bounding_box()
+    assert sb["x"] >= grid_box["x"] + grid_box["w"] - 1   # to the RIGHT of grid
+
+
+def test_create_multi_answer_splits_comma_back(page, site_base, seeded):
+    _open_tax_editor(page, site_base, seeded)
+    page.locator("#modal-body button", has_text="Create multi-answer").click()
+    expect(page.locator("#toast")).to_contain_text("Split into 5 answers")
+    pool = page.evaluate(
+        "() => [...document.querySelectorAll('#modal-body input')]"
+        ".map(i => i.value)"
+        ".filter(v => v.includes('tax') || v.includes('contributions'))")
+    assert pool == ["income tax", "national insurance contributions",
+                    "inheritance tax", "capital gains tax",
+                    "corporation tax"], pool
+    # required-for-full-marks defaults to the whole list
+    req = page.locator(
+        "#modal-body input[type=number]").first.input_value()
+    assert req == "5", req
+    # save → the stored card is a 5-answer multi card
+    page.locator("#modal-body button", has_text="Save Changes").click()
+    page.wait_for_timeout(900)
+    card = storage.read_mf_state(page)["decks"][0]["cards"][0]
+    assert card["answerCount"] == 5
+    assert card["requiredAnswers"] == 5
+    assert card["back"] == "\n".join(TAX_BACK.split(", "))
+
+
+def test_create_multi_answer_guards(page, site_base, seeded):
+    _open_tax_editor(page, site_base, seeded)
+    # no commas → nothing to split, mode unchanged
+    page.fill("#modal-body textarea >> nth=1", "a single answer")
+    page.locator("#modal-body button", has_text="Create multi-answer").click()
+    expect(page.locator("#toast")).to_contain_text("nothing to split")
+    # non-basic mode → guidance instead of a silent mis-split
+    page.get_by_role("button", name="Multi-answer", exact=True).click()
+    page.locator("#modal-body button", has_text="Create multi-answer").click()
+    expect(page.locator("#toast")).to_contain_text("Switch to Basic first")

@@ -49,6 +49,15 @@ function importPackData(data) {
     decks.push(data);                           // bare single deck
   } else return null;
   if (!decks.length && !folders.length) return null;
+  // Dedupe folders by id: folder exports made before the exportFolder
+  // subFolders fix carry the root folder in BOTH `folder` and `subFolders`,
+  // which would otherwise import as the folder plus an empty twin.
+  const seenFolderIds = new Set();
+  folders = folders.filter(f => {
+    if (!f || !f.id || seenFolderIds.has(f.id)) return false;
+    seenFolderIds.add(f.id);
+    return true;
+  });
 
   const fmap = {};
   const newFolders = folders.map(f => {

@@ -2570,6 +2570,8 @@ const PAGE_HELP = {
     'With cards selected, use "Move to Deck…" to move them into an existing deck or a brand-new one.',
     'Each deck shows how many cards are "mature" (well-learned) out of the total.',
     '✦ AI Capture lives inside "+ New Deck": the ✨ AI Capture tab generates cards from pasted text (local LLM server or any chat AI via Copy / Paste) straight into the new deck — or into an existing one via its destination toggle.',
+    'The “Aa Case…” buttons (subject, folder, deck and card-selection bars) batch-standardize letter case and end punctuation — with a preview, scope pickers (fronts by card type, backs, hints, deck/folder names) and an Undo toast.',
+    'In the card editor, “✂ Create multi-answer” (right of the 3×2 card-type grid) splits a comma-separated Basic back — “income tax, national insurance, …” — straight into a Multi-answer pool, required-count set to the whole list.',
   ]},
   study: { icon:'🧠', title:'Study', intro:'Pick a scope and a mode, then start a review session.', tips:[
     'Recents gives one-click access to scopes you\u2019ve studied before — "All Decks" is always pinned first. Click the 📌 on any recent to pin it too, so it stays put instead of aging out.',

@@ -155,3 +155,43 @@ def test_pack_share_button_copies_deep_link(page, site_base, seeded, context):
     clip = page.evaluate("() => navigator.clipboard.readText()")
     assert clip.endswith("/packs/#packs/spanish-starter"), clip
     assert clip.startswith(site_base), clip
+
+
+def test_legacy_duplicate_root_pack_imports_single_folder(page, site_base,
+                                                          seeded):
+    """A pack whose folder envelope lists the root in BOTH `folder` and
+    `subFolders` (pre-fix exporter) must add one folder, not a twin."""
+    legacy_pack = {
+        "version": 2,
+        "folder": {"id": "pfX", "name": "DupFolder", "emoji": "📁",
+                   "image": None, "subjectKey": "misc", "parentId": None,
+                   "color": "var(--blue)"},
+        "subFolders": [
+            {"id": "pfX", "name": "DupFolder", "emoji": "📁", "image": None,
+             "subjectKey": "misc", "parentId": None, "color": "var(--blue)"},
+        ],
+        "decks": [{"id": "pdX", "name": "PD", "emoji": "📖", "image": None,
+                   "subject": "misc", "folderId": "pfX",
+                   "color": "var(--blue)", "pinned": False,
+                   "cards": [{"id": "pcX", "front": "q", "back": "a",
+                              "type": "basic", "ease": 2.5, "interval": 0,
+                              "reps": 0, "lapses": 0, "due": 0, "state": "new",
+                              "suspended": False, "leech": False,
+                              "created": 0, "lastRated": None}]}],
+    }
+    page.route("**/api/v1/packs", lambda route: route.fulfill(
+        status=200, json={"packs": [{"file": "dup.json", "name": "Dup Pack",
+                                     "description": "legacy dup root"}]}))
+    page.route("**/assets/packs/dup.json",
+               lambda route: route.fulfill(status=200, json=legacy_pack))
+    goto_packs(page, site_base, seeded)
+    expect(page.locator("#packs-status")).to_contain_text("listed via server",
+                                                          timeout=8000)
+    card = page.locator("#packs-grid .card", has_text="Dup Pack")
+    card.get_by_role("button", name="➕ Add to Decks").click()
+    page.wait_for_timeout(600)
+    st = storage.read_app_state(page)
+    named = [f for f in st["folders"] if f["name"] == "DupFolder"]
+    assert len(named) == 1, named
+    deck = next(d for d in st["decks"] if d["name"] == "PD")
+    assert deck["folderId"] == named[0]["id"]
