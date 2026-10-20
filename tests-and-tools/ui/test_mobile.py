@@ -358,3 +358,127 @@ def test_phone_routes_overflow_free_with_new_layer(page, base_url, seeded):
         if over:
             problems[route] = over
     assert problems == {}, problems
+
+
+# ── Touch drag & drop (site/home until re-minified) ─────────────────────────
+
+def _touch_dnd_context(browser, playwright):
+    """Pixel 7 context seeded with a folder + a loose deck + a folded deck."""
+    import seed as seedlib
+    folder = seedlib.make_folder("Languages", folder_id="f_dnd")
+    loose = seedlib.make_deck("Loose Cards", [seedlib.make_card("a", "b")],
+                              deck_id="d_dnd_loose")
+    inside = seedlib.make_deck("In Folder", [seedlib.make_card("c", "d")],
+                               deck_id="d_dnd_in", folder_id="f_dnd")
+    ctx = browser.new_context(**playwright.devices["Pixel 7"])
+    storage.seed_context(ctx, mf_state=seedlib.make_mf_state(
+        decks=[loose, inside], folders=[folder]))
+    return ctx
+
+
+def _cdp_touch(page, context):
+    client = context.new_cdp_session(page)
+    return lambda type_, points: client.send(
+        "Input.dispatchTouchEvent", {"type": type_, "touchPoints": points})
+
+
+def test_touch_long_press_drag_moves_deck_into_folder(browser, playwright,
+                                                      base_url, site_base):
+    """HTML5 dnd is mouse-only; on touch a ~320 ms hold lifts the tile into a
+    ghost and the finger-drop runs the same dropOnFolder() as the mouse."""
+    ctx = _touch_dnd_context(browser, playwright)
+    page = ctx.new_page()
+    errors: list = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    try:
+        touch = _cdp_touch(page, ctx)
+        pages.goto_app(page, site_base, "/decks/")
+        page.evaluate("() => { state.deckNav = {view:'subject', subjectKey:'misc'};"
+                      " renderView('decks'); }")
+        page.wait_for_selector(".folder-item")
+        page.wait_for_selector(".deck-card")
+        src = page.locator(".deck-card", has_text="Loose Cards").first.bounding_box()
+        dst = page.locator(".folder-item").first.bounding_box()
+        sx, sy = src["x"] + src["width"] / 2, src["y"] + src["height"] / 2
+        dx, dy = dst["x"] + dst["width"] / 2, dst["y"] + dst["height"] / 2
+        touch("touchStart", [{"x": sx, "y": sy}])
+        page.wait_for_timeout(450)                       # > the 320 ms hold
+        expect(page.locator(".touch-drag-ghost")).to_have_count(1)
+        for i in range(1, 9):
+            touch("touchMove", [{"x": sx + (dx - sx) * i / 8,
+                                 "y": sy + (dy - sy) * i / 8}])
+            page.wait_for_timeout(25)
+        expect(page.locator(".folder-item").first).to_have_class(
+            re.compile(r"drop-hover"))
+        touch("touchEnd", [])
+        page.wait_for_function(
+            "() => state.decks.find(d => d.id === 'd_dnd_loose').folderId === 'f_dnd'",
+            timeout=5000)
+        expect(page.locator(".touch-drag-ghost")).to_have_count(0)
+        assert errors == []
+    finally:
+        ctx.close()
+
+
+def test_touch_drag_out_to_breadcrumb(browser, playwright, site_base):
+    """Dropping on a breadcrumb (a subject's top level) works by finger too."""
+    ctx = _touch_dnd_context(browser, playwright)
+    page = ctx.new_page()
+    try:
+        touch = _cdp_touch(page, ctx)
+        pages.goto_app(page, site_base, "/decks/")
+        # the drag source must live INSIDE the folder to drag it back out
+        page.evaluate("() => { state.decks.find(d => d.id === 'd_dnd_loose')"
+                      ".folderId = 'f_dnd';"
+                      " state.deckNav = {view:'folder', subjectKey:'misc',"
+                      " folderId:'f_dnd'}; renderView('decks'); }")
+        page.wait_for_selector(".deck-card")
+        page.wait_for_selector(".breadcrumb-part")
+        src = page.locator(".deck-card", has_text="Loose Cards").first.bounding_box()
+        dst = page.locator(".breadcrumb-part",
+                           has_text="Miscellaneous").first.bounding_box()
+        sx, sy = src["x"] + src["width"] / 2, src["y"] + src["height"] / 2
+        dx, dy = dst["x"] + dst["width"] / 2, dst["y"] + dst["height"] / 2
+        touch("touchStart", [{"x": sx, "y": sy}])
+        page.wait_for_timeout(450)
+        for i in range(1, 9):
+            touch("touchMove", [{"x": sx + (dx - sx) * i / 8,
+                                 "y": sy + (dy - sy) * i / 8}])
+            page.wait_for_timeout(25)
+        touch("touchEnd", [])
+        page.wait_for_function(
+            "() => state.decks.find(d => d.id === 'd_dnd_loose').folderId === null",
+            timeout=5000)
+    finally:
+        ctx.close()
+
+
+def test_touch_scroll_and_tap_unaffected_by_drag(browser, playwright, site_base):
+    """Immediate movement is a scroll (no ghost), a quick tap still selects —
+    the hold-lift must not eat the gestures it lives beside."""
+    ctx = _touch_dnd_context(browser, playwright)
+    page = ctx.new_page()
+    try:
+        touch = _cdp_touch(page, ctx)
+        pages.goto_app(page, site_base, "/decks/")
+        page.evaluate("() => { state.deckNav = {view:'subject', subjectKey:'misc'};"
+                      " renderView('decks'); }")
+        page.wait_for_selector(".deck-card")
+        # scroll gesture starting on a draggable card: no ghost, view scrolls
+        card = page.locator(".deck-card").first.bounding_box()
+        cx = card["x"] + card["width"] / 2
+        touch("touchStart", [{"x": cx, "y": 700}])
+        for i in range(8):
+            touch("touchMove", [{"x": cx, "y": 700 - i * 45}])
+            page.wait_for_timeout(20)
+        touch("touchEnd", [])
+        page.wait_for_timeout(300)
+        expect(page.locator(".touch-drag-ghost")).to_have_count(0)
+        # quick tap on a deck card = select, not lift (selection lives in the
+        # decks view grids — home cards are plain links-by-button)
+        page.locator(".deck-card").first.tap()
+        page.wait_for_timeout(250)
+        expect(page.locator(".deck-card.card-selected")).to_have_count(1)
+        expect(page.locator(".touch-drag-ghost")).to_have_count(0)
+    finally:
+        ctx.close()

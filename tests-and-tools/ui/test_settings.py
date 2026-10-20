@@ -1,5 +1,7 @@
 """Settings page: theme presets, accessibility toggles, algorithm select,
 daily-goal slider persistence, data management buttons."""
+import re
+
 import pytest
 from playwright.sync_api import expect
 
@@ -193,3 +195,60 @@ def test_every_slider_and_select_survived(page, base_url, seeded):
     # Library & Reading keeps the resume-position select
     expect(page.locator("#view-settings .card", has_text="📖 Library & Reading")
            .first.locator("select")).to_have_count(2)   # define lang + open-book
+
+
+# ── #settings/<panel> deep links + highlight (site/home until re-minified) ──
+
+def test_settings_deeplink_scrolls_and_flashes(page, site_base, seeded):
+    """A cold load of /settings/#settings/<panel> scrolls that panel into
+    view and pulses the highlight ring."""
+    seeded("preset:empty")
+    pages.goto_app(page, site_base, "/settings/#settings/scratch")
+    panel = page.locator("[data-settings-panel='scratch']")
+    expect(panel).to_have_class(re.compile(r"settings-flash"), timeout=6000)
+    page.wait_for_timeout(400)   # let the smooth scroll settle
+    scrolled = page.evaluate("() => document.getElementById('main').scrollTop")
+    box = panel.bounding_box()
+    assert scrolled > 0 and -60 <= box["y"] <= 320, (scrolled, box)
+
+
+def test_settings_deeplink_aliases(page, site_base, seeded):
+    seeded("preset:empty")
+    for payload, panel in (("scratchpad", "scratch"), ("a11y", "accessibility"),
+                           ("themes", "appearance"), ("integrations", "ai")):
+        pages.goto_app(page, site_base, "/settings/")
+        page.wait_for_function("() => document.querySelector('[data-settings-panel=study]')")
+        page.evaluate(f"() => {{ location.hash = '#settings/{payload}'; }}")
+        expect(page.locator(f"[data-settings-panel='{panel}']")).to_have_class(
+            re.compile(r"settings-flash"), timeout=6000)
+
+
+def test_settings_panel_copy_link_button(page, site_base, seeded, context):
+    context.grant_permissions(["clipboard-read", "clipboard-write"],
+                              origin=site_base)
+    seeded("preset:empty")
+    pages.goto_app(page, site_base, "/settings/")
+    page.locator("[data-settings-panel='study'] button"
+                 "[title='Copy link to this section']").click()
+    expect(page.locator("#toast")).to_contain_text("Section link copied",
+                                                   timeout=5000)
+    clip = page.evaluate("() => navigator.clipboard.readText()")
+    assert clip.endswith("/settings/#settings/study"), clip
+
+
+def test_scratchpad_gear_opens_settings_deeplink_in_new_tab(page, site_base,
+                                                            seeded, context):
+    """The scratchpad's ⚙ is the "change my defaults" cross-link: new tab,
+    deep-linked, highlighted."""
+    seeded("preset:demo")
+    pages.goto_app(page, site_base, "/study/")
+    page.click("#tutorial-target-study-start")
+    page.wait_for_selector(".scratch-open-btn", timeout=10000)
+    page.click(".scratch-open-btn")
+    with context.expect_page() as new_page:
+        page.click(".sp-icon-btn[title*='Scratchpad defaults']")
+    tab = new_page.value
+    tab.wait_for_load_state("load")
+    assert tab.url.endswith("/settings/#settings/scratch"), tab.url
+    expect(tab.locator("[data-settings-panel='scratch']")).to_have_class(
+        re.compile(r"settings-flash"), timeout=8000)

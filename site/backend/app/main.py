@@ -10,6 +10,7 @@ from typing import Optional, Sequence
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -97,6 +98,11 @@ async def redirect_http_to_https(request: Request, call_next):
 
 
 # ── Middleware ───────────────────────────────────────────────────────
+
+# Minified assets still compress ~70% further on the wire (JS/CSS/JSON are
+# text). Filenames are NOT content-hashed, so caching stays no-cache+ETag
+# (see STATIC_REVALIDATE below) — gzip is the transfer-size win here.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 app.add_middleware(
     CORSMiddleware,
@@ -915,11 +921,22 @@ def create_deck(
 # /home/scima/scima-learning, a dev laptop…) and the mounts follow it.
 # main.py sits at <repo>/backend/app/main.py, so parents[2] is <repo>.
 REPO_ROOT = Path(__file__).resolve().parents[2]
-STUDY_LANDING_DIR = REPO_ROOT / "home"
-PACKS_DIR = STUDY_LANDING_DIR / "assets" / "packs"
-# The legacy standalone community page was renamed upstream
-# (community/ → community-deprecated/); accept either name so checkouts
-# from before or after the rename both boot.
+# Static root probe: THIS FILE (site/backend) is the single canonical
+# backend; minified/backend/ is a byte-identical generated copy that the
+# deploy bundle ships (minify.sh re-syncs it), so the same code runs with
+# REPO_ROOT == site/ (canonical), REPO_ROOT == minified/ (deploy copy), a
+# bare repo root, or any checkout layout. SCIMA_STATIC_ROOT overrides
+# everything; otherwise first existing candidate wins.
+STATIC_CANDIDATES = ("home", "minified/home", "site/home",
+                     "../minified/home", "../site/home")
+STUDY_LANDING_DIR = Path(os.environ["SCIMA_STATIC_ROOT"]) \
+    if os.environ.get("SCIMA_STATIC_ROOT") else \
+    next((p for p in (REPO_ROOT / c for c in STATIC_CANDIDATES)
+          if (p / "index.html").exists()), REPO_ROOT / "home")
+# Legacy standalone community page: renamed community/ → community-deprecated/
+# at the repo root, and not shipped inside the minified bundle at all. Probe
+# every place it may live; if absent, the /community mount is skipped below
+# (StaticFiles would raise at import on a missing directory).
 COMMUNITY_DIR = next((p for p in (
     REPO_ROOT / "archive" / "community-deprecated",
     REPO_ROOT / "community-deprecated",
@@ -927,8 +944,7 @@ COMMUNITY_DIR = next((p for p in (
     REPO_ROOT.parent / "community-deprecated",
     REPO_ROOT.parent / "archive" / "community-deprecated",
 ) if p.exists()), None)
-if not COMMUNITY_DIR.exists():
-    COMMUNITY_DIR = REPO_ROOT / "community"
+PACKS_DIR = STUDY_LANDING_DIR / "assets" / "packs"
 
 # Legacy URL family (/dashboard/…). Kept because existing bookmarks use it
 # and the community page loads /dashboard/shared/theme.js root-absolute.
@@ -938,14 +954,15 @@ app.mount(
     name="dashboard",
 )
 
-app.mount(
-    "/community",
-    StaticFiles(
-        directory=COMMUNITY_DIR,
-        html=True,
-    ),
-    name="community",
-)
+if COMMUNITY_DIR is not None:
+    app.mount(
+        "/community",
+        StaticFiles(
+            directory=COMMUNITY_DIR,
+            html=True,
+        ),
+        name="community",
+    )
 
 
 # Canonical URL family: the workflow routes straight off the domain root —

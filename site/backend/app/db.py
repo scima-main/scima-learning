@@ -1,9 +1,13 @@
+import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
 
-DATA_DIR = Path("/data/study/data")
+# Canonical backend (site/backend; minified/backend is a generated copy).
+# Overridable so containers/CI can point the registry at a writable volume
+# without patching code (tests monkeypatch these constants directly).
+DATA_DIR = Path(os.environ.get("SCIMA_DATA_DIR", "/data/study/data"))
 DECKS_DIR = DATA_DIR / "decks"
 DB_PATH = DATA_DIR / "scima.db"
 

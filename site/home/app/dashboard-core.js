@@ -2561,6 +2561,7 @@ const PAGE_HELP = {
     'Drop a SCIMA JSON export on the upload panel to share it: add a description, author and tags, pick subject/level/exam board, then upload.',
   ]},
   decks: { icon:'📚', title:'Decks', intro:'Organize your flashcards into decks, grouped by subject and folder.', tips:[
+    'Drag decks and folders with the mouse — or on a touchscreen, LONG-PRESS (hold ~a third of a second) a deck or folder to lift it, then drag it onto a folder row or a breadcrumb and let go. Taps and scrolls keep their usual meanings.',
     'Browse by subject, then drill into folders and decks.',
     'Use the buttons at the top to create a new deck or folder.',
     'Drag and drop decks or folders onto each other to reorganize them.',

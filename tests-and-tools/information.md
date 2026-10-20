@@ -116,6 +116,9 @@ Key fixtures: `app` (booted `/` on empty), `demo_app` (booted `/` on demo),
   `#screen-search` / `#screen-deck` (community screens),
   `.touch-only` (touch-only reorder buttons; hidden on desktop pointers),
   `.reader-mobile-only` (reader sidebar toggles; hidden ≥820px),
+  `.touch-drag-ghost` (finger long-press drag ghost),
+  `[data-settings-panel=KEY]` + `.settings-flash` (Settings deep links),
+  `.sp-icon-btn[title*='Scratchpad defaults']` (scratchpad ⚙ cross-link),
   `#tutorial-target-deck-name-input`, `#tutorial-target-add-card`,
   `#tutorial-target-card-front-input` / `-back-input`,
   `#tutorial-target-study-start`, `.deck-card .deck-name`, `.rating-btn`,
@@ -179,6 +182,12 @@ site/home/app/dashboard-settings.js makeToggle); the checker exempts nothing.
 - render.py dimension control: scenario keys `viewport` / `device`,
   steps `set_viewport`, flags `--viewport WxH --device "iPhone 13"`;
   see `scenarios/10-breakpoints.json` and `08-mobile-drawer.json`.
+
+- Touch drag & drop: drive it with CDP `Input.dispatchTouchEvent`
+  (touchStart → hold ~450 ms → touchMove steps → touchEnd) inside a
+  `playwright.devices['Pixel 7']` context — see `ui/test_mobile.py`.
+- Backend tests run from EITHER copy (`site/backend`, `minified/backend`) —
+  they are byte-identical; `site/backend` is the canonical source.
 
 ## Full-stack mode (optional)
 

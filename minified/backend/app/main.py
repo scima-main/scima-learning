@@ -921,10 +921,12 @@ def create_deck(
 # /home/scima/scima-learning, a dev laptop…) and the mounts follow it.
 # main.py sits at <repo>/backend/app/main.py, so parents[2] is <repo>.
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# Static root probe: this main.py ships inside the minified deploy bundle
-# (minified/backend/app/main.py → REPO_ROOT == minified/) but the same code
-# may run from a repo root or against the unminified tree. SCIMA_STATIC_ROOT
-# overrides everything; otherwise first existing candidate wins.
+# Static root probe: THIS FILE (site/backend) is the single canonical
+# backend; minified/backend/ is a byte-identical generated copy that the
+# deploy bundle ships (minify.sh re-syncs it), so the same code runs with
+# REPO_ROOT == site/ (canonical), REPO_ROOT == minified/ (deploy copy), a
+# bare repo root, or any checkout layout. SCIMA_STATIC_ROOT overrides
+# everything; otherwise first existing candidate wins.
 STATIC_CANDIDATES = ("home", "minified/home", "site/home",
                      "../minified/home", "../site/home")
 STUDY_LANDING_DIR = Path(os.environ["SCIMA_STATIC_ROOT"]) \

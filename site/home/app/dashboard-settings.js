@@ -61,6 +61,21 @@ function renderSettings(c) {
     return el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},el('div',{style:'font-size:13px;font-weight:600;margin-bottom:2px;display:flex;gap:6px'},label,valSpan),input);
   }
 
+  /** Panel header row with a 🔗 button that copies a deep link straight to
+   *  this section (#settings/<key> — see scSettingsApplyHash below). */
+  function panelHeader(label, key, color) {
+    return el('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px'},
+      el('div',{style:`font-weight:800;${color ? `color:${color};` : ''}`}, label),
+      el('button',{class:'btn btn-ghost btn-sm', title:'Copy link to this section',
+        'aria-label':`Copy a link that opens Settings at ${label}`,
+        style:'padding:3px 8px;font-size:11px;opacity:0.8',
+        onclick:async e=>{ e.stopPropagation();
+          const url = location.origin + location.pathname.replace(/index\.html$/, '') + '#settings/' + key;
+          const ok = (typeof copyTextToClipboard === 'function') && await copyTextToClipboard(url);
+          showToast(ok ? 'Section link copied ✓' : url, ok ? 2500 : 6000);
+        }},'🔗'));
+  }
+
   const grid=el('div',{class:'grid-2'});
   const helpCard=el('div',{class:'card',style:'padding:20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap'},
     el('div',{},
@@ -72,7 +87,7 @@ function renderSettings(c) {
 
 
   // ── 1. 📚 Study & Scheduling — the SRS engine and session-shaping knobs ──
-  const studyCard=el('div',{class:'card',style:'padding:20px'},el('div',{style:'font-weight:800;margin-bottom:14px;color:var(--pink)'},'📚 Study & Scheduling'));
+  const studyCard=el('div',{class:'card',style:'padding:20px'},panelHeader('📚 Study & Scheduling','study','var(--pink)'));
   const algoSel=el('select',{class:'u-input','aria-label':'SRS scheduling algorithm',onchange:e=>{ state.settings.algorithm=e.target.value; scheduleSave(); }});
   [['fsrs','FSRS (Recommended)'],['sm2','SM-2 (Classic)']].forEach(([v,t])=>{ const o=el('option',{value:v,class:'u-bg'},t); if(state.settings.algorithm===v)o.selected=true; algoSel.appendChild(o); });
   studyCard.append(
@@ -109,7 +124,7 @@ function renderSettings(c) {
   studyCard.appendChild(tzWrap);
 
   // ── 5. ♿ Accessibility & Notifications — display/sound assists + reminders ──
-  const a11yCard=el('div',{class:'card',style:'padding:20px'},el('div',{style:'font-weight:800;margin-bottom:14px;color:var(--blue)'},'♿ Accessibility & Notifications'));
+  const a11yCard=el('div',{class:'card',style:'padding:20px'},panelHeader('♿ Accessibility & Notifications','accessibility','var(--blue)'));
   a11yCard.append(
     makeToggle('🔠 Dyslexia-Friendly Mode','Wider letter/word/line spacing and an evenly-spaced font throughout the app','dyslexia'),
     makeToggle('◐ High Contrast','Boost text contrast and border visibility on top of your current theme','highContrast'),
@@ -119,7 +134,7 @@ function renderSettings(c) {
   );
 
   // ── 7. 📖 Library & Reading — the reader's language/definition options ──
-  const libraryCard=el('div',{class:'card',style:'padding:20px'},el('div',{style:'font-weight:800;margin-bottom:14px;color:var(--blue)'},'📖 Library & Reading'));
+  const libraryCard=el('div',{class:'card',style:'padding:20px'},panelHeader('📖 Library & Reading','library','var(--blue)'));
   const defineLangSel=el('select',{class:'u-input','aria-label':'Define target language',onchange:e=>{ state.settings.defineLang=e.target.value; scheduleSave(); }});
   Object.entries(LANGS).forEach(([code,name])=>{ const o=el('option',{value:code,class:'u-bg'},name); if((state.settings.defineLang||'en')===code)o.selected=true; defineLangSel.appendChild(o); });
   libraryCard.append(
@@ -149,7 +164,7 @@ function renderSettings(c) {
 
   // ── 6. 🤖 AI & Integrations — the local LLM endpoint + Quizlet proxy ──────
   const aiCard=el('div',{class:'card',style:'padding:20px'},
-    el('div',{style:'font-weight:800;margin-bottom:4px;color:var(--blue)'},'🤖 AI & Integrations'),
+    panelHeader('🤖 AI & Integrations','ai','var(--blue)'),
     el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:14px'},'✨ AI Card Generation: generate flashcards from pasted text using a local LLM server on your own machine — nothing is sent to a hosted API, and there\u2019s no API key to store. Works with LM Studio, Ollama\u2019s OpenAI-compatible endpoint, llama.cpp server, or anything else that speaks the OpenAI chat-completions format.')
   );
   const endpointInput=el('input',{type:'text',class:'u-input',placeholder:'http://127.0.0.1:1234',value:state.settings.aiEndpoint||'',
@@ -198,7 +213,7 @@ function renderSettings(c) {
   // this file on the settings route). Guarded so a stale cache without the
   // scratchpad module still renders the rest of Settings.
   const scratchCard = el('div', { class:'card', style:'padding:20px' });
-  scratchCard.appendChild(el('div', { style:'font-weight:800;margin-bottom:4px;color:var(--blue)' }, '✍️ Scratchpad'));
+  scratchCard.appendChild(panelHeader('✍️ Scratchpad','scratch','var(--blue)'));
   scratchCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:10px' },
     'Defaults for the per-question drawing pad in study sessions. Pads are ephemeral — kept only while you answer a question, deleted the moment you answer it, and wiped when the session ends.'));
   if (typeof spSetting === 'function' && typeof SP_SWATCHES !== 'undefined') {
@@ -289,7 +304,7 @@ function renderSettings(c) {
   const sched = state.settings.themeSchedule || DEFAULT_SCHEDULE;
   // ── Appearance ────────────────────────────────────────────────────────────
   const appearCard = el('div', { class:'card', style:'padding:20px' });
-  appearCard.appendChild(el('div', { style:'font-weight:800;margin-bottom:14px;color:var(--blue)' }, '🎨 Appearance & Theme'));
+  appearCard.appendChild(panelHeader('🎨 Appearance & Theme','appearance','var(--blue)'));
 
   // Schedule-override notice
   if (sched.enabled && resolveScheduledTheme(sched, state.settings.customPresets)) {
@@ -838,7 +853,7 @@ function renderSettings(c) {
   // are kept (their decks keep their tag) and can be restored.
   const subjectsCard = el('div', { class:'card', style:'padding:20px' });
   subjectsCard.id = 'tutorial-target-subjects-card';
-  subjectsCard.appendChild(el('div', { style:'font-weight:800;margin-bottom:6px' }, '📘 Subjects'));
+  subjectsCard.appendChild(panelHeader('📘 Subjects','subjects'));
   subjectsCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:14px' },
     'Subjects group your decks and folders. Pick one when you create a deck — it drives the deck\u2019s colour tag, its breadcrumb, its XP multiplier and the Analytics breakdown. Deleting one \u2014 built-ins included \u2014 offers to move its decks elsewhere first, and leaves a \u21a9 Restore row here in case you change your mind.'));
 
@@ -1017,7 +1032,7 @@ function renderSettings(c) {
   // toggle their visibility. Hidden tabs move to the drawer at the bottom of
   // the sidebar (accessible but not cluttering the main nav list).
   const navCard = el('div', { class:'card', style:'padding:20px' });
-  navCard.appendChild(el('div', { style:'font-weight:800;margin-bottom:6px' }, '🗂️ Navigation'));
+  navCard.appendChild(panelHeader('🗂️ Navigation','navigation'));
   navCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:14px' }, 'Reorder or hide sidebar tabs. Hidden tabs go to the drawer at the bottom of the sidebar.'));
 
   function renderNavEditor() {
@@ -1202,6 +1217,76 @@ function renderSettings(c) {
     )
   );
 
+  // -- URL deep links: #settings/<panel> ------------------------------------
+  // Share/target links for individual panels: the scratchpad's ⚙ button, the
+  // 🔗 header buttons and hand-typed URLs all land here. The payload is an
+  // alias-resolved panel key; the applier scrolls the panel into view inside
+  // #main and pulses it (.settings-flash) so "change my scratchpad defaults"
+  // links point at the exact control group, not the top of Settings.
+  [[helpCard,'help'],[studyCard,'study'],[scratchCard,'scratch'],
+   [appearCard,'appearance'],[subjectsCard,'subjects'],[a11yCard,'accessibility'],
+   [aiCard,'ai'],[libraryCard,'library'],[navCard,'navigation'],[dataCard,'data']]
+    .forEach(([cardEl, key]) => cardEl.setAttribute('data-settings-panel', key));
+
+  const PANEL_ALIASES = {
+    study:'study', scheduling:'study', srs:'study',
+    scratch:'scratch', scratchpad:'scratch',
+    appearance:'appearance', themes:'appearance', theme:'appearance',
+    subjects:'subjects',
+    accessibility:'accessibility', a11y:'accessibility', notifications:'accessibility',
+    ai:'ai', integrations:'ai', llm:'ai',
+    library:'library', reading:'library',
+    navigation:'navigation', nav:'navigation',
+    data:'data', backup:'data',
+    help:'help',
+  };
+  function scSettingsFlash(panel) {
+    panel.classList.add('settings-flash');
+    setTimeout(() => panel.classList.remove('settings-flash'), 2600);
+  }
+  function scSettingsApplyHash(container) {
+    const h = (typeof scParseHash === 'function') ? scParseHash() : null;
+    if (!h || h.segs[0] !== 'settings' || !h.segs[1]) return null;
+    // once per hash value: re-renders (theme clicks, subject edits…) must not
+    // re-scroll/re-flash; a NEW payload (hashchange, goto, fresh load) does.
+    if (window._scSettingsLastHash === h.raw) return null;
+    const key = PANEL_ALIASES[String(h.segs[1]).toLowerCase()] || null;
+    const panel = key && container && container.querySelector(`[data-settings-panel="${key}"]`);
+    if (!panel) return null;
+    window._scSettingsLastHash = h.raw;
+    // deferred one tick so the view is laid out (and #main can measure it)
+    setTimeout(() => {
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      scSettingsFlash(panel);
+    }, 80);
+    return key;
+  }
+  /** In-page counterpart for single-document builds (extension) and any
+   *  in-app jump: mirror the hash, navigate, flash. */
+  function gotoSettingsPanel(key) {
+    const canon = PANEL_ALIASES[String(key).toLowerCase()] || key;
+    if (typeof scReplaceHash === 'function') scReplaceHash('settings/' + canon);
+    window._scSettingsLastHash = null;          // this jump must flash
+    if (typeof navigate === 'function') navigate('settings');
+    else renderView('settings');
+  }
+  // Same-document hash moves (clicking a #settings/<key> link while the app
+  // is open, back/forward onto a payload): switch into Settings if needed,
+  // otherwise re-run the applier against the live view. Registered once.
+  if (!window._scSettingsHashWired) {
+    window._scSettingsHashWired = true;
+    window.addEventListener('hashchange', () => {
+      const h = (typeof scParseHash === 'function') ? scParseHash() : null;
+      if (!h || h.segs[0] !== 'settings' || !h.segs[1]) return;
+      if (typeof state === 'undefined') return;
+      if (state.view !== 'settings' && typeof navigate === 'function') {
+        navigate('settings');                   // render applies the payload
+        return;
+      }
+      scSettingsApplyHash(document.getElementById('view-settings'));
+    });
+  }
+
   // Panel pairing (rows of the grid): study|scratchpad, appearance|subjects,
   // accessibility|AI, library|navigation — similar-height neighbours, and a
   // logical reading order once the grid collapses to one column on phones.
@@ -1211,4 +1296,5 @@ function renderSettings(c) {
     el('div', { style:'margin-bottom:24px' }, el('div', { class:'section-title' }, 'Settings')),
     helpCard, grid, dataCard
   );
+  scSettingsApplyHash(c);   // panels exist now — scroll + flash a #settings/<key> payload
 }

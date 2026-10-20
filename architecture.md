@@ -64,7 +64,7 @@ makes a network call.
 | Path | Role |
 |---|---|
 | `site/home/` | Static multi-page frontend (unminified source of truth). Route dirs contain only an `index.html`; all shared assets live at the landing root so every reference can be relative (§3.1). |
-| `minified/` | Deploy bundle: `minified/home/` (transfer-size-minified frontend) + `minified/backend/` (the FastAPI app — the only backend in the tree). `main.py` serves `minified/home` when run from there (§4.2). |
+| `minified/` | Deploy bundle: `minified/home/` (transfer-size-minified frontend) + `minified/backend/` (a byte-identical GENERATED COPY of `site/backend/`, re-synced by `minify.sh` — never hand-edited; the canonical backend lives in `site/`, §4). `main.py` serves `minified/home` when run from there (§4.2). |
 | `home/shared/` | Cross-context libraries: `shared.js` (sanitizers, rich text), `srs-core.js` + `srs.js` (schedulers), `theme.js` (presets/schedule), `scima-schema.js` (interchange schemas), `translate-shared.js` (define/translate/pinyin). |
 | `home/app/` | The dashboard split: `dashboard-core.js` (must load first) … `dashboard-bootstrap.js` (must load last), plus per-view modules. |
 | `home/lib/` | Vendored bundles: KaTeX (+mhchem), fflate (zip), EPUB/MOBI parsers, process-shim, lazily-loaded pdf.js. |
@@ -135,7 +135,13 @@ document and none of the cross-page machinery below runs.
   file name or display name, resolved leniently) opens that pack's detail
   modal once the async list lands; `#community/<deckId>` (server id) opens
   the registry deck's detail screen, mirrored back by openDeck() and folded
-  by "← Back to decks". bootstrap's init() resolves the hash's FIRST path
+  by "← Back to decks". `#settings/<panel>` (alias-resolved
+panel key: study/scratch/appearance/subjects/accessibility/ai/library/
+navigation/data/help) scrolls that panel into view and pulses a highlight
+ring (`.settings-flash`) — the scratchpad's ⚙ head button opens
+`settings/#settings/scratch` in a NEW tab as the canonical feature→its-
+setting cross-link, and every panel header carries a 🔗 copy-its-link
+button; and bootstrap's init() resolves the hash's FIRST path
   segment into the view (`#community/x` boots the landing page into the
   Community view), so payloads survive a cold load.
 - **Page memory**: SPA-only state that must survive "leave and come back"
@@ -298,11 +304,28 @@ has the 📂 "Move to Folder…" modal (`openMoveFolderModal`, subtree-aware,
 cross-subject moves reuse `moveFolderToSubject`); deck/card selection was
 already tap-toggle; text selection in the reader finalizes through a
 debounced `selectionchange` on coarse pointers (touch never fires the
-`mouseup` the toolbar positions from).
+`mouseup` the toolbar positions from). And because HTML5 drag events are
+mouse-only, `makeTouchDraggable()` (dashboard-decks.js) restores real
+drag-and-drop for fingers: a ~320 ms hold on a deck tile or folder row lifts
+a floating ghost (`.touch-drag-ghost`), the finger drags over the same target
+set as the mouse path (folder rows + breadcrumbs, hit-tested via
+`data-drop-folder` attributes that `makeDropTarget()` stamps), edge
+nudge-scrolls `#main`, and release drops through the very same
+`dropOnFolder()`; taps (too quick) still select/open and scrolls (moving
+before the hold) still scroll. CDP touch tests: `ui/test_mobile.py`.
 
 ---
 
 ## 4. Backend: `backend/`
+
+`site/backend/` is the ONE canonical backend. `minified/backend/` is a
+byte-identical generated copy shipped inside the deploy bundle (`minify.sh`
+re-syncs it; humans and CI edit only `site/backend/`). The canonical
+`main.py` carries the deploy affordances itself — `GZipMiddleware`, the
+`SCIMA_STATIC_ROOT`/`STATIC_CANDIDATES` static-root probe (so the same file
+runs with `REPO_ROOT` = `site/`, `minified/`, a repo root or any checkout)
+and `SCIMA_DATA_DIR` in `db.py` — which is what lets the copy stay identical
+instead of drifting.
 
 ### 4.1 App assembly (order matters)
 

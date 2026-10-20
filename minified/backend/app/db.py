@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
+# Canonical backend (site/backend; minified/backend is a generated copy).
 # Overridable so containers/CI can point the registry at a writable volume
 # without patching code (tests monkeypatch these constants directly).
 DATA_DIR = Path(os.environ.get("SCIMA_DATA_DIR", "/data/study/data"))

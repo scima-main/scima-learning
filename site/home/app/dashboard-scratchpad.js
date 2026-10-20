@@ -481,11 +481,28 @@ function spBuildPanel() {
     _sp.dockBtns.push(b);
     dockGroup.appendChild(b);
   }
+  // ⚙ — "change my defaults" cross-link: opens the Settings page's
+  // Scratchpad panel in a NEW TAB, deep-linked and highlighted
+  // (#settings/scratch — see dashboard-settings.js's scSettingsApplyHash).
+  // Single-document builds (extension) jump in-page instead of spawning a
+  // tab that would just host the same document.
+  const settingsBtn = el('button', {
+    type: 'button', class: 'sp-icon-btn',
+    title: 'Scratchpad defaults — open Settings in a new tab',
+    'aria-label': 'Open the scratchpad defaults section of Settings in a new tab',
+    onclick: () => {
+      if (typeof isExtension !== 'undefined' && isExtension) {
+        if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('scratch');
+        return;
+      }
+      window.open(`${ROOT_REL}settings/#settings/scratch`, '_blank');
+    },
+  }, '⚙');
   const head = el('div', { class: 'sp-head' },
     el('div', { class: 'sp-title' }, '✍️ Scratchpad'),
     dockGroup,
     el('div', { class: 'sp-head-spacer' }),
-    _sp.fullBtn, closeBtn);
+    settingsBtn, _sp.fullBtn, closeBtn);
 
   // Toolbar ────────────────────────────────────────────────────────────────
   const toolbar = el('div', { class: 'sp-toolbar', role: 'toolbar', 'aria-label': 'Scratchpad tools', 'aria-orientation': 'vertical' });

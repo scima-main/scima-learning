@@ -13,6 +13,9 @@ function makeDraggable(node, type, id) {
     setTimeout(() => { node.style.opacity = '0.4'; }, 0);
   });
   node.addEventListener('dragend', () => { node.style.opacity = ''; dragData = null; });
+  // Touch counterpart: HTML5 dnd never fires from fingers (see the long-press
+  // implementation below) — every mouse drag source gets a touch twin.
+  makeTouchDraggable(node, type, id);
 }
 
 function isDescendantFolder(candidateId, ancestorId) {
@@ -42,6 +45,12 @@ function dropOnFolder(targetFolderId, subjectKey) {
 }
 
 function makeDropTarget(node, targetFolderId, subjectKey) {
+  // Data attributes double as the hit-test map for the TOUCH drag path below
+  // (elementFromPoint → closest('[data-drop-folder]')): attribute PRESENCE
+  // marks a drop target, the value is the folder id ('' = a subject's top
+  // level, as used by the breadcrumb targets).
+  node.setAttribute('data-drop-folder', targetFolderId == null ? '' : targetFolderId);
+  node.setAttribute('data-drop-subject', subjectKey == null ? '' : subjectKey);
   node.addEventListener('dragover', e => {
     if (!dragData) return;
     if (dragData.type === 'folder' && (dragData.id === targetFolderId || (targetFolderId && isDescendantFolder(targetFolderId, dragData.id)))) return;
@@ -54,6 +63,122 @@ function makeDropTarget(node, targetFolderId, subjectKey) {
     e.preventDefault();
     node.classList.remove('drop-hover');
     dropOnFolder(targetFolderId, subjectKey);
+  });
+}
+
+// ── Touch drag & drop ──────────────────────────────────────────────────────
+// HTML5 drag events are mouse-only: on a phone, dragging a deck tile or a
+// folder row did nothing at all (no dragstart ever fires from touch), which
+// left the tap-modals (📂 Move to Folder…, selection bar) as the only move
+// path. This adds the missing finger workflow: LONG-PRESS (~320 ms of hold,
+// so taps and scrolls keep their meanings) lifts the row into a floating
+// ghost, the finger drags it over any [data-drop-folder] target (folder rows
+// AND breadcrumbs — same target set as the mouse path), releasing drops it
+// through the very same dropOnFolder() the mouse uses. Touch pointers are
+// implicitly captured by the element that received pointerdown, so all move/
+// up events keep arriving on the source node even once the finger leaves it.
+let _touchDrag = null;          // { ghost, src, target, dx, dy }
+let _swallowNextClick = false;  // a completed drag must not become a tap
+document.addEventListener('click', e => {
+  if (_swallowNextClick) {
+    _swallowNextClick = false;
+    e.stopPropagation();
+    e.preventDefault();
+  }
+}, true);
+function _scTouchPrevent(e) { e.preventDefault(); }   // stops scroll mid-drag
+
+function _scTouchTargetAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  return el ? el.closest('[data-drop-folder]') : null;
+}
+function _scTouchDragMove(x, y) {
+  const d = _touchDrag;
+  if (!d) return;
+  d.ghost.style.left = (x - d.dx) + 'px';
+  d.ghost.style.top = (y - d.dy) + 'px';
+  // Nudge the view scroll when the finger hugs either edge, so targets
+  // below the fold are reachable without a second hand.
+  const main = document.getElementById('main');
+  if (main) {
+    if (y < 72) main.scrollBy(0, -14);
+    else if (y > window.innerHeight - 72) main.scrollBy(0, 14);
+  }
+  const t = _scTouchTargetAt(x, y);
+  if (t !== d.target) {
+    d.target?.classList.remove('drop-hover');
+    t?.classList.add('drop-hover');
+    d.target = t;
+  }
+}
+function _scTouchDragStart(node, type, id, pt) {
+  dragData = { type, id };                       // same contract as dragstart
+  try { navigator.vibrate?.(12); } catch (e) {}
+  const rect = node.getBoundingClientRect();
+  const ghost = node.cloneNode(true);
+  ghost.classList.add('touch-drag-ghost');
+  ghost.style.width = rect.width + 'px';
+  document.body.appendChild(ghost);
+  node.classList.add('touch-drag-src');
+  _touchDrag = { ghost, src: node, target: null, dx: pt.x - rect.left, dy: pt.y - rect.top };
+  document.addEventListener('touchmove', _scTouchPrevent, { passive: false });
+  _scTouchDragMove(pt.x, pt.y);
+}
+function _scTouchDragEnd(x, y, drop) {
+  const d = _touchDrag;
+  if (!d) return;
+  document.removeEventListener('touchmove', _scTouchPrevent);
+  d.target?.classList.remove('drop-hover');
+  d.ghost.remove();
+  d.src.classList.remove('touch-drag-src');
+  const target = drop ? d.target : null;
+  _touchDrag = null;
+  if (target) {
+    _swallowNextClick = true;
+    setTimeout(() => { _swallowNextClick = false; }, 400);
+    dropOnFolder(target.getAttribute('data-drop-folder') || null,
+                 target.getAttribute('data-drop-subject') || null);
+  }
+  dragData = null;
+}
+/** Wires the long-press lift onto a makeDraggable() source. No-ops on
+ *  non-touch pointers, so the mouse keeps the native HTML5 path untouched. */
+function makeTouchDraggable(node, type, id) {
+  if (typeof matchMedia !== 'function' || !matchMedia('(pointer: coarse)').matches) return;
+  const HOLD_MS = 320, SLOP_PX = 12;
+  let timer = null, origin = null, dragging = false;
+  function reset() {
+    if (timer) { clearTimeout(timer); timer = null; }
+    origin = null;
+    dragging = false;
+  }
+  node.addEventListener('pointerdown', e => {
+    if (e.pointerType !== 'touch' || _touchDrag) return;
+    if (e.target.closest('button, a, input, select, textarea, [draggable="true"] .touch-only')) return;
+    origin = { x: e.clientX, y: e.clientY };
+    timer = setTimeout(() => {
+      timer = null;
+      dragging = true;
+      _scTouchDragStart(node, type, id, origin);
+    }, HOLD_MS);
+  });
+  node.addEventListener('pointermove', e => {
+    if (!origin) return;
+    if (!dragging) {
+      if (Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > SLOP_PX) reset();  // it's a scroll
+    } else {
+      _scTouchDragMove(e.clientX, e.clientY);
+    }
+  });
+  node.addEventListener('pointerup', e => {
+    const was = dragging;
+    reset();
+    if (was) _scTouchDragEnd(e.clientX, e.clientY, true);
+  });
+  node.addEventListener('pointercancel', () => {
+    const was = dragging;
+    reset();
+    if (was) _scTouchDragEnd(0, 0, false);
   });
 }
 
