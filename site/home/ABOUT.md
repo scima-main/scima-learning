@@ -1,5 +1,10 @@
-# CHANGELOG (last updated 18th October 2026, UTC)
+# CHANGELOG (last updated 28th October 2026, UTC)
 
+#### VERSION 2026.10.020-ALPHA
+- mobile friendly views
+- official study packs (more to released, currently in progress)
+- more deeplinked URLs
+- ui changes
 #### VERSION 2026.10.019-ALPHA
 
 - fill in the gaps now customizable with gap count
