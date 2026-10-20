@@ -141,7 +141,11 @@ Key fixtures: `app` (booted `/` on empty), `demo_app` (booted `/` on demo),
     `page_errors` (real JS exceptions), not console errors.
   - Review dates use **UTC** (`today()` = `toISOString()`); `seed.utc_day()`
     matches.
-  - Session answers: every rated card lands in `sessionLog[0].answers`
+  - Quiz parameters (`state.settings.quizParams`): types/limit/timeLimitMin/
+  shuffle/multiRequired/exam — set via the picker panel or evaluate; exam
+  sessions save answers with “💾 Save answer”, navigate with ← Prev /
+  Next →, grade at “🏁 Finish & reveal” (summary lists every answer).
+- Session answers: every rated card lands in `sessionLog[0].answers`
   (`{id, r, ok, ms}`); the history row's “Repeat wrong (N)” replays only
   `ok === false` cards. Case tools: “Aa Case…” buttons (subject/folder/
   deck/selection bars, deck cards) open the preview modal — letter case

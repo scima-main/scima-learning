@@ -1510,6 +1510,30 @@ input[type="number"]:focus { border-color: rgba(var(--blue-rgb),0.5); }
   .sc-root .deck-detail-title { font-size: 19px; }
 }
 
+/* ── Touch-device modal sheets beyond the 720px phone line ────────────────
+   A phone in landscape (or a small tablet) is still a phone: the centred
+   580px dialog floating in a 844×390 viewport reads as a desktop leftover
+   — most jarringly for modals that open on arrival, like a #packs/<pack>
+   deep link. Any coarse-pointer viewport up to 900px gets the same
+   edge-to-edge sheet treatment as ≤720px. */
+@media (max-width: 900px) and (pointer: coarse) {
+  #modal-backdrop { align-items: flex-start; padding: 10px 0 0; }
+  #modal-box { width: 100%; max-width: 100%;
+    max-height: calc(100vh - 10px); max-height: calc(100dvh - 10px);
+    border-radius: var(--r) var(--r) 0 0;
+    border-left: none; border-right: none; border-bottom: none; }
+  #modal-header { padding: 14px 16px; }
+  #modal-body { padding: 16px 16px 24px; }
+  #cmd-backdrop { align-items: flex-start; padding-top: 10px; }
+  #cmd-box { width: 100%; max-height: calc(100dvh - 20px);
+    border-radius: var(--r) var(--r) 0 0; border-left: none; border-right: none; }
+  .sc-root .sc-modal-overlay { align-items: flex-start; padding: 10px 0 0; }
+  .sc-root .sc-modal-box { width: 100%; max-width: 100%;
+    max-height: calc(100dvh - 10px);
+    border-radius: var(--r) var(--r) 0 0;
+    border-left: none; border-right: none; border-bottom: none; }
+}
+
 /* ── Library reader ≤820px: docked sidebars → slide-over panels ──────────
    bodyRow is position:relative, so both panels anchor inside it. The 📑 /
    📄 header buttons (.reader-mobile-only, injected by dashboard-library.js)

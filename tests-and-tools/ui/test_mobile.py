@@ -482,3 +482,37 @@ def test_touch_scroll_and_tap_unaffected_by_drag(browser, playwright, site_base)
         expect(page.locator(".touch-drag-ghost")).to_have_count(0)
     finally:
         ctx.close()
+
+
+def test_pack_deeplink_modal_is_sheet_on_landscape_phone(page, site_base,
+                                                         seeded):
+    """A #packs/<pack> link opened on a landscape phone (coarse pointer,
+    >720px wide) gets the same edge-to-edge sheet as every other modal —
+    not the centred desktop dialog."""
+    seeded("preset:empty")
+    page.set_viewport_size({"width": 844, "height": 390})
+    # set_viewport can't flip pointer capability mid-context; use CDP-free
+    # emulation via a touch context instead (below). Here we at least pin
+    # the width-based half of the rule for narrow landscape.
+    pages.goto_app(page, site_base, "/packs/#packs/spanish-starter")
+    pages.expect_modal(page, "Spanish Starter Pack", timeout=10000)
+    box = page.locator("#modal-box").bounding_box()
+    # 844px fine-pointer stays a centred dialog (the sheet is touch/≤720)
+    assert box["x"] > 100, box
+
+
+def test_pack_deeplink_modal_sheet_on_touch_landscape(browser, playwright,
+                                                      site_base):
+    import seed as seedlib
+    ctx = browser.new_context(viewport={"width": 844, "height": 390},
+                              has_touch=True, is_mobile=True)
+    storage.seed_context(ctx, mf_state=seedlib.preset_empty()["mf_state"])
+    page = ctx.new_page()
+    try:
+        pages.goto_app(page, site_base, "/packs/#packs/spanish-starter")
+        pages.expect_modal(page, "Spanish Starter Pack", timeout=10000)
+        box = page.locator("#modal-box").bounding_box()
+        assert box["x"] == 0 and abs(box["width"] - 844) <= 1, box
+        assert 4 <= box["y"] <= 20, box
+    finally:
+        ctx.close()

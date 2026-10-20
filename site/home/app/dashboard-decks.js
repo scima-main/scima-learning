@@ -567,7 +567,7 @@ function scPunctTransform(text, rule) {
   return v;
 }
 const CASE_CARD_TYPES = [
-  ['basic', 'Basic'], ['multi', 'Multi'], ['markscheme', 'Mark scheme'],
+  ['basic', 'Single-answer'], ['multi', 'Multi-answer'], ['markscheme', 'Mark scheme'],
   ['process', 'Process'], ['calculation', 'Calculation'], ['table', 'Table'],
 ];
 
@@ -588,7 +588,7 @@ function scComputeChanges(scope, opts) {
     if (next !== cur) changes.push({ kind, target, field, from: cur, to: next });
   };
   (scope.cards || []).forEach(card => {
-    if (typesOn && !typesOn.has(card.type || 'basic')) return;
+    if (typesOn && !typesOn.has(typeof cardTypeKey === 'function' ? cardTypeKey(card) : (card.type || 'basic'))) return;
     if (opts.fronts) consider('card', card, 'front');
     if (opts.backs)  consider('card', card, 'back');
     if (opts.hints)  consider('card', card, 'hint');

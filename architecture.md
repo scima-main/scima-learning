@@ -237,6 +237,17 @@ button; and bootstrap's init() resolves the hash's FIRST path
   auto-next — a Next/Finish button appears after marking; `settings.
   autoNextSeconds` (0 = off, default) adds a visible countdown to it.
   Countdowns are cleared on re-render/exit/finish.
+- **Quiz parameters** (`state.settings.quizParams`, picker panel “🧾 Quiz
+  parameters”): card-type filter (single/multi-answer/markscheme/process/
+  calculation/table via shared.js's `cardTypeKey()` — multi-answer being a
+  basic card with answerCount>1), card-count limit, global session time
+  limit (progress-row countdown; expiry finishes the session), shuffle
+  off/on, a multi-answer required-count override (`sessRequired()` caps a
+  card's own requirement), and **exam mode** (Written Quiz & Gaps): free
+  Prev/Next navigation with saved answers, nothing graded or revealed
+  until “🏁 Finish & reveal” grades every recorded answer through the same
+  matchers the live Check buttons use (`examGradeAll`), applies ratings via
+  `applyRating()` and lists your-answer-vs-expected on the summary screen.
 - **Session history**: `state.sessionLog` records every session —
   completed ones via `finishSession()`, abandoned ones (← Exit, tab closed,
   reload) as `status:'aborted'` with a `queueIds` snapshot — surfaced in the

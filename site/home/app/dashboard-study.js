@@ -41,6 +41,106 @@ function attachNextControls(container, rating){
   }
 }
 
+// ── Quiz creation parameters (picker's "🧾 Quiz parameters" panel) ─────────
+// Persisted under state.settings.quizParams so a configured quiz survives
+// reloads; every consumer reads through quizParams() which backfills
+// defaults for saves written before the panel existed.
+const QP_DEFAULTS = { types: [], limit: 0, timeLimitMin: 0, exam: false,
+                      multiRequired: 0, shuffle: true };
+const QP_TYPES = [['basic','Single-answer'],['multi','Multi-answer'],['markscheme','Mark scheme'],
+                  ['process','Process'],['calculation','Calculation'],['table','Table']];
+function qpTypeMatch(card, tid) {
+  return (typeof cardTypeKey === 'function' ? cardTypeKey(card) : (card.type || 'basic')) === tid;
+}
+function quizParams() {
+  return Object.assign({}, QP_DEFAULTS, state.settings.quizParams || {});
+}
+/** Effective "answers required for full marks" for a card in this session:
+ *  the session override (multiRequired) caps the card's own requirement —
+ *  "all of the multi-answers only need two answers if there are more than
+ *  two usually" — never raising it. */
+function sessRequired(card) {
+  const own = Math.min(card.answerCount || 1, Math.max(1, card.requiredAnswers || card.answerCount || 1));
+  const ov = (studySession && studySession.multiRequired) || 0;
+  return ov > 0 ? Math.min(own, ov) : own;
+}
+
+// ── Global session clock (time limit) ──────────────────────────────────────
+let sessionClockHandle = null;
+function clearSessionClock() { if (sessionClockHandle) { clearInterval(sessionClockHandle); sessionClockHandle = null; } }
+function sessionTimeUp() {
+  const sess = studySession;
+  if (!sess || !sess.active) return;
+  clearSessionClock();
+  showToast('⏱ Time limit reached — session finished', 4000);
+  if (sess.exam) examFinish();
+  else { sess.stats.skipped++; finishSession(); }
+}
+
+// ── Exam mode (free navigation, grade & reveal at the end) ─────────────────
+/** Stores a typed/boxed answer without grading it. */
+function saveExamAnswer(card, answers) {
+  const sess = studySession;
+  sess.recorded = sess.recorded || {};
+  sess.recorded[card.id] = { answers: (answers || []).map(a => (a || '').trim()),
+                             ms: Date.now() - (sess._cardStart || Date.now()) };
+  showToast('Answer saved — 🏁 Finish & reveal grades everything', 2000);
+  sess._examNavRefresh?.();
+}
+/** Grades every recorded answer at reveal time, reusing the same matchers
+ *  the live Check buttons use (quizMatch / greedy multi pairing / per-gap). */
+function examGradeAll(sess) {
+  const results = [];
+  (sess.queue || []).forEach(card => {
+    const rec = (sess.recorded || {})[card.id];
+    const meta = (sess._examMeta || {})[card.id];
+    if (!meta) { results.push({ card, result: null, userText: '', expected: [], ms: 0 }); return; }
+    let result, userText;
+    if (!rec || !rec.answers.some(a => a)) { result = null; userText = ''; }
+    else if (meta.gaps) {
+      const hits = meta.expected.map((exp, i) => (rec.answers[i] || '') ? quizMatch(rec.answers[i], exp) : 'wrong');
+      const nc = hits.filter(h => h === 'correct').length;
+      result = nc === hits.length ? 'correct' : nc > 0 ? 'close' : 'wrong';
+      userText = rec.answers.join(' / ');
+    } else if (meta.isMulti) {
+      const remaining = [...meta.expected];
+      let correctCount = 0;
+      rec.answers.forEach(u => {
+        if (u) { const idx = remaining.findIndex(exp => quizMatch(u, exp) === 'correct');
+          if (idx >= 0) { remaining.splice(idx, 1); correctCount++; } }
+      });
+      result = correctCount === meta.required ? 'correct' : correctCount > 0 ? 'close' : 'wrong';
+      userText = rec.answers.filter(Boolean).join(' / ');
+    } else {
+      result = rec.answers[0] ? quizMatch(rec.answers[0], meta.expected[0] || '') : 'wrong';
+      userText = rec.answers[0] || '';
+    }
+    results.push({ card, result, userText, expected: meta.expected || [], ms: rec?.ms || 0 });
+  });
+  return results;
+}
+/** Reveal: grade everything, apply ratings/XP/answers, show the summary. */
+function examFinish() {
+  const sess = studySession;
+  if (!sess || !sess.active) return;
+  clearNextTimer(); clearQuizTimer(); clearSessionClock();
+  const results = examGradeAll(sess);
+  sess.examResults = results;
+  results.forEach(r => {
+    if (!r.result) {                       // never answered → counts as missed
+      sess.stats.skipped++;
+      if (!sess.answers) sess.answers = [];
+      sess.answers.push({ id: r.card.id, r: null, ok: false, ms: 0 });
+      return;
+    }
+    const rating = r.result === 'correct' ? 4 : r.result === 'close' ? 3 : 1;
+    applyRating(r.card, rating, sess);
+    const last = sess.answers[sess.answers.length - 1];
+    if (last && last.id === r.card.id) last.ms = r.ms;
+  });
+  finishSession();
+}
+
 // ── Session statistics log ────────────────────────────────────────────────
 // state.sessionLog is an array of completed-session records, saved alongside
 // state. Each entry captures everything interesting about a single study
@@ -111,6 +211,9 @@ function pushSessionLog(sess, elapsed, status = 'complete') {
     // "Repeat wrong (N)"; trimmed together with queueIds below
     answers: (sess.answers || []).slice(0, 500),
     reverse: !!sess.reverse,
+    exam: !!sess.exam || undefined,
+    timeLimitSec: sess.timeLimitSec || undefined,
+    multiRequired: sess.multiRequired || undefined,
     scope: sess.scope || null,
     durationSec: elapsed,
     totalCards: sess.queue.length,
@@ -205,7 +308,9 @@ function startSessionFromEntry(entry, resume, onlyWrong = false) {
     quizAnswer:'', quizAnswers:[], gapChoice:null, stats, combo:0, maxCombo:0,
     startTime:Date.now(), matchMode: state.settings.quizMatchMode || 'fuzzy',
     timePerCard, timeLeft:timePerCard, timedOut:false,
-    timed: mode==='quiz' && !!state.settings.quizTimed, reverse: !!entry.reverse,
+    timed: mode==='quiz' && !!state.settings.quizTimed && !entry.exam, reverse: !!entry.reverse,
+    exam: !!entry.exam, timeLimitSec: entry.timeLimitSec || 0,
+    multiRequired: entry.multiRequired || 0, recorded: {}, _examMeta: {}, examResults: null,
     _cardStart:Date.now(), _firstCardMs:null, _cardTimes:[], _flipTimes:[],
     _keystrokes:0, _charsTyped:0, _backspaces:0, _timeouts:0,
     answers: [],
@@ -251,7 +356,7 @@ function renderStudyHistorySection() {
         panel.appendChild(el('div', { class: 'card', style: 'padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap' },
           el('div', { style: 'flex:1;min-width:160px' },
             el('div', { style: 'font-weight:800;font-size:12px' },
-              `${STUDY_MODE_ICONS[e.mode] || '📚'} ${e.mode || 'review'} · ${when}`),
+              `${e.exam ? '📝 ' : ''}${STUDY_MODE_ICONS[e.mode] || '📚'} ${e.mode || 'review'} · ${when}`),
             el('div', { class: 'u-muted-11' },
               `${e.cardsAttempted || 0}/${e.totalCards || 0} cards · ✅${e.correct || 0} ❌${e.incorrect || 0}` +
               (e.accuracyPct != null ? ` · ${e.accuracyPct}%` : ''))),
@@ -386,6 +491,72 @@ function renderStudyPicker(c) {
   revChk.addEventListener('change',function(){state.settings.studyReverse=revChk.checked;scheduleSave();});
   revRow.append(revChk,el('label',{for:'reverse-toggle',style:'font-size:12px;font-weight:700;cursor:pointer;color:var(--text)'},'🔁 Reverse cards (see the back, answer the front)'),el('span',{style:'font-size:11px;color:var(--muted);margin-left:auto'},'Basic cards study definition → term'));
 
+  // ── Quiz parameters: queue shaping + exam-style session rules ──────────
+  // "create a quiz with a five minute limit that takes five of the
+  // multi-answer cards from the scope, I can move between questions and
+  // only see answers at the end, and multi-answers only need two answers"
+  // — every knob for that sentence lives in this panel, persisted under
+  // state.settings.quizParams so a configured quiz survives reloads.
+  const qp = quizParams();
+  const qpRow = el('div',{style:'margin-bottom:14px;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:10px'});
+  const qpPreview = el('span',{style:'font-size:11px;color:var(--muted);margin-left:auto'});
+  const qpTypesRow = el('div',{style:'display:flex;gap:6px;flex-wrap:wrap;margin:8px 0'});
+  function qpSave(){ state.settings.quizParams = qp; scheduleSave(); qpRefresh(); }
+  function qpQueueCount(){
+    let list = refinedCards;
+    if (qp.types && qp.types.length) list = list.filter(cc => qp.types.some(t => qpTypeMatch(cc, t)));
+    if (qp.limit > 0) list = list.slice(0, qp.limit);
+    return list.length;
+  }
+  function qpRefresh(){
+    qpTypesRow.innerHTML = '';
+    qpTypesRow.appendChild(btn(qp.types.length ? 'Types: custom ✕' : 'All card types',
+      qp.types.length ? 'primary' : 'ghost',
+      { small: true, title: 'Click to clear the card-type filter',
+        onclick: () => { qp.types = []; qpSave(); } }));
+    QP_TYPES.forEach(([tid, tlabel]) => {
+      const on = qp.types.includes(tid);
+      qpTypesRow.appendChild(btn(tlabel, on ? 'primary' : 'ghost', { small: true,
+        title: `Only ${tlabel.toLowerCase()} cards enter the queue`,
+        onclick: () => { qp.types = on ? qp.types.filter(x => x !== tid) : [...qp.types, tid]; qpSave(); } }));
+    });
+    qpPreview.textContent = `→ ${qpQueueCount()} card${qpQueueCount() !== 1 ? 's' : ''} in queue` +
+      (qp.timeLimitMin ? ` · ${qp.timeLimitMin} min` : '') + (qp.exam ? ' · exam' : '');
+  }
+  const qpNum = (val, max, onchange, title) => {
+    const inp = el('input',{type:'number',min:'0',max:String(max),title,
+      style:'width:56px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-weight:700;font-size:12px'});
+    inp.value = String(val);
+    inp.addEventListener('change',()=>{ onchange(Math.max(0, Math.min(max, parseInt(inp.value,10)||0))); qpSave(); });
+    return inp;
+  };
+  const qpChk = (checked, label, title, onchange, id) => {
+    const c2 = el('input',{type:'checkbox',id,style:'width:16px;height:16px;accent-color:var(--blue);cursor:pointer'});
+    c2.checked = checked;
+    c2.addEventListener('change',()=>{ onchange(c2.checked); qpSave(); });
+    return el('span',{style:'display:flex;align-items:center;gap:6px',title},
+      c2, el('label',{for:id,style:'font-size:12px;font-weight:700;cursor:pointer;color:var(--text)'},label));
+  };
+  qpRow.append(
+    el('div',{style:'display:flex;align-items:center;gap:10px;flex-wrap:wrap'},
+      el('span',{style:'font-weight:800;font-size:12px'},'🧾 Quiz parameters'),
+      qpPreview),
+    qpTypesRow,
+    el('div',{style:'display:flex;gap:14px;align-items:center;flex-wrap:wrap'},
+      el('span',{style:'display:flex;align-items:center;gap:6px',title:'Max cards in the queue (0 = no limit)'},
+        el('label',{style:'font-size:12px;font-weight:700;color:var(--muted)'},'Card limit:'),
+        qpNum(qp.limit, 500, v => qp.limit = v, 'Max cards in the queue (0 = no limit)')),
+      el('span',{style:'display:flex;align-items:center;gap:6px',title:'Whole-session countdown (0 = off); at zero the session finishes'},
+        el('label',{style:'font-size:12px;font-weight:700;color:var(--muted)'},'⏱ Minutes:'),
+        qpNum(qp.timeLimitMin, 600, v => qp.timeLimitMin = v, 'Global time limit in minutes (0 = off)')),
+      el('span',{style:'display:flex;align-items:center;gap:6px',title:'Caps how many answers multi-answer cards require this session (0 = each card\u2019s own)'},
+        el('label',{style:'font-size:12px;font-weight:700;color:var(--muted)'},'Multi needs:'),
+        qpNum(qp.multiRequired, 20, v => qp.multiRequired = v, 'Multi-answer required-count override (0 = card\u2019s own)')),
+      qpChk(qp.shuffle !== false, 'Shuffle', 'Random queue order (off = deck order)', v => qp.shuffle = v, 'qp-shuffle'),
+      qpChk(!!qp.exam, 'Exam mode', 'Move freely between questions and see every answer only at the end (Written Quiz & Fill in the Gaps)', v => qp.exam = v, 'qp-exam'))
+  );
+  qpRefresh();
+
 
 // "How it works" copy for the six study modes — opened from the ⓘ button in
 // each mode card's top-right corner, complementing the card's one-line desc.
@@ -456,6 +627,7 @@ function openModeHelp(id) {
     imgToggleRow,
     timerRow,
     revRow,
+    qpRow,
     el('div',{style:'font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px'},'Mode'),
     modeGrid
   );
@@ -569,9 +741,14 @@ function startStudySession(scopes, mode) {
     cards = cards.filter(c=>c.type!=='calculation' && c.type!=='table');
   }
   if(mode==='multi') cards = cards.filter(c=>c.type==='basic');
+  // ── Quiz parameters: card-type filter, then the count limit ──
+  const qp = quizParams();
+  if (qp.types && qp.types.length) cards = cards.filter(c => qp.types.some(t => qpTypeMatch(c, t)));
+  if (qp.limit > 0) cards = cards.slice(0, qp.limit);
   pushRecentScope(scopes);
   const timePerCard=state.settings.timedQuizSeconds||30;
-  studySession={active:true,scope:scopes,mode,queue:[...cards].sort(()=>Math.random()-0.5),idx:0,flipped:false,showHint:false,showImages:state.settings.showStudyImages!==false,quizAnswer:'',quizAnswers:[],gapChoice:null,stats:{correct:0,incorrect:0,skipped:0},answers:[],combo:0,maxCombo:0,startTime:Date.now(),matchMode:state.settings.quizMatchMode||'fuzzy',timePerCard,timeLeft:timePerCard,timedOut:false,timed:mode==='quiz'&&!!state.settings.quizTimed,reverse:!!state.settings.studyReverse,
+  const exam = !!qp.exam && (mode==='quiz' || mode==='gaps');
+  studySession={active:true,scope:scopes,mode,queue:qp.shuffle===false?[...cards]:shuffleArr(cards),idx:0,flipped:false,showHint:false,showImages:state.settings.showStudyImages!==false,quizAnswer:'',quizAnswers:[],gapChoice:null,stats:{correct:0,incorrect:0,skipped:0},answers:[],combo:0,maxCombo:0,startTime:Date.now(),matchMode:state.settings.quizMatchMode||'fuzzy',timePerCard,timeLeft:timePerCard,timedOut:false,timed:mode==='quiz'&&!!state.settings.quizTimed&&!exam,reverse:!!state.settings.studyReverse,exam,timeLimitSec:(qp.timeLimitMin|0)*60,multiRequired:qp.multiRequired|0,recorded:{},_examMeta:{},examResults:null,
     // ── per-session stat accumulators (prefixed _ to distinguish from display fields) ──
     _cardStart: Date.now(),   // timestamp when current card was shown
     _firstCardMs: null,       // ms until first card was answered/rated
@@ -603,8 +780,23 @@ function renderStudySession(c) {
   c.innerHTML='';
   c.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;padding:0';
 
+  // Global time-limit countdown (🧾 Quiz parameters) — session-wide, distinct
+  // from the per-card ⏱️ Timed mode; hitting zero finishes the session.
+  let clockLabel = null;
+  if (sess.timeLimitSec) {
+    clockLabel = el('span',{style:'font-size:12px;font-weight:900;color:var(--blue);min-width:56px;text-align:right'},'⏱ --:--');
+    const paint = () => {
+      const left = Math.max(0, sess.timeLimitSec - Math.round((Date.now() - sess.startTime) / 1000));
+      clockLabel.textContent = `⏱ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+      clockLabel.style.color = left <= 30 ? '#ef4444' : left <= 60 ? '#FB923C' : 'var(--blue)';
+      if (left <= 0) sessionTimeUp();
+    };
+    paint();
+    sessionClockHandle = setInterval(paint, 1000);
+  }
+
   const progress=el('div',{class:'ui-action-bar',style:'display:flex;align-items:center;gap:12px;margin-bottom:20px'},
-    btn('← Exit','ghost',{small:true,onclick:()=>{ clearQuizTimer(); clearNextTimer(); if(window.speechSynthesis) window.speechSynthesis.cancel(); spSessionEnd(); logAbortedSession(studySession); studySession=null; renderView('study'); }}),
+    btn('← Exit','ghost',{small:true,onclick:()=>{ clearQuizTimer(); clearNextTimer(); clearSessionClock(); if(window.speechSynthesis) window.speechSynthesis.cancel(); spSessionEnd(); logAbortedSession(studySession); studySession=null; renderView('study'); }}),
     el('div',{style:'flex:1'},
       el('div',{style:'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'},
         el('span',{style:'font-size:12px;font-weight:700;color:var(--muted)'},`${sess.idx+1} / ${sess.queue.length}`),
@@ -621,7 +813,8 @@ function renderStudySession(c) {
         onclick:()=>{ sess.showHint=true; renderStudySession(document.getElementById('view-study')); }});
       if(card.hint) hintBtn.style.cssText='color:#22c55e;border-color:color-mix(in srgb, #22c55e 35%, transparent);background:color-mix(in srgb, #22c55e 10%, transparent)';
       return hintBtn;
-    })()
+    })(),
+    clockLabel
   );
 
   const scrollArea=el('div',{class:'quiz-scroll-area'});
@@ -635,6 +828,27 @@ function renderStudySession(c) {
     : sess.mode==='multi'
     ? renderMultiChoiceCard(card,citBadge)
     : renderFlashcard(card,citBadge);
+  if (sess.exam) {
+    // Free navigation: hop between questions, save answers along the way,
+    // grade & reveal everything at the end (🏁).
+    const navLabel = el('span', { class: 'u-muted-11', style: 'font-weight:800;min-width:120px;text-align:center' }, '');
+    const refreshNav = () => {
+      const answered = Object.keys(sess.recorded || {}).length;
+      navLabel.textContent = `Q ${sess.idx + 1}/${sess.queue.length} · saved ${answered}`;
+    };
+    refreshNav();
+    sess._examNavRefresh = refreshNav;
+    const go = d => {
+      sess.idx = Math.max(0, Math.min(sess.queue.length - 1, sess.idx + d));
+      clearQuizTimer(); clearNextTimer();
+      renderStudySession(document.getElementById('view-study'));
+    };
+    stickyFooter.appendChild(el('div', { style: 'display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap' },
+      btn('← Prev', 'ghost', { small: true, ...(sess.idx === 0 ? { disabled: '' } : {}), onclick: () => go(-1) }),
+      navLabel,
+      btn('Next →', 'ghost', { small: true, ...(sess.idx + 1 >= sess.queue.length ? { disabled: '' } : {}), onclick: () => go(1) }),
+      btn('🏁 Finish & reveal', 'primary', { small: true, title: 'Grade every saved answer and reveal the results', onclick: () => examFinish() })));
+  }
   scrollArea.appendChild(scrollContent);
   c.append(scrollArea,stickyFooter);
 }
@@ -950,6 +1164,11 @@ function renderGapCard(card, citBadge) {
   qChildren.push(el('div',{class:'flashcard-back-text',style:'font-size:15px'},contextText));
   const questionCard=el('div',{class:'flashcard front',style:'cursor:default;min-height:160px'},...qChildren);
 
+  if (sess.exam) { sess._examMeta = sess._examMeta || {};
+    sess._examMeta[card.id] = { expected: answersToCheck, gaps: true, required: answersToCheck.length };
+    const rec = (sess.recorded || {})[card.id];
+    if (rec) sess.quizAnswers = [...rec.answers];
+  }
   const inputAreas=[];
   for(let i=0;i<answersToCheck.length;i++){
     const inp=el('input',{type:'text',class:'quiz-input-area gap-input',
@@ -962,14 +1181,17 @@ function renderGapCard(card, citBadge) {
     inp.addEventListener('keydown',e=>{
       sess._keystrokes++;
       if(e.key==='Backspace'||e.key==='Delete') sess._backspaces++;
-      if(e.key==='Enter') checkGapAnswer();
+      if(e.key==='Enter') (sess.exam ? saveGap : checkGapAnswer)();
     });
     inputAreas.push(inp);
   }
 
   const compareEl=el('div',{style:'display:none'});
   let checked=false;
-  const checkBtn=btn('Check Answer (↵)','primary',{full:true,onclick:checkGapAnswer});
+  function saveGap(){ saveExamAnswer(card, inputAreas.map(inp=>inp.value)); }
+  const checkBtn = sess.exam
+    ? btn('💾 Save answer','primary',{full:true,onclick:saveGap})
+    : btn('Check Answer (↵)','primary',{full:true,onclick:checkGapAnswer});
   const stickyFooter=el('div',{class:'quiz-sticky-footer'});
   stickyFooter.append(...inputAreas,checkBtn);
 
@@ -1462,8 +1684,13 @@ function renderQuizCard(card, citBadge, scrollArea) {
   const answerCount = Math.min(8, Math.max(1, card.answerCount || 1));
   const isMulti = !isMarkscheme && answerCount > 1 && !sessIsReversed(card);
   const expectedAnswers = studyAnswers(card);
-  const requiredAnswers = (isMulti || isMarkscheme) ? Math.min(answerCount, Math.max(1, card.requiredAnswers || answerCount)) : 1;
+  const requiredAnswers = (isMulti || isMarkscheme) ? (isMulti ? sessRequired(card) : Math.min(answerCount, Math.max(1, card.requiredAnswers || answerCount))) : 1;
 
+  if (sess.exam) { sess._examMeta = sess._examMeta || {};
+    sess._examMeta[card.id] = { expected: expectedAnswers, isMulti, required: requiredAnswers };
+    const rec = (sess.recorded || {})[card.id];
+    if (rec) { sess.quizAnswers = [...rec.answers]; sess.quizAnswer = rec.answers[0] || ''; }
+  }
   const inputWrap=el('div',{});
   if(isMarkscheme) inputWrap.appendChild(el('div',{style:'font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px'},`Write your answer — cover ${requiredAnswers} key point${requiredAnswers===1?'':'s'} for full marks.`));
   else if(isMulti) inputWrap.appendChild(el('div',{style:'font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px'},`Give ${requiredAnswers} answer${requiredAnswers===1?'':'s'}.`));
@@ -1489,7 +1716,11 @@ function renderQuizCard(card, citBadge, scrollArea) {
 
   const compareEl=el('div',{style:'display:none'});
   let checked=false;
-  const checkBtn=btn('Check Answer (Ctrl+↵)','primary',{full:true,onclick:checkQuizAnswer});
+  function saveQuiz(){ saveExamAnswer(card, inputAreas.map(b=>b.value)); }
+  const submitFn = sess.exam ? saveQuiz : checkQuizAnswer;
+  const checkBtn = sess.exam
+    ? btn('💾 Save answer','primary',{full:true,onclick:submitFn})
+    : btn('Check Answer (Ctrl+↵)','primary',{full:true,onclick:submitFn});
 
   function checkQuizAnswer(){
     if(checked)return; checked=true;
@@ -1580,7 +1811,7 @@ function renderQuizCard(card, citBadge, scrollArea) {
     // Re-disable mode toggle after check
     modeToggleRow.querySelectorAll('button').forEach(b=>{ b.disabled=true; b.style.opacity='0.5'; b.style.cursor='default'; });
   }
-  inputAreas.forEach(box=>box.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey||isMulti)) checkQuizAnswer(); }));
+  inputAreas.forEach(box=>box.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey||isMulti)) submitFn(); }));
   // scrollContent: question card + compare result (scrollable)
   const scrollContent=el('div',{style:'padding-bottom:8px'});
   if(timerBar) scrollContent.appendChild(timerBar);
@@ -1602,22 +1833,13 @@ function renderQuizCard(card, citBadge, scrollArea) {
   return {scrollContent,stickyFooter};
 }
 
-function rateCard(rating) {
-  const sess=studySession, card=sess.queue[sess.idx];
-  // For flashcard/review mode, card time = total time on card including flip.
-  // Quiz/gap modes record timing inside checkQuizAnswer/checkGapAnswer instead.
-  if(sess.mode!=='quiz'&&sess.mode!=='gaps'){
-    const cardMs=Date.now()-(sess._cardStart||Date.now());
-    sess._cardTimes.push(cardMs);
-    if(sess._firstCardMs===null) sess._firstCardMs=cardMs;
-  }
+/** Applies a rating to a SPECIFIC card: stats/combo/XP/history/streak/
+ *  schedule + the per-answer log. rateCard() = applyRating(current) +
+ *  nextCard(); exam mode applies ratings in bulk at reveal time. */
+function applyRating(card, rating, sess) {
+  sess = sess || studySession;
   const good=rating>=3;
   const wasNew = card.state==='new';
-  // Per-answer record: id, rating, correct-ness and the time spent, so a
-  // finished session can be repeated over JUST the missed cards (see the
-  // Session History panel's "Repeat wrong" button). Every mode funnels
-  // through rateCard() — flashcard buttons directly, graded modes via the
-  // Next/Finish button attachNextControls() wires to the computed rating.
   if (!sess.answers) sess.answers = [];
   sess.answers.push({
     id: card.id,
@@ -1637,7 +1859,20 @@ function rateCard(rating) {
   bumpStreak();
   const updated=scheduleCard(card,rating,{algorithm:state.settings.algorithm,leechThreshold:state.settings.leechThreshold,autoSuspend:state.settings.autoSuspend});
   if(deck){ const i=deck.cards.findIndex(c=>c.id===card.id); if(i>=0) deck.cards[i]=updated; }
-  scheduleSave(); checkAchievements(); nextCard();
+  scheduleSave(); checkAchievements();
+}
+
+function rateCard(rating) {
+  const sess=studySession, card=sess.queue[sess.idx];
+  // For flashcard/review mode, card time = total time on card including flip.
+  // Quiz/gap modes record timing inside checkQuizAnswer/checkGapAnswer instead.
+  if(sess.mode!=='quiz'&&sess.mode!=='gaps'){
+    const cardMs=Date.now()-(sess._cardStart||Date.now());
+    sess._cardTimes.push(cardMs);
+    if(sess._firstCardMs===null) sess._firstCardMs=cardMs;
+  }
+  applyRating(card, rating, sess);
+  nextCard();
 }
 
 function nextCard(){
@@ -1695,5 +1930,27 @@ function finishSession(){
       btn('Retry','ghost',{onclick:()=>startStudySession(sess.scope,sess.mode)})
     )
   ));
+
+  // Exam mode: the payoff screen — every question with your answer beside
+  // the expected one, graded. The only place an exam session shows
+  // correctness (nothing was revealed while answering).
+  if (sess.examResults && sess.examResults.length) {
+    const list = el('div', { class: 'card', style: 'padding:20px;max-width:640px;margin:16px auto;text-align:left' });
+    list.appendChild(el('div', { style: 'font-weight:900;margin-bottom:12px' }, '📝 Answers revealed'));
+    sess.examResults.forEach(r => {
+      const col = r.result === 'correct' ? '#22c55e' : r.result === 'close' ? '#FB923C' : r.result === 'wrong' ? '#ef4444' : 'var(--muted)';
+      list.appendChild(el('div', { style: 'padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border);margin-bottom:8px' },
+        el('div', { style: 'display:flex;gap:8px;align-items:baseline;justify-content:space-between' },
+          setRichText(el('div', { style: 'font-weight:700;font-size:13px;flex:1;min-width:0' }), r.card.front || ''),
+          el('span', { style: 'font-size:14px;flex-shrink:0' }, r.result === 'correct' ? '✅' : r.result === 'close' ? '🟡' : r.result === 'wrong' ? '❌' : '⏭️')),
+        el('div', { style: 'font-size:12px;margin:4px 0 3px' },
+          el('span', { style: 'color:var(--muted)' }, 'Your answer: '),
+          setRichText(el('span', { style: `font-weight:700;color:${col}` }), r.userText || '(not answered)')),
+        el('div', { style: 'font-size:12px' },
+          el('span', { style: 'color:var(--muted)' }, 'Expected: '),
+          setRichText(el('span', { style: 'font-weight:700' }), (r.expected || []).join(' · ')))));
+    });
+    c.appendChild(list);
+  }
 }
 

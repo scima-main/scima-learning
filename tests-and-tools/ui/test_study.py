@@ -215,3 +215,93 @@ def test_gap_missing_words_render_latex(page, site_base, seeded):
     page.wait_for_selector(".quiz-compare")
     expect(page.locator(".quiz-compare .katex").first).to_be_visible(
         timeout=8000)
+
+
+# ── Quiz parameters: type filter, card limit, global clock, exam mode, ──────
+# ── multi-answer required override (site/home until re-minified) ────────────
+
+def _multi_state():
+    cards = []
+    for i in range(7):
+        c = seedlib.make_card(f"Name four {i}", "placeholder", card_id=f"cm{i}")
+        c["answerCount"] = 4
+        c["requiredAnswers"] = 4
+        c["back"] = "alpha\nbeta\ngamma\ndelta"
+        cards.append(c)
+    for i in range(3):
+        cards.append(seedlib.make_card(f"Basic {i}", "single", card_id=f"cb{i}"))
+    return seedlib.make_mf_state(
+        decks=[seedlib.make_deck("Mix", cards, deck_id="d_mix")])
+
+
+def _set_qp(page, **kw):
+    page.evaluate("(v) => { state.settings.quizParams = Object.assign("
+                  "{types:[],limit:0,timeLimitMin:0,exam:false,multiRequired:0,"
+                  "shuffle:true}, v); }", kw)
+
+
+def test_quiz_params_filter_limit_and_override(page, site_base, seeded):
+    seeded(mf_state=_multi_state())
+    pages.goto_app(page, site_base, "/study/")
+    _set_qp(page, types=["multi"], limit=5, multiRequired=2)
+    page.evaluate("() => renderView('study')")
+    expect(page.locator("#view-study")).to_contain_text("5 cards in queue")
+    page.locator("#view-study .card", has_text="Written Quiz") \
+        .get_by_role("button", name="Start").click()
+    page.wait_for_selector(".quiz-input-area")
+    sess = page.evaluate("() => ({n: studySession.queue.length,"
+                         " multi: studySession.queue.every(c => (c.answerCount||1) > 1),"
+                         " mr: studySession.multiRequired})")
+    assert sess == {"n": 5, "multi": True, "mr": 2}, sess
+    # override caps the boxes at 2 instead of the card's own 4
+    assert page.locator(".quiz-input-area").count() == 2
+
+
+def test_exam_mode_navigates_and_reveals_at_end(page, site_base, seeded):
+    seeded(mf_state=_multi_state())
+    pages.goto_app(page, site_base, "/study/")
+    _set_qp(page, types=["multi"], limit=3, exam=True, multiRequired=2,
+            timeLimitMin=5)
+    page.evaluate("() => renderView('study')")
+    page.locator("#view-study .card", has_text="Written Quiz") \
+        .get_by_role("button", name="Start").click()
+    page.wait_for_selector(".quiz-input-area")
+    # global clock in the progress row
+    expect(page.locator("#view-study span", has_text="⏱")).to_be_visible()
+    # save, move on, come back — answer prefilled, no feedback shown
+    page.locator(".quiz-input-area").first.fill("alpha")
+    page.get_by_role("button", name="💾 Save answer").click()
+    expect(page.locator("#toast")).to_contain_text("Answer saved")
+    expect(page.locator(".quiz-compare")).to_be_hidden()
+    page.get_by_role("button", name="Next →").click()
+    page.get_by_role("button", name="← Prev").click()
+    assert page.locator(".quiz-input-area").first.input_value() == "alpha"
+    # finish grades everything and reveals the per-card list
+    page.get_by_role("button", name="🏁 Finish & reveal").click()
+    expect(page.locator("#view-study")).to_contain_text("Session Complete!")
+    expect(page.locator("#view-study")).to_contain_text("Answers revealed")
+    expect(page.locator("#view-study")).to_contain_text("Your answer:")
+    log = page.evaluate("() => state.sessionLog[0]")
+    assert log["exam"] is True and log["timeLimitSec"] == 300
+    assert len(log["answers"]) == 3
+    assert log["answers"][0]["ok"] is True        # alpha matched, 2 required
+    assert sum(1 for a in log["answers"] if a["ok"] is False) == 2
+    # the two unanswered cards are repeatable as "wrong"
+    page.get_by_role("button", name="New Session").click()
+    page.click("#session-history-toggle")
+    expect(page.locator("#session-history-panel button",
+                        has_text="Repeat wrong (2)")).to_be_visible()
+
+
+def test_global_time_limit_ends_session(page, site_base, seeded):
+    seeded(mf_state=_multi_state())
+    pages.goto_app(page, site_base, "/study/")
+    _set_qp(page, limit=3, timeLimitMin=1)   # clock exists from start…
+    page.evaluate("() => renderView('study')")
+    page.locator("#view-study .card", has_text="Written Quiz") \
+        .get_by_role("button", name="Start").click()
+    page.wait_for_selector(".quiz-input-area")
+    page.evaluate("() => { studySession.timeLimitSec = 2; }")   # …then shortened
+    page.wait_for_function("() => !studySession || !studySession.active",
+                           timeout=8000)
+    expect(page.locator("#view-study")).to_contain_text("Session Complete!")

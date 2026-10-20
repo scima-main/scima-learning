@@ -25,7 +25,7 @@
  *  two tabs open on /#home and /#study whose sidebars disagree are two cached
  *  copies of different deploys, and a fetch would just report whatever the
  *  (possibly stale) cache says ABOUT.md contains. Bump both together. */
-const APP_VERSION = '2026.10.020-alpha';
+const APP_VERSION = '2026.10.021-alpha';
 
 /** XP per mark formula: XP = XP_COEFFICIENT × grade⁻² */
 const XP_COEFFICIENT = 1000;
@@ -392,6 +392,16 @@ function renderRichText(str) {
 // Sets an element's rendered rich-text content in place of appending it as a
 // plain-text child — use wherever card front/back text is displayed.
 function setRichText(node, str) { node.innerHTML = renderRichText(str); return node; }
+
+// The user-facing card TYPE key: stored types are basic/cloze/reversal/
+// markscheme/process/calculation/table, but a "multi-answer" card is really
+// a basic card whose answerCount > 1 — so filters/chips that offer
+// "Multi-answer" need this projection (and "Basic" then means single-answer).
+function cardTypeKey(card) {
+  const t = (card && card.type) || 'basic';
+  if (t === 'basic' && ((card && card.answerCount) || 1) > 1) return 'multi';
+  return t;
+}
 
 // ── LaTeX approximation: converts LaTeX fragments into a plain-text/unicode
 // reading, so a written-response answer authored with LaTeX (e.g.
