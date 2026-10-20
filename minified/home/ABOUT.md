@@ -1,4 +1,10 @@
-# CHANGELOG (last updated 28th October 2026, UTC)
+# CHANGELOG (last updated 20th October 2026, UTC)
+
+#### VERSION 2026.10.21-ALPHA
+
+- more customization of studying
+- QoL deck editing (basic -> multi, lower/uppercase, punctuation, etc.)
+- rendering fixes
 
 #### VERSION 2026.10.020-ALPHA
 - mobile friendly views
