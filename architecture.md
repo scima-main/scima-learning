@@ -203,6 +203,14 @@ document and none of the cross-page machinery below runs.
   `tests-and-tools/gamekit.py`), and Scratch/GD-style remix attribution
   (remixable by default; forks extend the chain). Charts are declarative
   data — no author code executes. Design rationale: `game-packages-design.md`.
+- **Packs (hidden route)**: `/packs/` lists official deck packs from
+  `assets/packs/` — two actions only (➕ Add to Decks, ⬇ Download). Discovery:
+  `GET /api/v1/packs` (backend dir scan + optional `manifest.json` metadata,
+  bucket `packs`) → static `manifest.json` fallback → empty state.
+  `importPackData()` accepts stamped scima envelopes and legacy v2 deck/folder
+  exports and bare shapes, sanitizes, remaps ids, re-links folder ids. About
+  images moved to `assets/media/` (resolver repointed; legacy `media/…` refs
+  keep working through prefix stripping).
 - **Manual advance**: graded answers (quiz/gaps/multiple-choice) never
   auto-next — a Next/Finish button appears after marking; `settings.
   autoNextSeconds` (0 = off, default) adds a visible countdown to it.

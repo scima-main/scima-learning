@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "exportedAt": "2026-10-18T12:00:00.000Z",
+  "deck": {
+    "id": "pack_es_starter",
+    "name": "Spanish Starter Pack",
+    "emoji": "🇪🇸",
+    "image": null,
+    "subject": "misc",
+    "folderId": null,
+    "color": "var(--blue)",
+    "pinned": false,
+    "cards": [
+      { "id": "pkes1", "front": "Hello", "back": "Hola", "answerCount": 1, "requiredAnswers": 1, "synonyms": [], "type": "basic", "ease": 2.5, "interval": 0, "reps": 0, "lapses": 0, "due": 0, "state": "new", "suspended": false, "leech": false, "created": 0, "lastRated": null },
+      { "id": "pkes2", "front": "Good morning", "back": "Buenos días", "answerCount": 1, "requiredAnswers": 1, "synonyms": [], "type": "basic", "ease": 2.5, "interval": 0, "reps": 0, "lapses": 0, "due": 0, "state": "new", "suspended": false, "leech": false, "created": 0, "lastRated": null },
+      { "id": "pkes3", "front": "Please", "back": "Por favor", "answerCount": 1, "requiredAnswers": 1, "synonyms": ["porfa"], "type": "basic", "ease": 2.5, "interval": 0, "reps": 0, "lapses": 0, "due": 0, "state": "new", "suspended": false, "leech": false, "created": 0, "lastRated": null },
+      { "id": "pkes4", "front": "Thank you very much", "back": "Muchas gracias", "answerCount": 1, "requiredAnswers": 1, "synonyms": [], "type": "basic", "ease": 2.5, "interval": 0, "reps": 0, "lapses": 0, "due": 0, "state": "new", "suspended": false, "leech": false, "created": 0, "lastRated": null },
+      { "id": "pkes5", "front": "How are you?", "back": "¿Cómo estás?", "answerCount": 1, "requiredAnswers": 1, "synonyms": ["¿qué tal?"], "type": "basic", "ease": 2.5, "interval": 0, "reps": 0, "lapses": 0, "due": 0, "state": "new", "suspended": false, "leech": false, "created": 0, "lastRated": null },
+      { "id": "pkes6", "front": "See you tomorrow", "back": "Hasta mañana", "answerCount": 1, "requiredAnswers": 1, "synonyms": [], "type": "basic", "ease": 2.5, "interval": 0, "reps": 0, "lapses": 0, "due": 0, "state": "new", "suspended": false, "leech": false, "created": 0, "lastRated": null }
+    ]
+  },
+  "citedSources": []
+}

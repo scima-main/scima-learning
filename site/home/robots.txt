@@ -12,5 +12,6 @@ Disallow: /capture/
 Disallow: /insights/
 Disallow: /tracker/
 Disallow: /games/
+Disallow: /packs/
 
 Sitemap: https://study.scima-net.com/sitemap.xml

@@ -1,0 +1,9 @@
+{
+  "packs": [
+    {
+      "file": "spanish-starter.json",
+      "name": "Spanish Starter Pack",
+      "description": "Six survival phrases with synonym-tolerant answers — a friendly first deck for new users."
+    }
+  ]
+}

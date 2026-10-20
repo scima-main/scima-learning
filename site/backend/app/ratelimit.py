@@ -16,6 +16,7 @@ BUCKETS = {
     "get_deck": RateLimit(120, 60),
     "export_deck": RateLimit(30, 60),
     "quizlet": RateLimit(30, 60),
+    "packs": RateLimit(60, 60),
 }
 
 _hits: dict[str, deque] = defaultdict(deque)

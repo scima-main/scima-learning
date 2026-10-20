@@ -50,15 +50,15 @@
 
    ═══ Hosted images ══════════════════════════════════════════════════════
    Every relative image src is assumed to be hosted in the landing folder's
-   media directory — ./home/media/* — so ABOUT.md only has to name the file:
+   media directory — ./home/assets/media/* — so ABOUT.md only has to name the file:
    ![logo](logo.png). media/logo.png, ./media/logo.png, home/media/logo.png,
-   ./home/media/logo.png and ../media/logo.png all resolve to that same
+   ./home/assets/media/logo.png and ../media/logo.png all resolve to that same
    file, and subfolders are kept (banners/x.png → media/banners/x.png).
    Absolute http(s)/data:image URLs are passed through untouched, and a
    relative *link* to a media-ish file (.png/.pdf/.mp4/…) resolves the same
    way. The directory is resolved with SCIMA_PAGE.root + document.baseURI, so
    /about/ and /dashboard/about/ both find it; missing files degrade to a
-   dashed "not found in ./home/media/" chip (see wireAboutMedia). */
+   dashed "not found in ./home/assets/media/" chip (see wireAboutMedia). */
 
 /* ────────────────────────── URL + escaping helpers ────────────────────── */
 
@@ -67,7 +67,7 @@
 // doesn't load the blob store. Falls back to the global when one exists
 // (extension build), and to the bare relative path when there's no DOM
 // (node test harness).
-const ABOUT_MEDIA_DIR = 'media/';
+const ABOUT_MEDIA_DIR = 'assets/media/';
 
 function aboutAssetUrl(path) {
   if (typeof assetUrl === 'function') { try { return assetUrl(path); } catch (e) {} }
@@ -78,7 +78,7 @@ function aboutAssetUrl(path) {
   catch (e) { return root + path; }
 }
 
-// Hosted-image resolver: everything relative lives in ./home/media/*.
+// Hosted-image resolver: everything relative lives in ./home/assets/media/*.
 function mdMediaUrl(src) {
   let s = String(src == null ? '' : src).trim();
   if (!s) return s;
@@ -86,14 +86,14 @@ function mdMediaUrl(src) {
   s = s.replace(/\\/g, '/');
   s = s.replace(/^\/+/, '');                                     // root-relative → landing folder
   s = s.replace(/^(?:\.\.?\/)+/, '');                            // ./ and ../ prefixes
-  s = s.replace(/^(?:home|media)\//i, '').replace(/^media\//i, '');  // home/media/x, media/x, home/x
+  s = s.replace(/^(?:home\/)?(?:assets\/)?media\//i, '').replace(/^assets\//i, '');  // home/assets/media/x, assets/media/x, media/x, home/x
   s = s.replace(/^\/+/, '');
   s = s.replace(/ /g, '%20');                                     // URL() encodes these anyway
   return aboutAssetUrl(ABOUT_MEDIA_DIR + s);
 }
 
 // Extensions that count as "a hosted file" when they turn up in a relative
-// *link* target — those get the same ./home/media/* treatment as images.
+// *link* target — those get the same ./home/assets/media/* treatment as images.
 const MD_ASSET_EXT = /\.(?:png|jpe?g|gif|webp|avif|bmp|ico|svg|mp4|webm|mov|m4v|mp3|ogg|wav|flac|pdf|zip|json|csv)$/i;
 
 function mdLinkUrl(href) {
@@ -885,7 +885,7 @@ function aboutMarkdown() {
   return _aboutCache;
 }
 
-// Images resolve into ./home/media/*, which may not hold the file yet (or
+// Images resolve into ./home/assets/media/*, which may not hold the file yet (or
 // ever). A failed load swaps in a dashed chip naming the folder, so a typo in
 // ABOUT.md reads as "asset missing" instead of a broken-image glyph.
 function wireAboutMedia(box) {
@@ -897,7 +897,7 @@ function wireAboutMedia(box) {
       const chip = el('span', {
         class: 'md-img-missing',
         title: `not found: ${img.getAttribute('src') || ''}`,
-      }, `🖼 ${img.getAttribute('alt') || 'image'} — not in ./home/media/`);
+      }, `🖼 ${img.getAttribute('alt') || 'image'} — not in ./home/assets/media/`);
       img.replaceWith(chip);
     }, { once: true });
   });

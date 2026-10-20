@@ -50,3 +50,8 @@ coverage/
 *.map
 *.dSYM/
 ```
+# Python (backend + tests)
+__pycache__/
+*.pyc
+.venv-test/
+.pytest_cache/

@@ -503,3 +503,28 @@ def test_http_to_https_redirect(client):
 def test_no_redirect_without_proxy_header(client):
     r = client.get("/", follow_redirects=False)
     assert r.status_code == 200
+
+
+def test_packs_endpoint_lists_and_merges_manifest(client, monkeypatch, tmp_path):
+    from app import main as m
+    packs = tmp_path / "packs"
+    packs.mkdir()
+    (packs / "manifest.json").write_text(
+        '{"packs": [{"file": "a.json", "name": "Alpha", "description": "d"}]}',
+        encoding="utf-8")
+    (packs / "a.json").write_text('{"deck": {"name": "A", "cards": []}}', encoding="utf-8")
+    (packs / "b.json").write_text('{"deck": {"name": "B", "cards": []}}', encoding="utf-8")
+    monkeypatch.setattr(m, "PACKS_DIR", packs)
+    r = client.get("/api/v1/packs")
+    assert r.status_code == 200
+    items = r.json()["packs"]
+    assert [i["file"] for i in items] == ["a.json", "b.json"]
+    assert items[0]["name"] == "Alpha" and items[0]["description"] == "d"
+    assert items[1]["name"] == "b"                      # stem fallback
+    assert items[0]["bytes"] > 0
+
+
+def test_packs_endpoint_ships_sample(client):
+    r = client.get("/api/v1/packs")
+    files = [i["file"] for i in r.json()["packs"]]
+    assert "spanish-starter.json" in files

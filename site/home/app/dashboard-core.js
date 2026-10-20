@@ -109,6 +109,7 @@ const VIEW_ROUTES = {
   analytics: 'analytics',
   quests: 'analytics',   // Quests merged into the Analytics page
   games: 'games',        // hidden pre-launch Arcade route (direct URL only)
+  packs: 'packs',        // hidden Packs route (official pack downloads, direct URL only)
   community: '',         // Community lives in the landing document at
                          // /#community (the old standalone /community/ mount
                          // is deprecated); entry is the nav tab only — the
@@ -2333,7 +2334,8 @@ function closeNav() {
 function viewRenderer(id) {
   const FC_RENDERERS = { home: 'renderHome', decks: 'renderDecks', study: 'renderStudy',
     library: 'renderLibrary', analytics: 'renderAnalytics', quests: 'renderQuests', settings: 'renderSettings',
-    about: 'renderAbout', community: 'renderCommunity', games: 'renderGames' };
+    about: 'renderAbout', community: 'renderCommunity', games: 'renderGames',
+    packs: 'renderPacks' };
   return FC_RENDERERS[id] ? window[FC_RENDERERS[id]] : null;
 }
 function renderView(id) {

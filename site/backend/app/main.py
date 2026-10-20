@@ -753,6 +753,42 @@ async def proxy_quizlet(
     return Response(content=upstream.content, media_type="application/json")
 
 
+# ── Packs directory listing (hidden /packs/ page) ─────────────────────────
+
+
+@app.get("/api/v1/packs")
+def list_packs(request: Request):
+    """List *.json packs in <landing>/assets/packs/, merging optional
+    curated metadata from manifest.json. The page falls back to reading
+    manifest.json directly when no backend is present (static hosting)."""
+    enforce_rate_limit(request, "packs")
+    manifest: dict = {}
+    mf = PACKS_DIR / "manifest.json"
+    if mf.is_file():
+        try:
+            raw = json.loads(mf.read_text(encoding="utf-8"))
+            entries = raw.get("packs") if isinstance(raw, dict) else raw
+            for e in entries or []:
+                if isinstance(e, dict) and isinstance(e.get("file"), str):
+                    manifest[e["file"]] = e
+        except (ValueError, OSError):
+            manifest = {}
+    items = []
+    if PACKS_DIR.is_dir():
+        for p in sorted(PACKS_DIR.glob("*.json")):
+            if p.name == "manifest.json" or not p.is_file():
+                continue
+            meta = manifest.get(p.name, {})
+            items.append({
+                "file": p.name,
+                "name": str(meta.get("name") or p.stem)[:80],
+                "description": str(meta.get("description") or "")[:300],
+                "bytes": p.stat().st_size,
+            })
+    return {"packs": items}
+
+
+
 @app.post(
     "/api/v1/decks",
     response_model=DeckSummary,
@@ -880,6 +916,7 @@ def create_deck(
 # main.py sits at <repo>/backend/app/main.py, so parents[2] is <repo>.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STUDY_LANDING_DIR = REPO_ROOT / "home"
+PACKS_DIR = STUDY_LANDING_DIR / "assets" / "packs"
 # The legacy standalone community page was renamed upstream
 # (community/ → community-deprecated/); accept either name so checkouts
 # from before or after the rename both boot.
