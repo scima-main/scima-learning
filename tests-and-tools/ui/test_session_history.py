@@ -144,3 +144,73 @@ def test_clear_history(page, site_base, seeded):
     page.get_by_role("button", name="Clear history").click()
     expect(page.locator(f"{PANEL} .card")).to_have_count(0)
     expect(page.locator(PANEL)).to_contain_text("No sessions yet")
+
+
+# ── Per-answer storage + wrong-only repeat ──────────────────────────────────
+
+def _rate_through_session(page, ratings):
+    """Rate the whole due queue (demo: 5 due) with the given rating list."""
+    page.click("#tutorial-target-study-start")
+    for rating in ratings:
+        expect(page.locator(".flashcard.front")).to_be_visible(timeout=8000)
+        pages.reveal(page)
+        pages.rate(page, rating)
+        page.wait_for_timeout(120)
+    page.wait_for_function("() => !studySession || !studySession.active",
+                           timeout=8000)
+    expect(page.locator("#view-study")).to_contain_text("Session Complete!")
+    page.get_by_role("button", name="New Session").click()   # back to picker
+    expect(page.locator(TOGGLE)).to_be_visible()
+
+
+def test_session_stores_every_answer_with_correctness(page, site_base, seeded):
+    goto_study(page, site_base, seeded)
+    _rate_through_session(page, ["Again", "Good", "Again", "Easy", "Good"])
+    entry = page.evaluate("() => state.sessionLog[0]")
+    assert entry["status"] == "complete"
+    assert len(entry["answers"]) == 5, entry["answers"]
+    assert [a["ok"] for a in entry["answers"]] == \
+        [False, True, False, True, True]
+    assert [a["r"] for a in entry["answers"]] == [1, 3, 1, 4, 3]
+    assert all(isinstance(a["ms"], int) and a["ms"] >= 0 for a in entry["answers"])
+    # answer ids are exactly the queue, in order
+    assert [a["id"] for a in entry["answers"]] == entry["queueIds"]
+
+
+def test_repeat_wrong_replays_only_missed_cards(page, site_base, seeded):
+    goto_study(page, site_base, seeded)
+    _rate_through_session(page, ["Again", "Good", "Again", "Easy", "Good"])
+    entry = page.evaluate("() => state.sessionLog[0]")
+    wrong_ids = [a["id"] for a in entry["answers"] if not a["ok"]]
+    open_history(page)
+    wrong_btn = page.locator(PANEL + " button", has_text="Repeat wrong (2)")
+    expect(wrong_btn).to_be_visible()
+    wrong_btn.click()
+    expect(page.locator(".flashcard.front")).to_be_visible(timeout=8000)
+    sess = page.evaluate("() => ({ n: studySession.queue.length,"
+                         " ids: studySession.queue.map(c => c.id),"
+                         " mode: studySession.mode })")
+    assert sess["n"] == 2
+    assert sess["ids"] == wrong_ids          # original order kept
+    assert sess["mode"] == entry["mode"]
+
+
+def test_no_repeat_wrong_button_when_nothing_missed(page, site_base, seeded):
+    goto_study(page, site_base, seeded)
+    _rate_through_session(page, ["Good"] * 5)
+    open_history(page)
+    expect(page.locator(PANEL + " button",
+                        has_text=re.compile(r"Repeat wrong"))).to_have_count(0)
+    expect(page.locator(PANEL + " button", has_text="Repeat")).to_be_visible()
+
+
+def test_answers_survive_reload_and_trim_with_queues(page, site_base, seeded):
+    goto_study(page, site_base, seeded)
+    _rate_through_session(page, ["Again", "Good", "Again", "Easy", "Good"])
+    page.wait_for_timeout(900)                 # debounced save
+    page.reload(wait_until="load")
+    pages.app_ready(page)
+    entry = page.evaluate("() => state.sessionLog[0]")
+    assert len(entry["answers"]) == 5
+    # sanitizeMfState keeps the records (pass-through for log entries)
+    assert all(set(a) >= {"id", "r", "ok"} for a in entry["answers"])

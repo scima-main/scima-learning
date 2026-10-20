@@ -87,6 +87,8 @@ document.addEventListener('click', e => {
   }
 }, true);
 function _scTouchPrevent(e) { e.preventDefault(); }   // stops scroll mid-drag
+// …and a long-press context menu must not pop over an in-flight drag.
+document.addEventListener('contextmenu', e => { if (_touchDrag) e.preventDefault(); }, true);
 
 function _scTouchTargetAt(x, y) {
   const el = document.elementFromPoint(x, y);
@@ -347,7 +349,12 @@ function renderSubjectView(c, subjectKey) {
     el('div',{class:'ui-action-group',style:'display:flex;gap:8px'},
       btn('+ New Folder','ghost',{onclick:()=>openCreateFolderModal(subjectKey,null)}),
       btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal(subjectKey)}),
-      btn('▶ Study All','ghost',{onclick:()=>{ state.studyScope=[{type:'subject',id:subjectKey}]; navigate('study'); }})
+      btn('▶ Study All','ghost',{onclick:()=>{ state.studyScope=[{type:'subject',id:subjectKey}]; navigate('study'); }}),
+      btn('Aa Case…','ghost',{title:'Standardize letter case / endings across this subject',
+        onclick:()=>openCaseStandardizeModal(`the subject "${s.name}"`, {
+          cards: allDecks.flatMap(d=>d.cards),
+          decks: allDecks,
+          folders: state.folders.filter(f=>(f.subjectKey||DEFAULT_SUBJECT_KEY)===subjectKey)})})
     )
   );
   c.append(breadcrumb,topBar);
@@ -431,7 +438,13 @@ function renderFolderView(c, folderId) {
       btn('▶ Study Folder','ghost',{onclick:()=>{ state.studyScope=[{type:'folder',id:folderId}]; navigate('study'); }}),
       btn('📂 Move to Folder…','ghost',{title:'Move this folder into another folder (or a subject\'s top level)',onclick:()=>openMoveFolderModal(folderId)}),
       btn('📚 Move to Subject…','ghost',{onclick:()=>openMoveFolderSubjectModal(folderId)}),
-      btn('⬇️ Export Folder','ghost',{onclick:()=>exportFolder(folderId)})
+      btn('⬇️ Export Folder','ghost',{onclick:()=>exportFolder(folderId)}),
+      btn('Aa Case…','ghost',{title:'Standardize letter case / endings across this folder (subfolders included)',
+        onclick:()=>{ const sub=new Set(folderSubtreeIds(folderId));
+          openCaseStandardizeModal(`the folder "${folder.name}" (incl. subfolders)`, {
+            cards: cardsInFolderSubtree(folderId),
+            decks: state.decks.filter(d=>sub.has(d.folderId)),
+            folders: state.folders.filter(f=>sub.has(f.id))}); }})
     )
   );
   c.append(breadcrumb,topBar);
@@ -472,6 +485,267 @@ function renderFolderView(c, folderId) {
         btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal(folder.subjectKey,folderId)})
       )
     ));
+}
+
+// ── Case standardization (batch text cleanup) ────────────────────────────
+// Three transforms, applicable to any card set (one card, a selection, a
+// deck, a folder subtree, a subject): ALL CAPS, all lowercase, and Title
+// Case that capitalizes every non-grammar word while keeping small
+// function words (by, of, a, the, …) lowercase — first and last word always
+// capitalized. KaTeX spans ($…$ / $$…$$) are NEVER touched: TeX is
+// case-sensitive, so uppercasing a formula would break it.
+const CASE_SMALL_WORDS = new Set(['a','an','the','and','but','or','nor','for','so','yet',
+  'at','by','in','of','on','to','up','off','out','per','via','as','from','with',
+  'into','onto','upon','than','till','until','like','near','past']);
+const CASE_WORD_RE = /\p{L}[\p{L}\p{N}'’-]*/gu;
+
+/** Split into [{math, text}] segments so transforms skip TeX spans. */
+function scCaseSegments(text) {
+  return String(text).split(/(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g)
+    .filter(seg => seg !== '')
+    .map((seg, i) => ({ math: i % 2 === 1, text: seg }));
+}
+function scTitleCase(text) {
+  const segs = scCaseSegments(text);
+  const words = segs.filter(g => !g.math)
+    .flatMap(g => g.text.match(CASE_WORD_RE) || []);
+  const total = words.length;
+  let wi = 0;
+  const cap = w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  return segs.map(g => {
+    if (g.math) return g.text;
+    return g.text.replace(CASE_WORD_RE, m => {
+      const i = wi++;
+      const lower = m.toLowerCase();
+      if (i === 0 || i === total - 1) return cap(m);
+      return CASE_SMALL_WORDS.has(lower) ? lower : cap(m);
+    });
+  }).join('');
+}
+const CASE_TOOLS = {
+  upper: { label: 'ALL CAPS', example: 'the cell wall → THE CELL WALL',
+    apply: t => scCaseSegments(t).map(g => g.math ? g.text : g.text.toUpperCase()).join('') },
+  lower: { label: 'all lowercase', example: 'The Cell Wall → the cell wall',
+    apply: t => scCaseSegments(t).map(g => g.math ? g.text : g.text.toLowerCase()).join('') },
+  title: { label: 'Title Case', example: 'the wall of a cell → The Wall of a Cell',
+    apply: scTitleCase },
+};
+const CASE_FIELDS = ['front', 'back', 'hint'];
+
+/** Compute every field change a tool would make across a card set. */
+function scCaseChanges(cards, toolKey) {
+  const apply = CASE_TOOLS[toolKey].apply;
+  const changes = [];
+  (cards || []).forEach(card => {
+    CASE_FIELDS.forEach(field => {
+      const cur = card[field];
+      if (typeof cur !== 'string' || !cur.trim()) return;
+      const next = apply(cur);
+      if (next !== cur) changes.push({ card, field, from: cur, to: next });
+    });
+  });
+  return changes;
+}
+
+/** End-punctuation transforms (the second axis of the batch editor).
+ *  "add" appends a full stop unless the field already ends in sentence
+ *  punctuation; "strip" removes trailing punctuation runs. Both leave KaTeX
+ *  spans alone implicitly — a field ending in "$…$" has no trailing
+ *  punctuation character to match. */
+function scPunctTransform(text, rule) {
+  const v = String(text);
+  if (rule === 'add') {
+    const t = v.trimEnd();
+    if (!t) return v;
+    return '.!?…:;'.includes(t.slice(-1)) ? v : t + '.';
+  }
+  if (rule === 'strip') return v.replace(/[\s.!?,;:…]+$/, '');
+  return v;
+}
+const CASE_CARD_TYPES = [
+  ['basic', 'Basic'], ['multi', 'Multi'], ['markscheme', 'Mark scheme'],
+  ['process', 'Process'], ['calculation', 'Calculation'], ['table', 'Table'],
+];
+
+/** Every edit the current options would make, as {kind, target, field, from,
+ *  to} — one list drives the preview, the count line, Apply and Undo. */
+function scComputeChanges(scope, opts) {
+  const changes = [];
+  const transform = v => {
+    let out = v;
+    if (opts.caseTool !== 'keep') out = CASE_TOOLS[opts.caseTool].apply(out);
+    return scPunctTransform(out, opts.punct);
+  };
+  const typesOn = opts.allTypes ? null : opts.types;
+  const consider = (kind, target, field) => {
+    const cur = target[field];
+    if (typeof cur !== 'string' || !cur.trim()) return;
+    const next = transform(cur);
+    if (next !== cur) changes.push({ kind, target, field, from: cur, to: next });
+  };
+  (scope.cards || []).forEach(card => {
+    if (typesOn && !typesOn.has(card.type || 'basic')) return;
+    if (opts.fronts) consider('card', card, 'front');
+    if (opts.backs)  consider('card', card, 'back');
+    if (opts.hints)  consider('card', card, 'hint');
+  });
+  if (opts.deckNames)   (scope.decks   || []).forEach(d => consider('deck', d, 'name'));
+  if (opts.folderNames) (scope.folders || []).forEach(f => consider('folder', f, 'name'));
+  return changes;
+}
+
+/** Batch case / end-punctuation editor. `scope` = {cards, decks, folders} —
+ *  the entry point decides what each of those means (a selection, a deck, a
+ *  folder subtree, a subject), and the modal's scope checkboxes let the user
+ *  narrow independently: fronts (optionally filtered by card type), backs,
+ *  hints, deck names, folder names. Preview shows the exact edits; Apply
+ *  leaves a 7 s Undo toast holding a snapshot of every touched field. */
+function openCaseStandardizeModal(scopeLabel, scope) {
+  if (Array.isArray(scope)) scope = { cards: scope, decks: [], folders: [] };
+  scope = scope || {};
+  const cards = (scope.cards || []).filter(Boolean);
+  const decks = (scope.decks || []).filter(Boolean);
+  const folders = (scope.folders || []).filter(Boolean);
+  if (!cards.length && !decks.length && !folders.length) {
+    showToast('No cards in scope to standardize'); return;
+  }
+  const opts = { caseTool: 'title', punct: 'leave',
+    fronts: true, backs: true, hints: true,
+    deckNames: false, folderNames: false, allTypes: true, types: new Set() };
+  openModal('Aa Standardize Case', body => {
+    body.appendChild(el('div', { class: 'u-muted-12', style: 'line-height:1.6' },
+      `Batch-edit ${scopeLabel} — ${cards.length} card${cards.length !== 1 ? 's' : ''}` +
+      (decks.length ? `, ${decks.length} deck name${decks.length !== 1 ? 's' : ''}` : '') +
+      (folders.length ? `, ${folders.length} folder name${folders.length !== 1 ? 's' : ''}` : '') +
+      '. Math spans ($…$) are never modified.'));
+
+    const sectionLabel = txt => el('div', { class: 'u-section-label', style: 'margin:12px 0 6px' }, txt);
+    const chip = (label, on, onclick, title) => btn(label, on ? 'primary' : 'ghost',
+      { small: true, title, onclick });
+
+    // ── transform pickers ──
+    const caseBar = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' });
+    const punctBar = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' });
+    // ── scope checkboxes + type chips ──
+    const scopeBar = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' });
+    const typeBar = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px' });
+    const countLine = el('div', { class: 'u-muted-11', style: 'margin:10px 0 8px' });
+    const preview = el('div', { style: 'display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border);max-height:200px;overflow-y:auto' });
+
+    function scopeChip(label, key, available, note) {
+      return chip((opts[key] ? '✓ ' : '') + label, opts[key], () => {
+        if (!available) return;
+        opts[key] = !opts[key]; refresh();
+      }, available ? note : `${note} (none in this scope)`);
+    }
+    function refresh() {
+      caseBar.innerHTML = '';
+      caseBar.appendChild(chip('Keep case', opts.caseTool === 'keep',
+        () => { opts.caseTool = 'keep'; refresh(); }, 'Change endings only — leave letter case alone'));
+      Object.entries(CASE_TOOLS).forEach(([key, def]) => {
+        caseBar.appendChild(chip(def.label, opts.caseTool === key,
+          () => { opts.caseTool = key; refresh(); }, def.example));
+      });
+      punctBar.innerHTML = '';
+      [['leave', 'Leave endings', 'Do not touch end punctuation'],
+       ['add', 'Add "." if missing', 'Append a full stop to every affected field that doesn\u2019t already end in sentence punctuation'],
+       ['strip', 'Strip ending punctuation', 'Remove trailing . ! ? , ; : … from every affected field']]
+        .forEach(([key, label, title]) => punctBar.appendChild(
+          chip(label, opts.punct === key, () => { opts.punct = key; refresh(); }, title)));
+      scopeBar.innerHTML = '';
+      scopeBar.append(
+        scopeChip('Fronts', 'fronts', cards.length > 0, 'Card fronts (questions)'),
+        scopeChip('Backs', 'backs', cards.length > 0, 'Card backs (answers)'),
+        scopeChip('Hints', 'hints', cards.length > 0, 'Card hints'),
+        scopeChip('Deck names', 'deckNames', decks.length > 0, 'Names of the decks in this scope'),
+        scopeChip('Folder names', 'folderNames', folders.length > 0, 'Names of the folders in this scope'));
+      typeBar.innerHTML = '';
+      const anyCardField = opts.fronts || opts.backs || opts.hints;
+      typeBar.style.display = anyCardField ? '' : 'none';
+      typeBar.appendChild(chip(opts.allTypes ? 'All card types' : 'Some types…',
+        opts.allTypes, () => { opts.allTypes = true; opts.types.clear(); refresh(); },
+        'Apply to every card type'));
+      CASE_CARD_TYPES.forEach(([tid, tlabel]) => {
+        const on = !opts.allTypes && opts.types.has(tid);
+        typeBar.appendChild(chip(tlabel, on, () => {
+          if (opts.allTypes) { opts.allTypes = false; opts.types = new Set([tid]); }
+          else if (opts.types.has(tid)) { opts.types.delete(tid); if (!opts.types.size) opts.allTypes = true; }
+          else opts.types.add(tid);
+          refresh();
+        }, `Only ${tlabel.toLowerCase()} cards`));
+      });
+      const changes = scComputeChanges({ cards, decks, folders }, opts);
+      preview.innerHTML = '';
+      const cardIds = new Set(changes.filter(c => c.kind === 'card').map(c => c.target.id));
+      countLine.textContent = changes.length
+        ? `${changes.length} field${changes.length !== 1 ? 's' : ''} would change` +
+          ` (${cardIds.size} card${cardIds.size !== 1 ? 's' : ''}` +
+          (changes.some(c => c.kind === 'deck') ? ' + deck names' : '') +
+          (changes.some(c => c.kind === 'folder') ? ' + folder names' : '') + '):'
+        : 'No changes — everything already matches these settings.';
+      changes.slice(0, 6).forEach(ch => {
+        preview.appendChild(el('div', { style: 'font-size:11px;line-height:1.5' },
+          el('div', { class: 'u-muted-11', style: 'font-size:10px' },
+            `${ch.kind === 'card' ? ch.field : ch.kind + ' name'}`),
+          el('div', { style: 'color:var(--muted);text-decoration:line-through;text-decoration-color:rgba(239,68,68,0.6)', title: ch.from }, ch.from.slice(0, 90)),
+          el('div', { style: 'color:#22c55e', title: ch.to }, ch.to.slice(0, 90))));
+      });
+      if (changes.length > 6) preview.appendChild(el('div', { class: 'u-muted-11' }, `… and ${changes.length - 6} more`));
+    }
+    refresh();
+    body.append(
+      sectionLabel('Letter case'), caseBar,
+      sectionLabel('End punctuation'), punctBar,
+      sectionLabel('Apply to'), scopeBar, typeBar,
+      countLine, preview);
+    body.appendChild(el('div', { class: 'u-muted-11', style: 'margin-top:8px' },
+      'Title Case keeps small words lowercase (' + [...CASE_SMALL_WORDS].slice(0, 14).join(', ') + ', …) unless first or last. End-punctuation rules never touch a field that ends in a math span.'));
+    body.appendChild(btn('Apply', 'primary', { full: true, style: 'margin-top:12px', onclick: () => {
+      const changes = scComputeChanges({ cards, decks, folders }, opts);
+      if (!changes.length) { showToast('Nothing to change'); closeModal(); return; }
+      // Undo snapshot: previous value of every field about to be rewritten
+      const undo = [];
+      const seen = new Set();
+      changes.forEach(ch => {
+        const uidKey = ch.kind + ':' + ch.target.id;
+        if (!seen.has(uidKey)) {
+          seen.add(uidKey);
+          undo.push(ch.kind === 'card'
+            ? { kind: 'card', id: ch.target.id, front: ch.target.front, back: ch.target.back, hint: ch.target.hint }
+            : { kind: ch.kind, id: ch.target.id, name: ch.target.name });
+        }
+        ch.target[ch.field] = ch.to;
+      });
+      scheduleSave(); closeModal(); renderView('decks'); renderSidebar();
+      const n = undo.length;
+      showToast(`Applied to ${n} target${n !== 1 ? 's' : ''} ✓`, 7000, {
+        label: 'Undo', onClick: () => {
+          const allCards = new Map(state.decks.flatMap(d => d.cards).map(c => [c.id, c]));
+          undo.forEach(u => {
+            if (u.kind === 'card') {
+              const card = allCards.get(u.id);
+              if (card) { card.front = u.front; card.back = u.back; card.hint = u.hint; }
+            } else if (u.kind === 'deck') {
+              const d = state.decks.find(d => d.id === u.id);
+              if (d) d.name = u.name;
+            } else {
+              const f = state.folders.find(f => f.id === u.id);
+              if (f) f.name = u.name;
+            }
+          });
+          scheduleSave(); renderView('decks'); renderSidebar();
+          showToast('Change undone ↩');
+        },
+      });
+    } }));
+  });
+}
+
+/** Cards of every deck inside a folder subtree (folder scope button). */
+function cardsInFolderSubtree(folderId) {
+  const ids = new Set(typeof folderSubtreeIds === 'function'
+    ? folderSubtreeIds(folderId) : [folderId]);
+  return state.decks.filter(d => ids.has(d.folderId)).flatMap(d => d.cards);
 }
 
 function openEditDeckModal(deckId) {
@@ -515,7 +789,8 @@ function renderDeckCard(deck, grid) {
       el('div',{style:'display:flex;gap:6px'},
         btn('Manage Cards','ghost',{full:true,onclick:()=>openDeckDetail(deck.id)}),
         btn('🖨️','ghost',{small:true,title:'Export double-sided PDF',onclick:e=>{e.stopPropagation();exportDeckPDF(deck.id);}}),
-        btn('⬇️','ghost',{small:true,title:'Export deck as JSON',onclick:e=>{e.stopPropagation();exportSingleDeck(deck.id);}})
+        btn('⬇️','ghost',{small:true,title:'Export deck as JSON',onclick:e=>{e.stopPropagation();exportSingleDeck(deck.id);}}),
+        btn('Aa','ghost',{small:true,title:'Standardize letter case / endings for this deck',onclick:e=>{e.stopPropagation();openCaseStandardizeModal(`the deck "${deck.name}"`,{cards:deck.cards,decks:[deck],folders:[]});}})
       )
     )
   );
@@ -2382,7 +2657,8 @@ function openDeckDetail(deckId) {
       btn('← Back','ghost',{small:true,onclick:()=>renderView('decks')}),
       mkIcon(deck.emoji,deck.image,'36px','8px'),
       el('div',{},el('div',{style:'font-weight:900;font-size:18px'},deck.name),el('div',{class:'u-muted-12'},`${nOf(deck.cards.length,'card')}`)),
-      el('div',{class:'ui-action-group',style:'margin-left:auto;display:flex;gap:8px;align-items:center'},pinToggleBtn,searchInput,(()=>{ const b=btn('+ Add Card','primary',{onclick:()=>openCardModal(deckId,null)}); b.id='tutorial-target-add-card'; return b; })())
+      el('div',{class:'ui-action-group',style:'margin-left:auto;display:flex;gap:8px;align-items:center'},pinToggleBtn,searchInput,
+        btn('Aa Case…','ghost',{small:true,title:'Standardize letter case / endings across every card in this deck',onclick:()=>openCaseStandardizeModal(`the deck "${deck.name}"`,{cards:deck.cards,decks:[deck],folders:[]})}),(()=>{ const b=btn('+ Add Card','primary',{onclick:()=>openCardModal(deckId,null)}); b.id='tutorial-target-add-card'; return b; })())
     )
   );
 
@@ -2407,7 +2683,9 @@ function openDeckDetail(deckId) {
           state.studyRefine.cardIds=[...selected];
           navigate('study');
         }}),
-        btn('Move to Deck…','primary',{small:true,title:'Combined destination modal · Ctrl+Alt+K = new deck · Ctrl+Alt+M = existing deck',onclick:()=>openMoveCardsModal(deckId,[...selected])})
+        btn('Move to Deck…','primary',{small:true,title:'Combined destination modal · Ctrl+Alt+K = new deck · Ctrl+Alt+M = existing deck',onclick:()=>openMoveCardsModal(deckId,[...selected])}),
+        btn('Aa Case…','ghost',{small:true,title:'Standardize letter case / endings on the selected cards',onclick:()=>{ const deck=state.decks.find(d=>d.id===deckId);
+          openCaseStandardizeModal(`${selected.size} selected card${selected.size!==1?'s':''}`, {cards:deck.cards.filter(c=>selected.has(c.id)),decks:[deck],folders:[]}); }})
       )
     );
   }

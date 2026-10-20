@@ -49,6 +49,8 @@ function attachNextControls(container, rating){
 // Schema (all numeric fields stored as plain numbers; timestamps as ms epoch):
 //   { ts, mode, durationSec, totalCards, correct, incorrect, skipped,
 //     accuracyPct, maxCombo, timed,
+//     answers: [{ id, r (rating 1-4), ok (r>=3), ms }] — every answer of the
+//              session; kept for the newest 40 entries (trimmed with queueIds),
 //     // quiz/gap specific (null for flashcard sessions):
 //     charsTyped, keystrokes, avgKsPerSec, wpm, timeouts,
 //     avgMsPerCard, fastestCardMs, slowestCardMs,
@@ -105,6 +107,9 @@ function pushSessionLog(sess, elapsed, status = 'complete') {
     // older entries keep their stats but lose replayability (trimmed below).
     idx: sess.idx || 0,
     queueIds: (sess.queue || []).map(c => c.id).slice(0, 200),
+    // every answer with its correct-ness ({id, r, ok, ms}) — powers
+    // "Repeat wrong (N)"; trimmed together with queueIds below
+    answers: (sess.answers || []).slice(0, 500),
     reverse: !!sess.reverse,
     scope: sess.scope || null,
     durationSec: elapsed,
@@ -144,7 +149,7 @@ function pushSessionLog(sess, elapsed, status = 'complete') {
   // Keep replay data for only the newest 40 sessions; older rows remain as
   // stats-only history (Analytics needs the numbers, not the queues).
   const withQ = state.sessionLog.filter(e => e.queueIds);
-  if (withQ.length > 40) withQ.slice(40).forEach(e => { delete e.queueIds; delete e.scope; });
+  if (withQ.length > 40) withQ.slice(40).forEach(e => { delete e.queueIds; delete e.scope; delete e.answers; });
   scheduleSave();
 }
 
@@ -172,11 +177,20 @@ function cardsForIds(ids) {
 
 /** Rebuilds a session from a history entry: resume keeps progress + stats,
  *  repeat restarts the same queue/mode/orientation from scratch. */
-function startSessionFromEntry(entry, resume) {
+function startSessionFromEntry(entry, resume, onlyWrong = false) {
   if (!entry || !Array.isArray(entry.queueIds)) {
     showToast('No replayable queue for that session'); return false;
   }
-  const cards = cardsForIds(entry.queueIds);
+  let ids = entry.queueIds;
+  if (onlyWrong) {
+    // Replay filter: keep exactly the cards answered incorrectly last time,
+    // in the original queue order (skips and correct answers stay out).
+    const wrong = new Set((entry.answers || [])
+      .filter(a => a && a.ok === false).map(a => a.id));
+    ids = ids.filter(id => wrong.has(id));
+    if (!ids.length) { showToast('Nothing was answered wrong — nothing to repeat 🎉'); return false; }
+  }
+  const cards = cardsForIds(ids);
   if (!cards.length) { showToast('Those cards no longer exist'); return false; }
   let idx = 0, stats = { correct: 0, incorrect: 0, skipped: 0 };
   if (resume) {
@@ -194,6 +208,7 @@ function startSessionFromEntry(entry, resume) {
     timed: mode==='quiz' && !!state.settings.quizTimed, reverse: !!entry.reverse,
     _cardStart:Date.now(), _firstCardMs:null, _cardTimes:[], _flipTimes:[],
     _keystrokes:0, _charsTyped:0, _backspaces:0, _timeouts:0,
+    answers: [],
     _gap: mode==='gaps' ? {correct:0,close:0,wrong:0} : null };
   spSessionStart();
   renderView('study');
@@ -227,6 +242,10 @@ function renderStudyHistorySection() {
         const existing = cardsForIds(e.queueIds);
         const resumable = e.status === 'aborted' && (e.idx || 0) < existing.length && existing.length > 0;
         const repeatable = existing.length > 0;
+        // wrong-only replay needs stored per-answer records AND the missed
+        // cards to still exist
+        const wrongIds = [...new Set((e.answers || []).filter(a => a && a.ok === false).map(a => a.id))];
+        const wrongLeft = wrongIds.filter(id => existing.some(c => c.id === id)).length;
         const when = new Date(e.ts).toLocaleString(undefined,
           { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
         panel.appendChild(el('div', { class: 'card', style: 'padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap' },
@@ -240,7 +259,10 @@ function renderStudyHistorySection() {
             e.status === 'aborted' ? '#FB923C' : '#22c55e'),
           el('div', { style: 'display:flex;gap:6px' },
             resumable ? btn('Resume', 'primary', { small: true, onclick: () => startSessionFromEntry(e, true) }) : null,
-            repeatable ? btn('Repeat', 'ghost', { small: true, onclick: () => startSessionFromEntry(e, false) }) : null)
+            repeatable ? btn('Repeat', 'ghost', { small: true, onclick: () => startSessionFromEntry(e, false) }) : null,
+            wrongLeft > 0 && !resumable ? btn(`Repeat wrong (${wrongLeft})`, 'ghost',
+              { small: true, title: 'Study this session again — only the answers you missed',
+                onclick: () => startSessionFromEntry(e, false, true) }) : null)
         ));
       });
       panel.appendChild(btn('Clear history', 'ghost', { small: true, onclick: () => {
@@ -549,7 +571,7 @@ function startStudySession(scopes, mode) {
   if(mode==='multi') cards = cards.filter(c=>c.type==='basic');
   pushRecentScope(scopes);
   const timePerCard=state.settings.timedQuizSeconds||30;
-  studySession={active:true,scope:scopes,mode,queue:[...cards].sort(()=>Math.random()-0.5),idx:0,flipped:false,showHint:false,showImages:state.settings.showStudyImages!==false,quizAnswer:'',quizAnswers:[],gapChoice:null,stats:{correct:0,incorrect:0,skipped:0},combo:0,maxCombo:0,startTime:Date.now(),matchMode:state.settings.quizMatchMode||'fuzzy',timePerCard,timeLeft:timePerCard,timedOut:false,timed:mode==='quiz'&&!!state.settings.quizTimed,reverse:!!state.settings.studyReverse,
+  studySession={active:true,scope:scopes,mode,queue:[...cards].sort(()=>Math.random()-0.5),idx:0,flipped:false,showHint:false,showImages:state.settings.showStudyImages!==false,quizAnswer:'',quizAnswers:[],gapChoice:null,stats:{correct:0,incorrect:0,skipped:0},answers:[],combo:0,maxCombo:0,startTime:Date.now(),matchMode:state.settings.quizMatchMode||'fuzzy',timePerCard,timeLeft:timePerCard,timedOut:false,timed:mode==='quiz'&&!!state.settings.quizTimed,reverse:!!state.settings.studyReverse,
     // ── per-session stat accumulators (prefixed _ to distinguish from display fields) ──
     _cardStart: Date.now(),   // timestamp when current card was shown
     _firstCardMs: null,       // ms until first card was answered/rated
@@ -972,7 +994,7 @@ function renderGapCard(card, citBadge) {
       el('div',{class:`quiz-label ${result}`},`${emoji} ${label}`),
       el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em'},
         (isMulti?(isMarkscheme?'Missing marking point:':'Missing answer:'):'Missing word:')+(hits.length>1?'s':'')),
-      ...answersToCheck.map((a,i)=>el('div',{class:'quiz-answer-text',style:`margin-bottom:2px;color:${hits[i]==='correct'?'#22c55e':hits[i]==='close'?'#FB923C':'var(--text)'}`},`${hits[i]==='correct'?'✅ ':hits[i]==='close'?'🟡 ':'⬜ '}${a}`)),
+      ...answersToCheck.map((a,i)=>setRichText(el('div',{class:'quiz-answer-text',style:`margin-bottom:2px;color:${hits[i]==='correct'?'#22c55e':hits[i]==='close'?'#FB923C':'var(--text)'}`}),`${hits[i]==='correct'?'✅ ':hits[i]==='close'?'🟡 ':'⬜ '}${a}`)),
       setRichText(el('div',{style:'font-size:12px;color:var(--muted);margin-top:8px'}),fullAnswerText)
     );
     if(citBadge) compareEl.appendChild(citBadge);
@@ -1021,7 +1043,7 @@ function renderProcessGapCard(card, citBadge) {
   qChildren.push(setRichText(el('div',{class:'flashcard-front-text',style:'font-size:18px'}),formatCardFront(card)));
   qChildren.push(el('div',{style:'font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-top:10px'},`Step ${removedIndex+1} is missing:`));
   qChildren.push(el('ol',{style:'text-align:left;margin:8px auto 0;max-width:380px;padding-left:22px;line-height:1.8;font-size:14px'},
-    ...steps.map((s,i)=>i===removedIndex?el('li',{style:'color:var(--muted);font-style:italic'},'▁▁▁▁▁▁▁'):el('li',{},s))
+    ...steps.map((s,i)=>i===removedIndex?el('li',{style:'color:var(--muted);font-style:italic'},'▁▁▁▁▁▁▁'):setRichText(el('li'),s))
   ));
   const questionCard=el('div',{class:'flashcard front',style:'cursor:default;min-height:160px'},...qChildren);
 
@@ -1223,7 +1245,7 @@ function renderCalcQuizCard(card, citBadge) {
       finalNote,
       (card.backImage&&sess.showImages!==false)?el('img',{src:card.backImage,style:'max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-bottom:8px'}):null,
       el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em'},'Correct answer:'),
-      el('div',{class:'quiz-answer-text'},`${card.back}${card.calcUnit?` ${card.calcUnit}`:''}`),
+      setRichText(el('div',{class:'quiz-answer-text'}),`${card.back}${card.calcUnit?` ${card.calcUnit}`:''}`),
       workingInput?el('div',{style:'font-size:10px;color:var(--muted);margin:10px 0 6px;text-transform:uppercase;letter-spacing:0.05em'},'Method marks:'):null,
       workingInput?el('ul',{style:'text-align:left;margin:0;padding-left:20px;line-height:1.7;font-size:13px'},
         ...card.methodPool.map((k,i)=>el('li',{style:`color:${methodHits[i]?'#22c55e':'var(--text)'}`},`${methodHits[i]?'✅ ':'⬜ '}${k}`))
@@ -1495,7 +1517,7 @@ function renderQuizCard(card, citBadge, scrollArea) {
         (card.backImage&&sess.showImages!==false)?el('img',{src:card.backImage,style:'max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-bottom:8px'}):null,
         el('div',{style:'font-size:10px;color:var(--muted);margin:8px 0 6px;text-transform:uppercase;letter-spacing:0.05em'},'Mark scheme:'),
         el('ul',{style:'text-align:left;margin:0;padding-left:20px;line-height:1.7;font-size:13px'},
-          ...expectedAnswers.map((k,i)=>el('li',{style:`color:${hits[i]?'#22c55e':'var(--text)'}`},`${hits[i]?'✅ ':'⬜ '}${k}`))
+          ...expectedAnswers.map((k,i)=>setRichText(el('li',{style:`color:${hits[i]?'#22c55e':'var(--text)'}`}),`${hits[i]?'✅ ':'⬜ '}${k}`))
         )
       ];
     } else if(!isMulti){
@@ -1509,7 +1531,7 @@ function renderQuizCard(card, citBadge, scrollArea) {
           : null,
         el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em'},'Expected answer:'),
         ((sessIsReversed(card)?card.frontImage:card.backImage)&&sess.showImages!==false)?el('img',{src:sessIsReversed(card)?card.frontImage:card.backImage,style:'max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-bottom:8px'}):null,
-        el('div',{class:'quiz-answer-text'},expectedAnswers[0]||'')
+        setRichText(el('div',{class:'quiz-answer-text'}),expectedAnswers[0]||'')
       ];
     } else {
       // Greedily pair each typed answer with the closest still-unmatched expected
@@ -1532,12 +1554,12 @@ function renderQuizCard(card, citBadge, scrollArea) {
       resultChildren=[
         el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em'},`${correctCount} / ${requiredAnswers} correct`),
         ...rows.map(r=>el('div',{style:'display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:4px 0'},
-          el('span',{},r.userAnswer||'(blank)'),
+          setRichText(el('span',{}),r.userAnswer||'(blank)'),
           el('span',{style:`font-weight:700;color:${r.rowResult==='correct'?'#22c55e':'#ef4444'}`},r.rowResult==='correct'?'✅':'❌')
         )),
         el('div',{style:'font-size:10px;color:var(--muted);margin:8px 0 6px;text-transform:uppercase;letter-spacing:0.05em'},'Expected answers:'),
         (card.backImage&&sess.showImages!==false)?el('img',{src:card.backImage,style:'max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-bottom:8px'}):null,
-        el('div',{class:'quiz-answer-text'},expectedAnswers.join(', '))
+        el('div',{class:'quiz-answer-text',style:'display:flex;flex-direction:column;gap:2px'},...expectedAnswers.map(k=>setRichText(el('div'),k)))
       ];
     }
     compareEl.style.display=''; compareEl.className=`quiz-compare ${result}`; compareEl.innerHTML='';
@@ -1591,6 +1613,19 @@ function rateCard(rating) {
   }
   const good=rating>=3;
   const wasNew = card.state==='new';
+  // Per-answer record: id, rating, correct-ness and the time spent, so a
+  // finished session can be repeated over JUST the missed cards (see the
+  // Session History panel's "Repeat wrong" button). Every mode funnels
+  // through rateCard() — flashcard buttons directly, graded modes via the
+  // Next/Finish button attachNextControls() wires to the computed rating.
+  if (!sess.answers) sess.answers = [];
+  sess.answers.push({
+    id: card.id,
+    r: rating,
+    ok: good,
+    ms: sess._cardTimes.length ? sess._cardTimes[sess._cardTimes.length - 1]
+        : Date.now() - (sess._cardStart || Date.now()),
+  });
   sess.stats.correct+=good?1:0; sess.stats.incorrect+=good?0:1;
   sess.combo=good?sess.combo+1:0; sess.maxCombo=Math.max(sess.maxCombo,sess.combo);
   const deck=state.decks.find(d=>d.cards.some(c=>c.id===card.id));

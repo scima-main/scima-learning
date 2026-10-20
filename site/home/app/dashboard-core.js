@@ -2577,6 +2577,7 @@ const PAGE_HELP = {
     'Modes: SRS Review (due cards, spaced repetition), Cram (all cards, no scheduling), Written Quiz (type your answer), Fill in the Gaps, Weakness (cards you struggle with), and Multiple Choice (pick the right answer from 4, basic cards only). A green Show Hint button in the corner works in any mode — using it halves that card\'s XP.',
     'During a card: click it (or Reveal) to see the answer, use Hint or Skip, then rate how well you knew it — Again / Hard / Good / Easy — which schedules when you\u2019ll see it next.',
     'Toggle "Show card images during study" if your cards have images and you\u2019d rather hide them.',
+    'Session History stores every answer with its correct-ness: “Repeat wrong (N)” on a past session replays only the cards you missed, in the original order and mode.',
   ]},
   library: { icon:'📖', title:'Library', intro:'Import book, PDF, EPUB, or article source texts so you can cite them from your flashcards.', tips:[
     '"+ Add Source" imports a file; "Import" brings in previously exported Library data.',

@@ -141,7 +141,14 @@ Key fixtures: `app` (booted `/` on empty), `demo_app` (booted `/` on demo),
     `page_errors` (real JS exceptions), not console errors.
   - Review dates use **UTC** (`today()` = `toISOString()`); `seed.utc_day()`
     matches.
-  - Deep links: `/packs/#packs/<pack>` opens a pack's detail modal (after the
+  - Session answers: every rated card lands in `sessionLog[0].answers`
+  (`{id, r, ok, ms}`); the history row's “Repeat wrong (N)” replays only
+  `ok === false` cards. Case tools: “Aa Case…” buttons (subject/folder/
+  deck/selection bars, deck cards) open the preview modal — letter case
+  (incl. Keep case) × end punctuation (leave / add “.” / strip) × scope
+  (fronts+type filter, backs, hints, deck names, folder names); `$…$`
+  spans are never touched; Apply leaves an Undo toast.
+- Deep links: `/packs/#packs/<pack>` opens a pack's detail modal (after the
   async list lands); `/#community/<deckId>` opens a registry deck's detail
   screen (mock `/decks/<id>` BEFORE the broad `/decks*` list pattern — see
   `ui/test_community.py::_detail_handlers`). Closing/back folds the hash

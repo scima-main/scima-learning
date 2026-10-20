@@ -237,6 +237,12 @@ button; and bootstrap's init() resolves the hash's FIRST path
   picker's 🕘 Session History panel (under the scheduler help button) with
   Resume (incomplete, restores idx + stats) and Repeat (same queue/mode/
   orientation, fresh stats). Replay data kept for the newest 40 entries.
+  Every entry also stores `answers: [{id, r, ok, ms}]` — each rated card
+  with its rating and correct-ness (`ok = rating >= 3`, the same line
+  `stats.correct` uses), recorded in `rateCard()`, the single funnel every
+  mode rates through — which powers **Repeat wrong (N)**: a third history
+  action that replays exactly the missed cards, original order and mode
+  (skips and correct answers stay out; trimmed together with `queueIds`).
 - **SEO layer**: `robots.txt` + `sitemap.xml` at the landing root; unique
   per-page titles/descriptions, canonical + OpenGraph tags on the six
   content routes; `noindex` on `/settings/` and the redirect stubs;
@@ -251,6 +257,21 @@ button; and bootstrap's init() resolves the hash's FIRST path
   front-as-answer across flashcard, written quiz, multiple choice and
   fill-the-gap (which blanks the question instead). Directional types
   (cloze/markscheme/process/calculation/table) always study forward.
+- **Case & ending standardization**: “Aa Case…” batch editors on the
+  subject bar, folder bar, deck-detail bar, card-selection bar and each deck
+  card. Two independent transform axes — letter case (Keep case / ALL CAPS /
+  all lowercase / Title Case that keeps small grammar words lowercase,
+  first/last word always capitalized) and end punctuation (leave / add “.”
+  if missing / strip trailing punctuation) — apply to an independently
+  chosen scope: fronts (optionally filtered by card type: basic/multi/
+  markscheme/process/calculation/table), backs, hints, deck names and
+  folder names (the name scopes exist only where the entry point's scope
+  carries decks/folders: subject ⊃ folders ⊃ decks ⊃ selection). KaTeX
+  spans ($…$ / $$…$$) are segment-skipped by every transform (TeX is
+  case-sensitive, and a field ending in a math span has no trailing
+  punctuation to match); the modal previews the exact field edits before
+  applying, and Apply leaves a 7 s Undo toast holding a snapshot of every
+  touched field or name.
 - **Card/deck/folder surgery**: duplicate-card action, move-decks-between-
   subjects (deck selection bar), move-folder-between-subjects (📚 row action,
   folder toolbar, subtree-aware: subfolders and contained decks are retagged

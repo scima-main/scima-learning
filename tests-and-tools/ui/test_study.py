@@ -178,3 +178,40 @@ def test_refine_stale_subset(page, base_url, seeded):
     n_input.fill("2")
     n_input.dispatch_event("change")
     expect(page.locator("#view-study")).to_contain_text("2 of 7 cards selected")
+
+
+def test_quiz_feedback_renders_latex(page, site_base, seeded):
+    """The written-quiz compare panel must render the expected answer as
+    rich text (KaTeX), not plain source — site/home until re-minified."""
+    card = seedlib.make_card("What is $\\sqrt{16}$?", "$2\\pi r^2$ watts",
+                             card_id="c_latex")
+    deck = seedlib.make_deck("Latex", [card], deck_id="d_latex")
+    seeded(mf_state=seedlib.make_mf_state(decks=[deck]))
+    pages.goto_app(page, site_base, "/study/")
+    page.locator("#view-study .card", has_text="Written Quiz") \
+        .get_by_role("button", name="Start").click()
+    page.wait_for_selector(".quiz-input-area")
+    page.fill(".quiz-input-area", "wrong answer")
+    page.get_by_role("button", name=re.compile("Check Answer")).click()
+    page.wait_for_selector(".quiz-compare")
+    expect(page.locator(".quiz-compare .katex").first).to_be_visible(
+        timeout=8000)
+    assert "$" not in page.locator(
+        ".quiz-compare .quiz-answer-text").inner_text()
+
+
+def test_gap_missing_words_render_latex(page, site_base, seeded):
+    """Same guarantee for the Fill-in-the-Gaps missing-words list."""
+    card = seedlib.make_card("Name the formula", "area is $\\pi r^2$ always",
+                             card_id="c_gap")
+    deck = seedlib.make_deck("Latex", [card], deck_id="d_latex2")
+    seeded(mf_state=seedlib.make_mf_state(decks=[deck]))
+    pages.goto_app(page, site_base, "/study/")
+    page.locator("#view-study .card", has_text="Fill in the Gaps") \
+        .get_by_role("button", name="Start").click()
+    page.wait_for_selector(".quiz-input-area")
+    page.fill(".quiz-input-area", "wrong")
+    page.get_by_role("button", name=re.compile("Check Answer")).click()
+    page.wait_for_selector(".quiz-compare")
+    expect(page.locator(".quiz-compare .katex").first).to_be_visible(
+        timeout=8000)
