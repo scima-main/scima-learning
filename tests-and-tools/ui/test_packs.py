@@ -94,3 +94,64 @@ def test_robots_disallows_packs(site_base):
     import urllib.request
     with urllib.request.urlopen(site_base + "/robots.txt", timeout=5) as r:
         assert "Disallow: /packs/" in r.read().decode()
+
+
+# ── Pack deep links (#packs/<pack>) ─────────────────────────────────────────
+
+def test_pack_deep_link_opens_detail(page, site_base, seeded):
+    """A shared /packs/#packs/<stem> link opens that pack's detail modal."""
+    seeded("preset:empty")
+    pages.goto_app(page, site_base, "/packs/#packs/spanish-starter")
+    pages.expect_modal(page, "Spanish Starter Pack", timeout=10000)
+    expect(page.locator("#pack-detail-contents")).to_contain_text("Contains",
+                                                                  timeout=8000)
+    assert page.evaluate("() => location.hash") == "#packs/spanish-starter"
+
+
+def test_pack_deep_link_resolves_leniently(page, site_base, seeded):
+    """The payload resolves by display name too (matchName), not just the
+    file stem — shared links survive small typos and case changes."""
+    seeded("preset:empty")
+    pages.goto_app(page, site_base, "/packs/#packs/Spanish%20Starter")
+    pages.expect_modal(page, "Spanish Starter Pack", timeout=10000)
+
+
+def test_pack_deep_link_close_folds_hash(page, site_base, seeded):
+    seeded("preset:empty")
+    pages.goto_app(page, site_base, "/packs/#packs/spanish-starter")
+    pages.expect_modal(page, "Spanish Starter Pack", timeout=10000)
+    page.click("#modal-close")
+    page.wait_for_function("() => location.hash === '#packs'", timeout=5000)
+    expect(page.locator("#packs-grid .card")).to_have_count(1)
+
+
+def test_pack_deep_link_unknown_pack_shows_list(page, site_base, seeded):
+    """An unresolvable payload is a no-op: the grid renders, no modal."""
+    seeded("preset:empty")
+    pages.goto_app(page, site_base, "/packs/#packs/not-a-real-pack")
+    expect(page.locator("#packs-grid .card",
+                        has_text="Spanish Starter Pack")).to_be_visible(timeout=8000)
+    expect(page.locator("#modal-backdrop")).to_have_class(re.compile(r"hidden"))
+
+
+def test_pack_card_title_opens_detail_and_mirrors_hash(page, site_base, seeded):
+    goto_packs(page, site_base, seeded)
+    card = page.locator("#packs-grid .card", has_text="Spanish Starter Pack")
+    expect(card).to_be_visible(timeout=8000)
+    card.locator("div[role='button']").click()
+    pages.expect_modal(page, "Spanish Starter Pack")
+    page.wait_for_function(
+        "() => location.hash === '#packs/spanish-starter'", timeout=5000)
+
+
+def test_pack_share_button_copies_deep_link(page, site_base, seeded, context):
+    context.grant_permissions(["clipboard-read", "clipboard-write"],
+                              origin=site_base)
+    goto_packs(page, site_base, seeded)
+    card = page.locator("#packs-grid .card", has_text="Spanish Starter Pack")
+    expect(card).to_be_visible(timeout=8000)
+    card.locator("button[title*='shareable link']").click()
+    expect(page.locator("#toast")).to_contain_text("Pack link copied", timeout=5000)
+    clip = page.evaluate("() => navigator.clipboard.readText()")
+    assert clip.endswith("/packs/#packs/spanish-starter"), clip
+    assert clip.startswith(site_base), clip

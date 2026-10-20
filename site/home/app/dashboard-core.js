@@ -109,11 +109,13 @@ const VIEW_ROUTES = {
   analytics: 'analytics',
   quests: 'analytics',   // Quests merged into the Analytics page
   games: 'games',        // hidden pre-launch Arcade route (direct URL only)
-  packs: 'packs',        // hidden Packs route (official pack downloads, direct URL only)
+  packs: 'packs',        // hidden Packs route (official pack downloads, direct
+                         // URL only); #packs/<pack> deep-links one pack's detail
   community: '',         // Community lives in the landing document at
                          // /#community (the old standalone /community/ mount
-                         // is deprecated); entry is the nav tab only — the
-                         // landing page renders no in-page tab bar for it
+                         // is deprecated); entry is the nav tab or a
+                         // /#community/<deckId> deep link — the landing page
+                         // renders no in-page tab bar for it
   settings: 'settings',
   about: 'about',
 };
@@ -2364,6 +2366,8 @@ function renderView(id) {
 // path-style URLs work too). Shape:
 //   #decks/<Subject>/<folder…>/<deck>      names, resolved leniently
 //   #library/<folder…>/<book>              ditto, last seg may open a book
+//   #packs/<pack>                          pack file stem / name → detail modal
+//   #community/<deckId>                    server deck id → detail screen
 //   #study?scope=…&mode=…&seed=…&qid=…&timed=…
 function scParseHash() {
   if (typeof location === 'undefined' || !location.hash) return null;
@@ -2600,6 +2604,11 @@ const PAGE_HELP = {
     'Navigation: reorder the sidebar tabs or hide them into the drawer.',
     'Data Management: "Export All Data" downloads a complete .zip backup — every deck/card, folder, source (including bundled PDFs and illustrated EPUBs), review history, achievements, tracker data, streak, and recent study scopes. "Import" reads that .zip (or an older .json export) back in, either merging with or replacing your current data.',
   ]},
+  packs: { icon:'📦', title:'Packs', intro:'Official deck packs curated by SCIMA — prebuilt .json exports you can add to your decks in one tap.', tips:[
+    'Each pack offers exactly two actions: ➕ Add to Decks (imports a fresh copy into YOUR browser — nothing is uploaded and existing decks are never touched) and ⬇ Download (the raw .json file).',
+    'Open a pack (tap its title) for a detail view with its contents and a 🔗 shareable link — anyone following the link lands straight on that pack.',
+    'Adding the same pack twice creates a second independent copy — packs never merge into decks you already have.',
+  ]},
   about: { icon:'❓', title:'About', intro:'What SCIMA Learning is — rendered live from the ABOUT.md file at the site root.', tips:[
     'The markdown is fetched and rendered on every load, so this page always matches the deployed file — no rebuild needed to update it.',
     'Supported markdown: headings, paragraphs, bullet/numbered lists, blockquotes, code fences, inline code, bold, italics, links, and --- rules.',
@@ -2761,8 +2770,16 @@ function openCmd() {
   document.getElementById('cmd-input').focus();
   _cmdSetHighlight(0);
 }
+// Mobile never surfaces the command palette: the ⌘K hint pill is hidden by
+// CSS on phone-width / coarse-pointer devices, and the Ctrl/Cmd+K binding
+// below is skipped there too — the nav drawer already reaches every
+// destination the palette lists, so on a keyboardless device the palette and
+// its hint are pure redundancy (and an unclickable dead pill).
+function _scCoarsePointer() {
+  return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+}
 window.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); openCmd(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') { if (_scCoarsePointer()) return; e.preventDefault(); openCmd(); }
   if (e.key === 'Escape') { closeCmd(); closeModal(); closeNav(); _openColorPickerClose?.(); }
 
   // Alt+Shift+1..9 → jump to the Nth tab in the sidebar, in the order the user

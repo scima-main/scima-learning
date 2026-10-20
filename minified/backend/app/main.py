@@ -993,15 +993,24 @@ async def redirect_unknown_to_home(request: Request, exc: HTTPException):
     path = request.url.path
     if path.startswith("/api/"):
         return JSONResponse({"detail": "Not Found"}, status_code=404)
-    # Deep links in path form (/decks/Biology/My%20Deck, /library/Fics/book)
-    # map onto the hash form the frontend parses — checked before the
-    # asset-looking 404 rule below because deck/book names may contain dots.
-    for prefix in ("/decks/", "/library/"):
+    # Deep links in path form (/decks/Biology/My%20Deck, /library/Fics/book,
+    # /packs/spanish-starter) map onto the hash form the frontend parses —
+    # checked before the asset-looking 404 rule below because deck/book/pack
+    # names may contain dots.
+    for prefix in ("/decks/", "/library/", "/packs/"):
         if path.startswith(prefix):
             rest = path[len(prefix):].strip("/")
             if rest:
                 target = f"/{prefix.strip('/')}/#{prefix.strip('/')}/{rest}"
                 return RedirectResponse(target, status_code=302)
+    # Community deck deep links are different: the view lives in the LANDING
+    # document (/#community/<deckId>), not under a /community/ route — and the
+    # legacy /community mount (when present) 404s anything that isn't one of
+    # its own files, landing here too.
+    if path.startswith("/community/"):
+        rest = path[len("/community/"):].strip("/")
+        if rest:
+            return RedirectResponse(f"/#community/{rest}", status_code=302)
     last = path.rstrip("/").rsplit("/", 1)[-1]
     if "." in last:
         return JSONResponse({"detail": "Not Found"}, status_code=404)

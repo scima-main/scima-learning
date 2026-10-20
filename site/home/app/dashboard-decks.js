@@ -156,12 +156,12 @@ function renderDecks(c) {
 }
 
 function renderDecksHome(c) {
-  const topBar = el('div',{style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:24px'},
+  const topBar = el('div',{class:'ui-action-bar',style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:24px'},
     el('div',{},
       el('div',{class:'section-title'},'Decks'),
       el('div',{class:'section-sub',style:'margin-bottom:0'},`${state.decks.length} deck${state.decks.length!==1?'s':''} · ${state.folders.length} folder${state.folders.length!==1?'s':''}`)
     ),
-    el('div',{style:'display:flex;gap:8px'},
+    el('div',{class:'ui-action-group',style:'display:flex;gap:8px'},
       btn('+ New Folder','ghost',{onclick:()=>openCreateFolderModal(null,null)}),
       (()=>{ const b=btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal()}); b.id='tutorial-target-new-deck'; return b; })()
     )
@@ -214,12 +214,12 @@ function renderSubjectView(c, subjectKey) {
     el('span',{class:'breadcrumb-sep'},'›'),
     el('span',{class:'breadcrumb-part active',style:`color:${s.defaultColor}`},s.name)
   );
-  const topBar = el('div',{style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px'},
+  const topBar = el('div',{class:'ui-action-bar',style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px'},
     el('div',{},
       el('div',{style:`font-weight:900;font-size:20px;color:${s.defaultColor}`},s.name),
       el('div',{class:'u-muted-12'},`${nOf(allDecks.length,'deck')} total`)
     ),
-    el('div',{style:'display:flex;gap:8px'},
+    el('div',{class:'ui-action-group',style:'display:flex;gap:8px'},
       btn('+ New Folder','ghost',{onclick:()=>openCreateFolderModal(subjectKey,null)}),
       btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal(subjectKey)}),
       btn('▶ Study All','ghost',{onclick:()=>{ state.studyScope=[{type:'subject',id:subjectKey}]; navigate('study'); }})
@@ -244,6 +244,7 @@ function renderSubjectView(c, subjectKey) {
         el('div',{class:'folder-actions'},
           btn('▶','ghost',{small:true,title:'Study this folder now','aria-label':`Study folder ${folder.name} now`,onclick:e=>{e.stopPropagation();state.studyScope=[{type:'folder',id:folder.id}];navigate('study');}}),
           btn('⬇','ghost',{small:true,title:'Export folder as JSON','aria-label':`Export folder ${folder.name} as JSON`,onclick:e=>{e.stopPropagation();exportFolder(folder.id);}}),
+          btn('📂','ghost',{small:true,title:'Move to Folder…','aria-label':`Move folder ${folder.name} into another folder`,onclick:e=>{e.stopPropagation();openMoveFolderModal(folder.id);}}),
           btn('📚','ghost',{small:true,title:'Move to Subject…','aria-label':`Move folder ${folder.name} to another subject`,onclick:e=>{e.stopPropagation();openMoveFolderSubjectModal(folder.id);}}),
           btn('✏','ghost',{small:true,title:'Rename folder','aria-label':`Rename folder ${folder.name}`,onclick:e=>{e.stopPropagation();openRenameFolderModal(folder.id);}}),
           btn('×','danger',{small:true,title:'Delete folder','aria-label':`Delete folder ${folder.name}`,onclick:e=>{e.stopPropagation();deleteFolder(folder.id);}})
@@ -297,12 +298,13 @@ function renderFolderView(c, folderId) {
 
   const subFolders = state.folders.filter(f=>f.parentId===folderId);
   const folderDecks = state.decks.filter(d=>d.folderId===folderId);
-  const topBar = el('div',{style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px'},
+  const topBar = el('div',{class:'ui-action-bar',style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px'},
     el('div',{},el('div',{style:'font-size:22px;font-weight:900'},`📁 ${folder.name}`),el('div',{class:'u-muted-12'},`${nOf(folderDecks.length,'deck')}`)),
-    el('div',{style:'display:flex;gap:8px'},
+    el('div',{class:'ui-action-group',style:'display:flex;gap:8px'},
       btn('+ Subfolder','ghost',{onclick:()=>openCreateFolderModal(folder.subjectKey,folderId)}),
       btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal(folder.subjectKey,folderId)}),
       btn('▶ Study Folder','ghost',{onclick:()=>{ state.studyScope=[{type:'folder',id:folderId}]; navigate('study'); }}),
+      btn('📂 Move to Folder…','ghost',{title:'Move this folder into another folder (or a subject\'s top level)',onclick:()=>openMoveFolderModal(folderId)}),
       btn('📚 Move to Subject…','ghost',{onclick:()=>openMoveFolderSubjectModal(folderId)}),
       btn('⬇️ Export Folder','ghost',{onclick:()=>exportFolder(folderId)})
     )
@@ -319,6 +321,7 @@ function renderFolderView(c, folderId) {
         mkIcon(sf.emoji||'📁',sf.image,'22px','4px'),
         el('div',{style:'flex:1'},el('div',{class:'folder-name'},sf.name),el('div',{class:'folder-meta'},`${sfd.length} deck${sfd.length!==1?'s':''}`)),
         el('div',{class:'folder-actions'},
+          btn('📂','ghost',{small:true,title:'Move to Folder…','aria-label':`Move subfolder ${sf.name} into another folder`,onclick:e=>{e.stopPropagation();openMoveFolderModal(sf.id);}}),
           btn('📚','ghost',{small:true,title:'Move to Subject…','aria-label':`Move subfolder ${sf.name} to another subject`,onclick:e=>{e.stopPropagation();openMoveFolderSubjectModal(sf.id);}}),
           btn('✏','ghost',{small:true,title:'Rename subfolder','aria-label':`Rename subfolder ${sf.name}`,onclick:e=>{e.stopPropagation();openRenameFolderModal(sf.id);}}),
           btn('×','danger',{small:true,title:'Delete subfolder','aria-label':`Delete subfolder ${sf.name}`,onclick:e=>{e.stopPropagation();deleteFolder(sf.id);}})
@@ -548,6 +551,61 @@ function openMoveFolderSubjectModal(folderId) {
       moveFolderToSubject(folderId, key);
       closeModal(); renderView('decks');
       showToast(`Moved "${folder.name}" to ${subjects[key]?.name||key} 📁`);
+    }}));
+  });
+}
+
+/** Folder-into-folder move — the tap/click counterpart of dragging a folder
+ *  row onto another one (HTML5 drag-and-drop is mouse-only, so touch users
+ *  need an explicit action for the same workflow). Destination list: every
+ *  folder that isn't the moved folder itself or one of its descendants, plus
+ *  each subject's top level. Cross-subject moves carry the whole subtree
+ *  (decks included), exactly like the 📚 subject action / a breadcrumb drop. */
+function openMoveFolderModal(folderId) {
+  const folder = state.folders.find(f=>f.id===folderId); if(!folder) return;
+  const excluded = new Set(folderSubtreeIds(folderId));
+  const subjects = typeof getAllSubjects === 'function' ? getAllSubjects() : {};
+  const subjName = k => (subjects[k] && subjects[k].name) || k;
+  const curSubject = folder.subjectKey || DEFAULT_SUBJECT_KEY;
+  openModal('Move Folder to Folder…', body => {
+    body.appendChild(el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:16px'},
+      `Pick a new parent for \u201c${folder.name}\u201d — its subfolders and decks travel with it.`));
+    const sel = el('select',{class:'u-input',style:'margin-bottom:12px','aria-label':'Destination folder'});
+    sel.appendChild(el('option',{value:'',class:'u-bg'},
+      `\ud83d\udcda ${subjName(curSubject)} — top level${folder.parentId ? '' : ' (current)'}`));
+    Object.keys(subjects).forEach(sk=>{
+      if(sk===curSubject) return;
+      sel.appendChild(el('option',{value:'subj:'+sk,class:'u-bg'},`\ud83d\udcda ${subjName(sk)} — top level`));
+    });
+    const pathOf = f => { const parts=[]; let cur=f;
+      while(cur){ parts.unshift(cur.name); cur=cur.parentId?state.folders.find(x=>x.id===cur.parentId):null; }
+      return parts.join(' / '); };
+    state.folders.filter(f=>!excluded.has(f.id)).forEach(f=>{
+      sel.appendChild(el('option',{value:f.id,class:'u-bg'},
+        `\ud83d\udcc1 ${subjName(f.subjectKey||DEFAULT_SUBJECT_KEY)} / ${pathOf(f)}`));
+    });
+    body.appendChild(sel);
+    body.appendChild(btn('Move \u2192','primary',{full:true,onclick:()=>{
+      const v=sel.value;
+      if(!v){                                   // own subject's top level
+        folder.parentId=null;
+        scheduleSave(); closeModal(); renderView('decks'); renderSidebar();
+        showToast(`Moved \u201c${folder.name}\u201d to top level \ud83d\udcc2`);
+        return;
+      }
+      if(v.startsWith('subj:')){
+        folder.parentId=null;
+        moveFolderToSubject(folderId, v.slice(5));   // subtree re-tag
+      } else {
+        const target=state.folders.find(f=>f.id===v);
+        if(!target){ showToast('Destination folder no longer exists'); return; }
+        if(excluded.has(target.id)){ showToast("Can't move a folder into its own subfolder"); return; }
+        folder.parentId=target.id;
+        const tsk=target.subjectKey||DEFAULT_SUBJECT_KEY;
+        if((folder.subjectKey||DEFAULT_SUBJECT_KEY)!==tsk) moveFolderToSubject(folderId, tsk);
+      }
+      scheduleSave(); closeModal(); renderView('decks'); renderSidebar();
+      showToast(`Moved \u201c${folder.name}\u201d \ud83d\udcc2`);
     }}));
   });
 }
@@ -2195,11 +2253,11 @@ function openDeckDetail(deckId) {
   }, '📌');
 
   container.append(
-    el('div',{style:'display:flex;align-items:center;gap:12px;margin-bottom:20px'},
+    el('div',{class:'ui-action-bar',style:'display:flex;align-items:center;gap:12px;margin-bottom:20px'},
       btn('← Back','ghost',{small:true,onclick:()=>renderView('decks')}),
       mkIcon(deck.emoji,deck.image,'36px','8px'),
       el('div',{},el('div',{style:'font-weight:900;font-size:18px'},deck.name),el('div',{class:'u-muted-12'},`${nOf(deck.cards.length,'card')}`)),
-      el('div',{style:'margin-left:auto;display:flex;gap:8px;align-items:center'},pinToggleBtn,searchInput,(()=>{ const b=btn('+ Add Card','primary',{onclick:()=>openCardModal(deckId,null)}); b.id='tutorial-target-add-card'; return b; })())
+      el('div',{class:'ui-action-group',style:'margin-left:auto;display:flex;gap:8px;align-items:center'},pinToggleBtn,searchInput,(()=>{ const b=btn('+ Add Card','primary',{onclick:()=>openCardModal(deckId,null)}); b.id='tutorial-target-add-card'; return b; })())
     )
   );
 
@@ -3324,7 +3382,11 @@ function openCardModal(deckId, cardId) {
         const th=el('th',{style:'padding:2px;background:rgba(255,255,255,0.08)'},
           el('div',{style:'display:flex;gap:2px;align-items:center'},
             el('span',{draggable:'true',title:'Drag to reorder column',style:'flex-shrink:0;cursor:grab;font-size:10px;color:var(--muted);padding:0 2px;user-select:none'},'⠿'),
+            // Touch fallback for the drag grip: nudge this column one slot
+            // left/right (.touch-only — hidden unless the device has no hover).
+            el('button',{type:'button',class:'touch-only',title:'Move column left','aria-label':`Move column ${ci+1} left`,...(ci===0?{disabled:''}:{}),style:'flex-shrink:0;width:16px;height:18px;border-radius:4px;border:none;cursor:pointer;font-size:8px;background:rgba(255,255,255,0.08);color:var(--muted);padding:0',onclick:()=>moveColumnTo(ci,ci-1)},'◀'),
             el('input',{type:'text',placeholder:`Column ${ci+1}`,class:'u-input',style:'width:100%;font-size:11px;font-weight:700;padding:3px 4px',value:c.label,onfocus:()=>{ pushTableHistory(); },oninput:e=>{ c.label=e.target.value; refreshTablePreview(); }}),
+            el('button',{type:'button',class:'touch-only',title:'Move column right','aria-label':`Move column ${ci+1} right`,...(ci===tCols.length-1?{disabled:''}:{}),style:'flex-shrink:0;width:16px;height:18px;border-radius:4px;border:none;cursor:pointer;font-size:8px;background:rgba(255,255,255,0.08);color:var(--muted);padding:0',onclick:()=>moveColumnTo(ci,ci+1)},'▶'),
             tCols.length>1?el('button',{type:'button',title:'Delete column',style:'flex-shrink:0;width:18px;height:18px;border-radius:4px;border:none;cursor:pointer;font-size:10px;background:rgba(239,68,68,0.12);color:#ef4444',onclick:()=>deleteColumnAt(ci)},'×'):null
           )
         );
@@ -3362,6 +3424,9 @@ function openCardModal(deckId, cardId) {
           el('div',{style:'display:flex;align-items:center;gap:3px;font-size:10px;color:var(--muted)'},
             el('span',{draggable:'true',title:'Drag to reorder row',style:'cursor:grab;user-select:none'},'⠿'),
             `R${ri+1}`,
+            // Touch fallback for the row drag grip (.touch-only, as above).
+            el('button',{type:'button',class:'touch-only',title:'Move row up','aria-label':`Move row ${ri+1} up`,...(ri===0?{disabled:''}:{}),style:'flex-shrink:0;width:14px;height:16px;border-radius:4px;border:none;cursor:pointer;font-size:8px;background:rgba(255,255,255,0.08);color:var(--muted);padding:0',onclick:()=>moveRowTo(ri,ri-1)},'▲'),
+            el('button',{type:'button',class:'touch-only',title:'Move row down','aria-label':`Move row ${ri+1} down`,...(ri===tRows.length-1?{disabled:''}:{}),style:'flex-shrink:0;width:14px;height:16px;border-radius:4px;border:none;cursor:pointer;font-size:8px;background:rgba(255,255,255,0.08);color:var(--muted);padding:0',onclick:()=>moveRowTo(ri,ri+1)},'▼'),
             tRows.length>1?el('button',{type:'button',title:'Delete row',style:'flex-shrink:0;width:16px;height:16px;border-radius:4px;border:none;cursor:pointer;font-size:10px;background:rgba(239,68,68,0.12);color:#ef4444',onclick:()=>deleteRowAt(ri)},'×'):null
           )
         );

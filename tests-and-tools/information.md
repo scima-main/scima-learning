@@ -40,7 +40,8 @@ tests-and-tools/
 ├── scenarios/            11 ready-to-run render.py scenarios (numbered)
 ├── ui/                   pytest tests: smoke, navigation, home, decks,
 │                         study, library, analytics, settings, community,
-│                         storage, tour, viewports, content, **features**
+│                         storage, tour, viewports, mobile, content,
+│                         **features**
 └── screenshots/          all output lands here (gitignored)
 ```
 
@@ -111,6 +112,10 @@ Key fixtures: `app` (booted `/` on empty), `demo_app` (booted `/` on demo),
   `#page-tabs .tab-btn[data-view]`, `#modal-backdrop`/`#modal-box`/
   `#modal-title`, `#cmd-backdrop`/`#cmd-input` (Ctrl/Cmd+K),
   `#tutorial-overlay`, `#tutorial-target-new-deck`,
+  `#packs-grid .card` / `#pack-detail-contents` (pack list & detail modal),
+  `#screen-search` / `#screen-deck` (community screens),
+  `.touch-only` (touch-only reorder buttons; hidden on desktop pointers),
+  `.reader-mobile-only` (reader sidebar toggles; hidden ≥820px),
   `#tutorial-target-deck-name-input`, `#tutorial-target-add-card`,
   `#tutorial-target-card-front-input` / `-back-input`,
   `#tutorial-target-study-start`, `.deck-card .deck-name`, `.rating-btn`,
@@ -133,7 +138,12 @@ Key fixtures: `app` (booted `/` on empty), `demo_app` (booted `/` on demo),
     `page_errors` (real JS exceptions), not console errors.
   - Review dates use **UTC** (`today()` = `toISOString()`); `seed.utc_day()`
     matches.
-  - Prod-only behavior: the FastAPI backend redirects unknown routes to
+  - Deep links: `/packs/#packs/<pack>` opens a pack's detail modal (after the
+  async list lands); `/#community/<deckId>` opens a registry deck's detail
+  screen (mock `/decks/<id>` BEFORE the broad `/decks*` list pattern — see
+  `ui/test_community.py::_detail_handlers`). Closing/back folds the hash
+  back to `#packs` / `#community`.
+- Prod-only behavior: the FastAPI backend redirects unknown routes to
     `/#home` and serves the legacy `/dashboard/` mount; the static test
     server 404s instead (pinned by `test_unknown_route_note`).
 
@@ -144,6 +154,12 @@ pytest -m responsive        # viewport/device matrix
 pytest -m content           # content-integrity checkers
 ```
 
+- `ui/test_mobile.py` pins the mobile layer: edge-to-edge modal sheets at
+  phone widths (and the centred dialog above 720px), one-panel/two-button
+  grid collapse, 16px form inputs, ⌘K pill + Ctrl+K removal on touch
+  contexts, hover-action visibility without hover, tap-driven folder/deck
+  move modals, `.touch-only` visibility per pointer capability, and the
+  reader's slide-over sidebars.
 - `ui/test_viewports.py` boots and exercises the UI at 10 viewport sizes
   (320→2560 wide, landscape, short windows), asserts the 720px CSS gutter
   breakpoint, drawer cycle at every size, rating buttons/modals staying

@@ -581,7 +581,7 @@ function renderStudySession(c) {
   c.innerHTML='';
   c.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;padding:0';
 
-  const progress=el('div',{style:'display:flex;align-items:center;gap:12px;margin-bottom:20px'},
+  const progress=el('div',{class:'ui-action-bar',style:'display:flex;align-items:center;gap:12px;margin-bottom:20px'},
     btn('← Exit','ghost',{small:true,onclick:()=>{ clearQuizTimer(); clearNextTimer(); if(window.speechSynthesis) window.speechSynthesis.cancel(); spSessionEnd(); logAbortedSession(studySession); studySession=null; renderView('study'); }}),
     el('div',{style:'flex:1'},
       el('div',{style:'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'},

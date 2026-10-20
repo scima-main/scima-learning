@@ -89,7 +89,9 @@ def test_algorithm_select(page, base_url, seeded):
 
 def test_daily_goal_slider_persists(page, base_url, seeded):
     goto_settings(page, base_url, seeded)
-    slider = page.locator("input[type='range']").first   # Daily Review Goal
+    # aria-label (set by makeRange) — robust across panel regroupings; it is
+    # also still the first range input on the page (Study & Scheduling leads).
+    slider = page.locator("input[aria-label='Daily Review Goal']")
     slider.fill("35")
     assert page.evaluate("() => state.settings.dailyGoal") == 35
     page.wait_for_timeout(900)
@@ -107,3 +109,87 @@ def test_replay_tutorial_button_starts_tour(page, base_url, seeded):
     page.get_by_role("button", name="Replay tutorial").click()
     expect(page.locator("#tutorial-overlay")).to_be_visible(timeout=5000)
     pages.dismiss_tour(page)
+
+
+# ── The regrouped panel layout ──────────────────────────────────────────────
+# Settings was reorganized from "one giant Study & Accessibility card + an
+# Algorithm & Notifications card + full-width stragglers" into eight domain
+# panels in one grid-2 (+ full-width Help on top, Data Management below).
+# Every feature survived the move — these pin both the new grouping and the
+# presence of each control in its new home.
+
+PANELS = [
+    "📚 Study & Scheduling", "✍️ Scratchpad",
+    "🎨 Appearance & Theme", "📘 Subjects",
+    "♿ Accessibility & Notifications", "🤖 AI & Integrations",
+    "📖 Library & Reading", "🗂️ Navigation",
+    "💾 Data Management", "❓ Help",
+]
+
+
+def test_regrouped_panels_present(page, base_url, seeded):
+    goto_settings(page, base_url, seeded)
+    for label in PANELS:
+        expect(page.locator("#view-settings .card",
+                            has_text=label).first).to_be_visible()
+
+
+def test_panel_pairing_is_one_grid(page, base_url, seeded):
+    """The eight domain panels live in a single grid-2 (rows of two on
+    desktop; the mobile CSS collapses it to one column)."""
+    goto_settings(page, base_url, seeded)
+    grid = page.locator("#view-settings > .grid-2")
+    expect(grid).to_have_count(1)
+    assert grid.locator("> .card").count() == 8
+
+
+def test_theme_schedule_lives_inside_appearance(page, base_url, seeded):
+    goto_settings(page, base_url, seeded)
+    card = page.locator("#view-settings .card",
+                        has_text="🎨 Appearance & Theme").first
+    expect(card).to_contain_text("🕐 Theme Schedule")
+    expect(card.locator(
+        "button.toggle[aria-label='Enable scheduling']")).to_be_visible()
+
+
+def test_every_toggle_survived_the_regroup(page, base_url, seeded):
+    """All eight feature toggles exist exactly once, in their new panels."""
+    goto_settings(page, base_url, seeded)
+    homes = {
+        "Auto-suspend leeches": "📚 Study & Scheduling",
+        "Dyslexia-Friendly Mode": "♿ Accessibility & Notifications",
+        "High Contrast": "♿ Accessibility & Notifications",
+        "Power Saving Mode": "♿ Accessibility & Notifications",
+        "Text-to-Speech": "♿ Accessibility & Notifications",
+        "Push Notifications": "♿ Accessibility & Notifications",
+        "Show Pinyin": "📖 Library & Reading",
+        "Single-Word Definitions": "📖 Library & Reading",
+    }
+    for label, panel in homes.items():
+        rows = page.locator(".toggle-row", has_text=label)
+        expect(rows).to_have_count(1)
+        card = page.locator("#view-settings .card", has_text=panel).first
+        expect(card.locator(".toggle-row", has_text=label)).to_have_count(1)
+
+
+def test_every_slider_and_select_survived(page, base_url, seeded):
+    goto_settings(page, base_url, seeded)
+    for aria in ("Daily Review Goal", "New Cards Per Day", "Leech Threshold",
+                 "Gap density %", "Max gaps per card",
+                 "Auto-next countdown (s, 0 = manual)"):
+        expect(page.locator(f"input[aria-label='{aria}']")).to_have_count(1)
+    expect(page.locator("select[aria-label='SRS scheduling algorithm']"),
+           ).to_have_count(1)
+    expect(page.locator("select[aria-label='Day boundary timezone']"),
+           ).to_have_count(1)
+    expect(page.locator("select[aria-label='Define target language']"),
+           ).to_have_count(1)
+    # AI & Integrations keeps the LLM endpoint + the Quizlet proxy template
+    card = page.locator("#view-settings .card",
+                        has_text="🤖 AI & Integrations").first
+    expect(card).to_contain_text("Server Address")
+    expect(card).to_contain_text("Quizlet proxy template")
+    expect(card.locator("button", has_text="Test Connection")).to_have_count(1)
+    # Library & Reading keeps the resume-position select
+    expect(page.locator("#view-settings .card", has_text="📖 Library & Reading")
+           .first.locator("select")).to_have_count(2)   # define lang + open-book

@@ -1,8 +1,23 @@
 'use strict';
-/* dashboard-settings.js — the entire Settings view (SRS algorithm, theme,
-   accessibility, data import/export, etc.) — one large self-contained
+/* dashboard-settings.js — the entire Settings view — one large self-contained
    function. Part of the dashboard-*.js split; see dashboard-core.js's header
    for the full rationale and load-order rules.
+
+   PANEL LAYOUT: a full-width ❓ Help card, one grid-2 of eight evenly-sized
+   domain panels, and a full-width 💾 Data Management card:
+
+     📚 Study & Scheduling   │ ✍️ Scratchpad
+     🎨 Appearance & Theme   │ 📘 Subjects
+     ♿ Accessibility & Notif.│ 🤖 AI & Integrations
+     📖 Library & Reading    │ 🗂️ Navigation
+
+   (rows pair panels of similar height; the grid collapses to one column on
+   phone widths — see dashboard.css). The same regrouping that used to live
+   in "Algorithm & Notifications" + one giant "Study & Accessibility" card is
+   now split by domain: scheduling/SRS knobs in Study, the display & sound
+   assist toggles in Accessibility, LLM + Quizlet-proxy integrations in AI,
+   and the reader's language/definition options in Library. The Theme
+   Schedule became a subsection of Appearance & Theme.
 
    SITE PORT NOTES: this is the flashcard-side Settings only — the Mark
    Tracker has its own separate Tracker Settings view (renderTrackerSettings
@@ -54,82 +69,20 @@ function renderSettings(c) {
     ),
     btn('Replay tutorial','primary',{onclick:()=>startTutorial(0,'replay')})
   );
-  const aiCard=el('div',{class:'card',style:'padding:20px'},el('div',{style:'font-weight:800;margin-bottom:14px;color:var(--blue)'},'🤖 Algorithm & Notifications'));
+
+
+  // ── 1. 📚 Study & Scheduling — the SRS engine and session-shaping knobs ──
+  const studyCard=el('div',{class:'card',style:'padding:20px'},el('div',{style:'font-weight:800;margin-bottom:14px;color:var(--pink)'},'📚 Study & Scheduling'));
   const algoSel=el('select',{class:'u-input','aria-label':'SRS scheduling algorithm',onchange:e=>{ state.settings.algorithm=e.target.value; scheduleSave(); }});
   [['fsrs','FSRS (Recommended)'],['sm2','SM-2 (Classic)']].forEach(([v,t])=>{ const o=el('option',{value:v,class:'u-bg'},t); if(state.settings.algorithm===v)o.selected=true; algoSel.appendChild(o); });
-  aiCard.append(
+  studyCard.append(
     el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},el('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px'},el('div',{style:'font-size:13px;font-weight:600'},'SRS Algorithm'),makeHelpBtn('FSRS vs SM-2 — how reviews get scheduled', ()=>openAlgorithmHelp(), false)),algoSel),
     makeToggle('Auto-suspend leeches','Suspend cards after too many lapses','autoSuspend'),
-    makeToggle('Text-to-Speech','Read cards aloud during study','tts'),
-    makeToggle('Push Notifications','Daily review reminders','notifications'),
-    makeToggle('Power Saving Mode','Disables animations and visual effects for better performance','powerSaving')
-  );
-
-  const llmCard=el('div',{class:'card',style:'padding:20px;margin-top:16px'},
-    el('div',{style:'font-weight:800;margin-bottom:4px;color:var(--blue)'},'✨ AI Card Generation'),
-    el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:14px'},'Generate flashcards from pasted text using a local LLM server on your own machine — nothing is sent to a hosted API, and there\u2019s no API key to store. Works with '+'LM Studio, Ollama\u2019s OpenAI-compatible endpoint, llama.cpp server, or anything else that speaks the OpenAI chat-completions format.')
-  );
-  const endpointInput=el('input',{type:'text',class:'u-input',placeholder:'http://127.0.0.1:1234',value:state.settings.aiEndpoint||'',
-    oninput:e=>{ state.settings.aiEndpoint=e.target.value.trim(); scheduleSave(); }});
-  const modelInput=el('input',{type:'text',class:'u-input',placeholder:'Leave blank to use whatever model is currently loaded',value:state.settings.aiModel||'',
-    oninput:e=>{ state.settings.aiModel=e.target.value.trim(); scheduleSave(); }});
-  const testStatus=el('div',{style:'font-size:12px;margin-top:8px'});
-  const testBtn=btn('Test Connection','ghost',{onclick:async()=>{
-    testBtn.disabled=true; const prevText=testBtn.textContent; testBtn.textContent='Testing…';
-    testStatus.textContent=''; testStatus.style.color='var(--muted)';
-    const result=await testAIConnection();
-    testBtn.disabled=false; testBtn.textContent=prevText;
-    if(result.ok){
-      testStatus.style.color='#22c55e';
-      testStatus.textContent=`✓ Connected${result.model?` — loaded model: ${result.model}`:''}`;
-    } else {
-      testStatus.style.color='#ef4444';
-      testStatus.textContent=`✕ ${result.error}`;
-    }
-  }});
-  llmCard.append(
-    el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},
-      el('div',{style:'font-size:13px;font-weight:600;margin-bottom:6px'},'Server Address'),
-      endpointInput
-    ),
-    el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},
-      el('div',{style:'font-size:13px;font-weight:600;margin-bottom:6px'},'Model ID (optional)'),
-      modelInput
-    ),
-    el('div',{style:'padding-top:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap'},testBtn,testStatus)
-  );
-
-  const studyCard=el('div',{class:'card',style:'padding:20px'},el('div',{style:'font-weight:800;margin-bottom:14px;color:var(--pink)'},'📚 Study & Accessibility'));
-  const defineLangSel=el('select',{class:'u-input',onchange:e=>{ state.settings.defineLang=e.target.value; scheduleSave(); }});
-  Object.entries(LANGS).forEach(([code,name])=>{ const o=el('option',{value:code,class:'u-bg'},name); if((state.settings.defineLang||'en')===code)o.selected=true; defineLangSel.appendChild(o); });
-  studyCard.append(
-    el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},
-      el('div',{style:'font-size:13px;font-weight:600;margin-bottom:2px'},'🔍 Define Target Language'),
-      el('div',{style:'font-size:11px;color:var(--muted);margin-bottom:8px'},'Smart Definition translates terms into this language if they aren\u2019t already in it'),
-      defineLangSel
-    ),
-    makeToggle('🀄 Show Pinyin','Display Mandarin pinyin when selecting Chinese characters while reading','showPinyin'),
-    makeToggle('🔤 Single-Word Definitions','For a single word in a spaced script (Latin, Cyrillic, Arabic, etc.), show a definition in its own language instead of translating it','singleWordDefinition'),
-    makeToggle('🔠 Dyslexia-Friendly Mode','Wider letter/word/line spacing and an evenly-spaced font throughout the app','dyslexia'),
-    makeToggle('◐ High Contrast','Boost text contrast and border visibility on top of your current theme','highContrast'),
-    (()=>{
-      const wrap=el('div',{style:'display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid var(--border);margin-top:4px'});
-      const lbl=el('div',{},
-        el('div',{style:'font-size:13px;font-weight:600'},'🔖 Open book at…'),
-        el('div',{style:'font-size:11px;color:var(--muted);margin-top:2px'},'Where to resume when re-opening a source')
-      );
-      const sel=el('select',{style:'padding:5px 10px;border-radius:7px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text);font-size:12px;font-family:inherit;cursor:pointer'});
-      [['auto','Last position (auto)'],['manual','Furthest manual bookmark']].forEach(([v,t])=>{
-        const o=el('option',{value:v,class:'u-bg'},t);
-        if((state.settings.bookmarkRestore||'auto')===v) o.selected=true;
-        sel.appendChild(o);
-      });
-      sel.addEventListener('change',()=>{ state.settings.bookmarkRestore=sel.value; scheduleSave(); });
-      wrap.append(lbl,sel);
-      return wrap;
-    })(),
-    makeRange('Daily Review Goal: ','dailyGoal',5,100,'var(--blue)'),makeRange('New Cards Per Day: ','newCardsPerDay',1,50,'var(--pink)'),makeRange('Leech Threshold: ','leechThreshold',3,20,'#FB923C'),
-    makeRange('Gap density %: ','gapPercent',5,100,'#34D399'),makeRange('Max gaps per card: ','gapMax',1,8,'#34D399'),
+    makeRange('Daily Review Goal: ','dailyGoal',5,100,'var(--blue)'),
+    makeRange('New Cards Per Day: ','newCardsPerDay',1,50,'var(--pink)'),
+    makeRange('Leech Threshold: ','leechThreshold',3,20,'#FB923C'),
+    makeRange('Gap density %: ','gapPercent',5,100,'#34D399'),
+    makeRange('Max gaps per card: ','gapMax',1,8,'#34D399'),
     makeRange('Auto-next countdown (s, 0 = manual): ','autoNextSeconds',0,30,'var(--blue)'));
 
   // ── Day boundary: timezone in which streaks / daily goal / history roll over ──
@@ -155,6 +108,81 @@ function renderSettings(c) {
     tzSel);
   studyCard.appendChild(tzWrap);
 
+  // ── 5. ♿ Accessibility & Notifications — display/sound assists + reminders ──
+  const a11yCard=el('div',{class:'card',style:'padding:20px'},el('div',{style:'font-weight:800;margin-bottom:14px;color:var(--blue)'},'♿ Accessibility & Notifications'));
+  a11yCard.append(
+    makeToggle('🔠 Dyslexia-Friendly Mode','Wider letter/word/line spacing and an evenly-spaced font throughout the app','dyslexia'),
+    makeToggle('◐ High Contrast','Boost text contrast and border visibility on top of your current theme','highContrast'),
+    makeToggle('Power Saving Mode','Disables animations and visual effects for better performance','powerSaving'),
+    makeToggle('Text-to-Speech','Read cards aloud during study','tts'),
+    makeToggle('Push Notifications','Daily review reminders','notifications')
+  );
+
+  // ── 7. 📖 Library & Reading — the reader's language/definition options ──
+  const libraryCard=el('div',{class:'card',style:'padding:20px'},el('div',{style:'font-weight:800;margin-bottom:14px;color:var(--blue)'},'📖 Library & Reading'));
+  const defineLangSel=el('select',{class:'u-input','aria-label':'Define target language',onchange:e=>{ state.settings.defineLang=e.target.value; scheduleSave(); }});
+  Object.entries(LANGS).forEach(([code,name])=>{ const o=el('option',{value:code,class:'u-bg'},name); if((state.settings.defineLang||'en')===code)o.selected=true; defineLangSel.appendChild(o); });
+  libraryCard.append(
+    el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},
+      el('div',{style:'font-size:13px;font-weight:600;margin-bottom:2px'},'🔍 Define Target Language'),
+      el('div',{style:'font-size:11px;color:var(--muted);margin-bottom:8px'},'Smart Definition translates terms into this language if they aren\u2019t already in it'),
+      defineLangSel
+    ),
+    makeToggle('🀄 Show Pinyin','Display Mandarin pinyin when selecting Chinese characters while reading','showPinyin'),
+    makeToggle('🔤 Single-Word Definitions','For a single word in a spaced script (Latin, Cyrillic, Arabic, etc.), show a definition in its own language instead of translating it','singleWordDefinition'),
+    (()=>{
+      const wrap=el('div',{style:'display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-top:1px solid rgba(255,255,255,0.05);margin-top:4px;gap:10px;flex-wrap:wrap'});
+      const lbl=el('div',{},
+        el('div',{style:'font-size:13px;font-weight:600'},'🔖 Open book at…'),
+        el('div',{style:'font-size:11px;color:var(--muted);margin-top:2px'},'Where to resume when re-opening a source')
+      );
+      const sel=el('select',{style:'padding:5px 10px;border-radius:7px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text);font-size:12px;font-family:inherit;cursor:pointer'});
+      [['auto','Last position (auto)'],['manual','Furthest manual bookmark']].forEach(([v,t])=>{
+        const o=el('option',{value:v,class:'u-bg'},t);
+        if((state.settings.bookmarkRestore||'auto')===v) o.selected=true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change',()=>{ state.settings.bookmarkRestore=sel.value; scheduleSave(); });
+      wrap.append(lbl,sel);
+      return wrap;
+    })());
+
+  // ── 6. 🤖 AI & Integrations — the local LLM endpoint + Quizlet proxy ──────
+  const aiCard=el('div',{class:'card',style:'padding:20px'},
+    el('div',{style:'font-weight:800;margin-bottom:4px;color:var(--blue)'},'🤖 AI & Integrations'),
+    el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:14px'},'✨ AI Card Generation: generate flashcards from pasted text using a local LLM server on your own machine — nothing is sent to a hosted API, and there\u2019s no API key to store. Works with LM Studio, Ollama\u2019s OpenAI-compatible endpoint, llama.cpp server, or anything else that speaks the OpenAI chat-completions format.')
+  );
+  const endpointInput=el('input',{type:'text',class:'u-input',placeholder:'http://127.0.0.1:1234',value:state.settings.aiEndpoint||'',
+    oninput:e=>{ state.settings.aiEndpoint=e.target.value.trim(); scheduleSave(); }});
+  const modelInput=el('input',{type:'text',class:'u-input',placeholder:'Leave blank to use whatever model is currently loaded',value:state.settings.aiModel||'',
+    oninput:e=>{ state.settings.aiModel=e.target.value.trim(); scheduleSave(); }});
+  const testStatus=el('div',{style:'font-size:12px;margin-top:8px'});
+  const testBtn=btn('Test Connection','ghost',{onclick:async()=>{
+    testBtn.disabled=true; const prevText=testBtn.textContent; testBtn.textContent='Testing…';
+    testStatus.textContent=''; testStatus.style.color='var(--muted)';
+    const result=await testAIConnection();
+    testBtn.disabled=false; testBtn.textContent=prevText;
+    if(result.ok){
+      testStatus.style.color='#22c55e';
+      testStatus.textContent=`✓ Connected${result.model?` — loaded model: ${result.model}`:''}`;
+    } else {
+      testStatus.style.color='#ef4444';
+      testStatus.textContent=`✕ ${result.error}`;
+    }
+  }});
+  aiCard.append(
+    el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},
+      el('div',{style:'font-size:13px;font-weight:600;margin-bottom:6px'},'Server Address'),
+      endpointInput
+    ),
+    el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},
+      el('div',{style:'font-size:13px;font-weight:600;margin-bottom:6px'},'Model ID (optional)'),
+      modelInput
+    ),
+    el('div',{style:'padding-top:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap'},testBtn,testStatus)
+  );
+
+  aiCard.appendChild(el('div',{style:'border-top:1px solid rgba(255,255,255,0.05);margin:16px 0 2px'}));
   // ── Optional Quizlet proxy template (fallback when every built-in fetch path is blocked) ──
   const proxyWrap=el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'});
   const proxyInput=el('input',{type:'text',class:'u-input','aria-label':'Quizlet proxy template URL',placeholder:'https://my-proxy.example/?url={url}',style:'margin-top:6px'});
@@ -164,369 +192,104 @@ function renderSettings(c) {
     el('div',{style:'font-size:13px;font-weight:600'},'🔀 Quizlet proxy template (optional)'),
     el('div',{style:'font-size:11px;color:var(--muted);margin:2px 0 6px'},'If Quizlet blocks the built-in server proxy, route webapi calls through your own proxy. {url} is replaced with the encoded Quizlet request.'),
     proxyInput);
-  studyCard.appendChild(proxyWrap);
-
-  grid.append(aiCard,studyCard);
-
-  const dataCard=el('div',{class:'card',style:'padding:20px;margin-top:16px'},
-    el('div',{style:'font-weight:800;margin-bottom:6px'},'💾 Data Management'),
-    el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:14px'},`${nOf(state.decks.length,'deck')} · ${nOf(state.decks.flatMap(d=>d.cards).length,'card')} · ${nOf(state.sources.length,'source')} · ${nOf(state.folders.length,'folder')}`)
-  );
-  const btnRow=el('div',{style:'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px'});
-
-  btnRow.appendChild(btn('📤 Export All Data (.zip)','ghost',{onclick:()=>{ exportAllDataZip(); }}));
-  btnRow.appendChild(btn('📦 Export Decks Only','ghost',{onclick:()=>{
-    const a=document.createElement('a');
-    const citedSourceIds=new Set(state.decks.flatMap(d=>d.cards).map(c=>c.citation?.sourceId).filter(Boolean));
-    const citedSources=(state.sources||[]).filter(s=>citedSourceIds.has(s.id));
-    function resolveDecks(decks){
-      return decks.map(d=>({...d,cards:d.cards.map(c=>{
-        if(!c.citation)return c;
-        const src=citedSources.find(s=>s.id===c.citation.sourceId);
-        const chap=c.citation.chapterId&&src?.chapters?.find(ch=>ch.id===c.citation.chapterId);
-        const excerpt=src?src.content.slice(c.citation.charStart,c.citation.charEnd):'';
-        return {...c,citation:{...c.citation,sourceName:src?.name||null,chapterTitle:chap?.title||null,excerpt:excerpt||null}};
-      })}));
+  aiCard.appendChild(proxyWrap);
+  // ✍️ Scratchpad defaults (spec §32) — persisted under state.settings.scratch
+  // via dashboard-scratchpad.js's spSetting()/spSetSetting() (loaded before
+  // this file on the settings route). Guarded so a stale cache without the
+  // scratchpad module still renders the rest of Settings.
+  const scratchCard = el('div', { class:'card', style:'padding:20px' });
+  scratchCard.appendChild(el('div', { style:'font-weight:800;margin-bottom:4px;color:var(--blue)' }, '✍️ Scratchpad'));
+  scratchCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:10px' },
+    'Defaults for the per-question drawing pad in study sessions. Pads are ephemeral — kept only while you answer a question, deleted the moment you answer it, and wiped when the session ends.'));
+  if (typeof spSetting === 'function' && typeof SP_SWATCHES !== 'undefined') {
+    const spRow = (label, desc, node) => scratchCard.appendChild(el('div', { style:'padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05)' },
+      el('div', { style:'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap' },
+        el('div', {},
+          el('div', { style:'font-size:13px;font-weight:600' }, label),
+          desc ? el('div', { style:'font-size:11px;color:var(--muted)' }, desc) : null),
+        node)));
+    const spToggle = (label, desc, key) => {
+      const knob = el('div', { class:'toggle-knob' });
+      const sw = el('button', { type:'button', role:'switch',
+        class:`toggle${spSetting(key) ? ' on' : ''}`,
+        'aria-label': label, 'aria-checked':String(!!spSetting(key)),
+        onclick: () => {
+        spSetSetting(key, !spSetting(key));
+        sw.classList.toggle('on', !!spSetting(key));
+        sw.setAttribute('aria-checked', String(!!spSetting(key)));
+      }}, knob);
+      spRow(label, desc, sw);
+    };
+    // Default pen color — quick swatches + custom picker
+    const swatchRow = el('div', { style:'display:flex;gap:6px;flex-wrap:wrap;align-items:center' });
+    const redrawSwatches = () => {
+      swatchRow.innerHTML = '';
+      for (const c of SP_SWATCHES) {
+        swatchRow.appendChild(el('button', {
+          type:'button', class:'sp-swatch' + (String(spSetting('color')).toLowerCase() === c.toLowerCase() ? ' active' : ''),
+          'aria-label': `Default scratchpad color ${c}`, title: c, style:`background:${c}`,
+          onclick: () => { spSetSetting('color', c); redrawSwatches(); },
+        }));
+      }
+      swatchRow.appendChild(el('button', {
+        type:'button', class:'sp-mini-btn', 'aria-label':'Custom default scratchpad color', title:'Custom color…',
+        onclick: e => { try { openColorPicker(e.currentTarget, spSetting('color'), c => { spSetSetting('color', c); redrawSwatches(); }); } catch (err) {} },
+      }, '🎨'));
+    };
+    redrawSwatches();
+    spRow('Default pen color', 'Applied to fresh pads and new strokes', swatchRow);
+    // Default stroke width
+    const widthRow = el('div', { style:'display:flex;gap:6px' });
+    const redrawWidths = () => {
+      widthRow.innerHTML = '';
+      for (const w of SP_WIDTHS) {
+        widthRow.appendChild(el('button', {
+          type:'button', class:'sp-mini-btn' + (Number(spSetting('width')) === w ? ' active' : ''),
+          'aria-label': `Default stroke width ${w} pixels`,
+          onclick: () => { spSetSetting('width', w); redrawWidths(); },
+        }, String(w)));
+      }
+    };
+    redrawWidths();
+    spRow('Default stroke width', 'Pen / shape outline thickness', widthRow);
+    // Default background style
+    const bgSel = el('select', { class:'u-input', style:'max-width:180px', 'aria-label':'Default scratchpad background', onchange: e => spSetSetting('bg', e.target.value) });
+    for (const b of SP_BG_STYLES) {
+      const o = el('option', { value: b.id }, b.label);
+      if (spSetting('bg') === b.id) o.selected = true;
+      bgSel.appendChild(o);
     }
-    a.href='data:application/json,'+encodeURIComponent(JSON.stringify(scimaStamp({version:2,decks:resolveDecks(state.decks).map(d=>scimaDeckToShare(d)),folders:state.folders,citedSources},'share','collection'),null,2));
-    a.download=`SCIMA-decks-${today()}.json`; a.click();
-  }}));
-
-  const importInput=el('input',{type:'file',accept:'.zip,.json',style:'display:none',onchange:async e=>{
-    const file=e.target.files?.[0]; if(!file)return;
-    try{
-      let data, pdfFiles={}, htmlFiles={};
-      if(file.name.toLowerCase().endsWith('.zip')){
-        const buf=new Uint8Array(await file.arrayBuffer());
-        const unzipped=fflate.unzipSync(buf);
-        const dataBytes=unzipped['data.json'];
-        if(!dataBytes) throw new Error('data.json not found in archive');
-        data=JSON.parse(new TextDecoder().decode(dataBytes));
-        Object.keys(unzipped).forEach(name=>{
-          if(name.startsWith('pdf/')&&name.endsWith('.pdf')) pdfFiles[name.slice(4,-4)]=unzipped[name];
-          if(name.startsWith('html/')&&name.endsWith('.json')) htmlFiles[name.slice(5,-5)]=unzipped[name];
-        });
-      } else {
-        data=JSON.parse(await file.text());
-      }
-
-      const clsI = scimaClassify(data);
-      if (!clsI || (clsI.kind!=='account' && clsI.kind!=='collection')) {
-        showToast(clsI ? 'That file is a deck/folder export — import it from Decks → + New Deck → Import JSON' : 'Unrecognized file — not a SCIMA backup (schema check failed)');
-        return;
-      }
-      openModal('Import Data', body=>{
-        const deckCount=data.decks?.length||0, folderCount=data.folders?.length||0, sourceCount=data.sources?.length||0;
-        const libFolderCount=data.libraryFolders?.length||0, pdfCount=Object.keys(pdfFiles).length, htmlCount=Object.keys(htmlFiles).length;
-        body.appendChild(el('div',{style:'padding:14px;border-radius:10px;background:rgba(var(--blue-rgb),0.08);border:1px solid rgba(var(--blue-rgb),0.2);margin-bottom:16px'},
-          el('div',{style:'font-weight:700;color:var(--blue);margin-bottom:8px'},'📦 Import Contents'),
-          deckCount?el('div',{class:'u-muted-12'},`📚 ${deckCount} deck${deckCount!==1?'s':''}`):'',
-          folderCount?el('div',{class:'u-muted-12'},`📁 ${folderCount} folder${folderCount!==1?'s':''}`):'',
-          sourceCount?el('div',{class:'u-muted-12'},`📖 ${sourceCount} source${sourceCount!==1?'s':''}`):'',
-          libFolderCount?el('div',{class:'u-muted-12'},`🗂️ ${libFolderCount} library folder${libFolderCount!==1?'s':''}`):'',
-          pdfCount?el('div',{class:'u-muted-12'},`📄 ${pdfCount} PDF${pdfCount!==1?'s':''} bundled`):'',
-          htmlCount?el('div',{class:'u-muted-12'},`🖼️ ${htmlCount} illustrated book${htmlCount!==1?'s':''} bundled`):'',
-          data.reviewHistory?el('div',{class:'u-muted-12'},'📅 Review history included'):'',
-          data.trackerState?el('div',{class:'u-muted-12'},'⭐ XP/tracker data included'):'',
-          data.streak!==undefined?el('div',{class:'u-muted-12'},'🔥 Streak included'):'',
-          data.settings?el('div',{class:'u-muted-12'},'⚙️ Settings/preferences included'):'',
-          data.settings?.theme?el('div',{class:'u-muted-12'},'🎨 Appearance/theme included'):''
-        ));
-
-        async function restoreBinaries(){
-          for(const [srcId,bytes] of Object.entries(pdfFiles)){
-            let bin=''; const CH=8192; for(let i=0;i<bytes.length;i+=CH) bin+=String.fromCharCode(...bytes.subarray(i,i+CH));
-            await writePdfChunks(srcId, 'data:application/pdf;base64,'+btoa(bin));
-          }
-          for(const [srcId,bytes] of Object.entries(htmlFiles)){
-            try{ await saveHtmlChapters(srcId, JSON.parse(new TextDecoder().decode(bytes))); }
-            catch(e){ console.warn(`[SCIMA] import: failed to restore HTML/EPUB content for source ${srcId} — the source entry exists but its content will be empty:`, e); }
-          }
-        }
-
-        body.append(
-          btn('Merge (keep existing + add imported)','primary',{full:true,onclick:async ()=>{
-            const mf = sanitizeMfState(data);
-            if(data.decks){ const ids=new Set(state.decks.map(d=>d.id)); state.decks.push(...mf.decks.filter(d=>!ids.has(d.id))); }
-            if(data.folders){ const ids=new Set(state.folders.map(f=>f.id)); state.folders.push(...mf.folders.filter(f=>!ids.has(f.id))); }
-            if(data.libraryFolders){ if(!state.libraryFolders)state.libraryFolders=[]; const ids=new Set(state.libraryFolders.map(f=>f.id)); state.libraryFolders.push(...mf.libraryFolders.filter(f=>!ids.has(f.id))); }
-            if(data.sources){ const ids=new Set(state.sources.map(s=>s.id)); state.sources.push(...mf.sources.filter(s=>!ids.has(s.id))); }
-            if(data.recentStudyScopes){ const keys=new Set(state.recentStudyScopes.map(r=>r.key)); state.recentStudyScopes.push(...mf.recentStudyScopes.filter(r=>!keys.has(r.key))); }
-            // reviewHistory entries are keyed by date — keep the existing entry for any
-            // date already present locally, and only add dates the import doesn't overlap.
-            if(data.reviewHistory){ if(!state.reviewHistory)state.reviewHistory=[]; const dates=new Set(state.reviewHistory.map(r=>r.date)); state.reviewHistory.push(...mf.reviewHistory.filter(r=>!dates.has(r.date))); }
-            // achievements are plain unlocked-id strings — union, don't overwrite.
-            if(data.achievements){ if(!state.achievements)state.achievements=[]; const ids=new Set(state.achievements); mf.achievements.forEach(a=>{ if(!ids.has(a)){ state.achievements.push(a); ids.add(a); } }); }
-            if(data.settings) Object.assign(state.settings, mf.settings);
-            // Daily streak: was previously dropped entirely on Merge (even though the
-            // export includes it) — keep whichever side's lastStreakDate is more
-            // recent, so a fresher local streak isn't clobbered by an older backup
-            // and vice versa; fall back to the higher count if dates tie or are missing.
-            if(data.streak!==undefined || data.lastStreakDate!==undefined){
-              const importedIsFresher = mf.lastStreakDate && (!state.lastStreakDate || mf.lastStreakDate > state.lastStreakDate);
-              if(importedIsFresher){ state.streak=mf.streak; state.lastStreakDate=mf.lastStreakDate; }
-              else if(!state.lastStreakDate && !mf.lastStreakDate){ state.streak=Math.max(state.streak||0, mf.streak||0); }
-            }
-            // Was previously silently dropped on import even though the export
-            // includes it (and the summary above literally says "XP/tracker data
-            // included") — now a real merge (see mergeTrackerState in shared.js)
-            // instead of a blind overwrite, so existing Mark Tracker progress
-            // (subject XP/marks, predicted grades, streak) is combined with the
-            // imported backup rather than replaced by it.
-            if(data.trackerState) state.trackerState=mergeTrackerState(state.trackerState, data.trackerState);
-            await restoreBinaries();
-            tickThemeSchedule(); scheduleSave(); closeModal(); renderView('settings'); renderSidebar(); showToast('Data merged ✓');
-          }}),
-          btn('Replace (overwrite all existing data)','danger',{full:true,onclick:async ()=>{
-            if(!confirm('Replace ALL your existing data?'))return;
-            const mf = sanitizeMfState(data);
-            if(data.decks)state.decks=mf.decks; if(data.folders)state.folders=mf.folders;
-            if(data.libraryFolders)state.libraryFolders=mf.libraryFolders;
-            if(data.sources)state.sources=mf.sources; if(data.reviewHistory)state.reviewHistory=mf.reviewHistory;
-            if(data.achievements)state.achievements=mf.achievements; if(data.settings)Object.assign(state.settings,mf.settings);
-            if(data.streak!==undefined)state.streak=mf.streak; if(data.lastStreakDate!==undefined)state.lastStreakDate=mf.lastStreakDate;
-            if(data.recentStudyScopes)state.recentStudyScopes=mf.recentStudyScopes;
-            // Same fix as Merge above: this was silently dropped despite being exported.
-            if(data.trackerState) state.trackerState=sanitizeState(data.trackerState);
-            await restoreBinaries();
-            tickThemeSchedule(); scheduleSave(); closeModal(); renderView('settings'); renderSidebar(); showToast('Data replaced ✓');
-          }})
-        );
+    spRow('Default background', 'Paper style behind the drawing canvas', bgSel);
+    // Ranges
+    const SMOOTH_LABELS = ['Off', 'Light', 'Medium', 'Strong'];
+    const spRange = (label, desc, key, min, max, step, fmtv) => {
+      const valSpan = el('span', { style:'font-size:12px;color:var(--muted);min-width:56px;text-align:right' }, fmtv(spSetting(key)));
+      const input = el('input', {
+        type:'range', min:String(min), max:String(max), step:String(step), value:String(spSetting(key)),
+        style:'accent-color:var(--blue);flex:1', 'aria-label': label,
+        oninput: e => { const v = Number(e.target.value); spSetSetting(key, v); valSpan.textContent = fmtv(v); },
       });
-    }catch(err){ showToast('Could not read file: '+(err?.message||String(err))); }
-    importInput.value='';
-  }});
-  btnRow.appendChild(btn('📥 Import','ghost',{onclick:()=>importInput.click()}));
-  dataCard.append(btnRow, importInput,
-    el('div',{style:'padding-top:14px;border-top:1px solid rgba(255,255,255,0.05)'},
-      btn('🗑️ Clear All Data','danger',{onclick:()=>{
-        if(confirm('Delete ALL flashcard data? This cannot be undone.')){
-          try{localStorage.removeItem('mf_state');}catch(e){ console.warn('[SCIMA] Clear All Data: localStorage.removeItem failed:', e); }
-          location.reload();
-        }
-      }})
-    )
-  );
-  // ── Theme Schedule ────────────────────────────────────────────────────────
-  // Timed automatic theme switching. Three modes:
-  //  daily  — same time-slots repeat every day
-  //  weekly — different slots per weekday (great for "lighter on weekends")
-  //  sun    — switch at sunrise/sunset with per-slot offsets (uses browser geolocation)
+      spRow(label, desc, el('div', { style:'display:flex;align-items:center;gap:10px;min-width:200px;flex:1' }, input, valSpan));
+    };
+    spRange('Stroke smoothing', 'Filters jitter out of freehand lines', 'smoothing', 0, 3, 1, v => SMOOTH_LABELS[v] || 'Medium');
+    spRange('Undo history steps', 'How many undos a pad remembers', 'undoSteps', 20, 300, 20, v => `${v} steps`);
+    // Toggles
+    spToggle('Show grid on open', 'Start new pads with the background grid visible', 'gridVisible');
+    spToggle('Snap to grid', 'Drawing and dragging snap to the (rotated) grid', 'snap');
+    spToggle('Autosave while answering', 'Restore the pad if you close and reopen it on the same question', 'autosave');
+    spToggle('Confirm before clearing', 'Ask before 🧹 Clear pad wipes the drawing', 'confirmClear');
+    spToggle('Open in fullscreen', 'The pad covers the whole window instead of docking to the side', 'fullscreen');
+  }
+
+
+
+  // ── 3. 🎨 Appearance & Theme — colours, presets, patterns + the theme
+  //         schedule (its own card before the regrouping; the schedule is
+  //         appearance, so it now lives here as a subsection). ──────────────
   const sched = state.settings.themeSchedule || DEFAULT_SCHEDULE;
-
-  const schedCard = el('div', { class:'card', style:'padding:20px;margin-top:16px' });
-  schedCard.appendChild(el('div', { style:'font-weight:800;margin-bottom:4px' }, '🕐 Theme Schedule'));
-  schedCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:14px' }, 'Automatically switch themes at set times or based on sunrise/sunset.'));
-
-  // Enable toggle
-  const schedKnob = el('div', { class:'toggle-knob' });
-  const schedSw   = el('button', { type:'button', role:'switch',
-    class:`toggle${sched.enabled?' on':''}`,
-    'aria-checked':String(!!sched.enabled),
-    'aria-label':'Enable scheduling',
-    title:'Override manual theme at set times',
-    onclick: () => {
-    sched.enabled = !sched.enabled;
-    schedSw.classList.toggle('on', sched.enabled);
-    schedSw.setAttribute('aria-checked', String(!!sched.enabled));
-    scheduleSave(); tickThemeSchedule(); renderSchedBody();
-  }}, schedKnob);
-  schedCard.appendChild(el('div', { class:'toggle-row', style:'margin-bottom:14px' },
-    el('div', { class:'toggle-info' }, el('div', { class:'toggle-label' }, 'Enable scheduling'), el('div', { class:'toggle-desc' }, 'Override manual theme at set times')),
-    schedSw
-  ));
-
-  // Mode selector tabs
-  const modeBar = el('div', { style:'display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap' });
-  [['daily','📅 Daily'],['weekly','🗓 Weekly'],['sun','🌅 Sunrise/Sunset']].forEach(([m,label]) => {
-    const b = el('button', { class:`btn btn-sm ${sched.mode===m?'btn-primary':'btn-ghost'}`, onclick:()=>{
-      sched.mode = m; scheduleSave(); tickThemeSchedule(); renderSchedBody();
-    }}, label);
-    modeBar.appendChild(b);
-  });
-  schedCard.appendChild(modeBar);
-
-  const schedBody = el('div');
-  schedCard.appendChild(schedBody);
-
-  // ── Shared helpers ───────────────────────────────────────────────────────
-  const PRESET_OPTIONS = getAllPresets().map(({ key, name }) => [key, name]);
-
-  function makePresetSel(currentKey, onChange) {
-    const s = el('select', { style:'padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text);font-size:12px;font-family:inherit;outline:none', onchange: e => onChange(e.target.value) });
-    PRESET_OPTIONS.forEach(([k,name]) => { const o = el('option',{value:k,class:'u-bg'},name); if(k===currentKey)o.selected=true; s.appendChild(o); });
-    return s;
-  }
-
-  function makeTimePicker(val, onChange) {
-    return el('input',{type:'time',value:val||'08:00',style:'padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text);font-size:12px;font-family:inherit;outline:none',onchange:e=>onChange(e.target.value)});
-  }
-
-  function makeSlotRow(slot, onDelete, onChange) {
-    const swatch = el('span', { style:`width:18px;height:18px;border-radius:4px;background:linear-gradient(135deg,${(THEME_PRESETS[slot.presetKey]||THEME_PRESETS.default).blue||'#5BCEFA'},${(THEME_PRESETS[slot.presetKey]||THEME_PRESETS.default).pink||'#F5A9B8'});display:inline-block;flex-shrink:0;border:1px solid rgba(255,255,255,0.15)` });
-    const timePick = makeTimePicker(slot.time, v => { slot.time = v; scheduleSave(); tickThemeSchedule(); swatch.style.background = `linear-gradient(135deg,${(THEME_PRESETS[slot.presetKey]||THEME_PRESETS.default).blue},${(THEME_PRESETS[slot.presetKey]||THEME_PRESETS.default).pink})`; });
-    const presetSel = makePresetSel(slot.presetKey, k => { slot.presetKey = k; scheduleSave(); tickThemeSchedule(); swatch.style.background = `linear-gradient(135deg,${(THEME_PRESETS[k]||THEME_PRESETS.default).blue},${(THEME_PRESETS[k]||THEME_PRESETS.default).pink})`; });
-    const del = el('button', { class:'btn btn-ghost btn-sm', style:'padding:3px 8px;color:var(--muted)', title:'Remove slot', onclick:onDelete }, '×');
-    return el('div', { style:'display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border)' }, swatch, timePick, presetSel, del);
-  }
-
-  function addSlotBtn(onClick) {
-    return btn('+ Add Slot', 'ghost', { onclick: onClick, style:'margin-top:4px;width:100%' });
-  }
-
-  // ── Mode renderers ───────────────────────────────────────────────────────
-  function renderSchedBody() {
-    schedBody.innerHTML = '';
-    if (!sched.enabled) {
-      schedBody.appendChild(el('div', { style:'font-size:12px;color:var(--muted);padding:6px 0' }, 'Enable scheduling above to configure time slots.'));
-      return;
-    }
-
-    if (sched.mode === 'daily') {
-      if (!sched.daily) sched.daily = [...DEFAULT_SCHEDULE.daily];
-      const slotList = el('div');
-      const refresh = () => {
-        slotList.innerHTML = '';
-        [...sched.daily].sort((a,b) => hhmm2min(a.time)-hhmm2min(b.time)).forEach((slot,i) => {
-          slotList.appendChild(makeSlotRow(slot,
-            () => { sched.daily.splice(sched.daily.indexOf(slot),1); scheduleSave(); tickThemeSchedule(); refresh(); },
-            () => {}
-          ));
-        });
-      };
-      refresh();
-      schedBody.append(slotList, addSlotBtn(() => {
-        sched.daily.push({ time:'12:00', presetKey:'light' });
-        scheduleSave(); tickThemeSchedule(); refresh();
-      }));
-    }
-
-    else if (sched.mode === 'weekly') {
-      if (!sched.weekly) sched.weekly = { ...DEFAULT_SCHEDULE.weekly };
-      const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-      DAY_NAMES.forEach((dayName, d) => {
-        if (!sched.weekly[d]) sched.weekly[d] = [];
-        const daySection = el('div', { style:'margin-bottom:12px' });
-        daySection.appendChild(el('div', { style:'font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:6px' }, dayName));
-        const slotList = el('div');
-        const refresh = () => {
-          slotList.innerHTML = '';
-          [...sched.weekly[d]].sort((a,b)=>hhmm2min(a.time)-hhmm2min(b.time)).forEach(slot => {
-            slotList.appendChild(makeSlotRow(slot,
-              () => { sched.weekly[d].splice(sched.weekly[d].indexOf(slot),1); scheduleSave(); tickThemeSchedule(); refresh(); },
-              () => {}
-            ));
-          });
-          if (!sched.weekly[d].length) slotList.appendChild(el('div',{style:'font-size:11px;color:var(--muted);padding:4px 0;font-style:italic'},'No slots — inherits from previous day'));
-        };
-        refresh();
-        daySection.append(slotList, el('button',{class:'btn btn-ghost btn-sm',style:'font-size:11px;padding:4px 10px',onclick:()=>{ sched.weekly[d].push({time:'08:00',presetKey:'light'}); scheduleSave(); tickThemeSchedule(); refresh(); }},'+ Add'));
-        schedBody.appendChild(daySection);
-      });
-    }
-
-    else if (sched.mode === 'sun') {
-      if (!sched.sun) sched.sun = { ...DEFAULT_SCHEDULE.sun };
-      const sun = sched.sun;
-
-      // Validate helper
-      const validCoord = (v, min, max) => v !== '' && !isNaN(v) && Number(v) >= min && Number(v) <= max;
-
-      // Inline editable lat/lng inputs — always visible, geoBtn fills them automatically
-      function makeCoordInput(val, min, max, placeholder, onChange) {
-        const inp = el('input', {
-          type: 'text', inputmode: 'decimal', placeholder,
-          value: val != null ? String(val) : '',
-          style: 'width:90px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text);font-size:12px;font-family:inherit;outline:none;text-align:right;transition:border-color 0.15s',
-          oninput: e => {
-            const v = e.target.value;
-            inp.style.borderColor = validCoord(v, min, max) ? 'rgba(var(--blue-rgb),0.5)' : 'rgba(239,68,68,0.6)';
-            if (validCoord(v, min, max)) onChange(parseFloat(parseFloat(v).toFixed(4)));
-          },
-          onblur: e => {
-            if (!validCoord(e.target.value, min, max)) {
-              inp.style.borderColor = 'rgba(239,68,68,0.6)';
-              inp.title = `Must be between ${min} and ${max}`;
-            }
-          }
-        });
-        return inp;
-      }
-
-      const latInput = makeCoordInput(sun.lat, -90, 90, '51.5074', v => {
-        sun.lat = v; scheduleSave(); refreshSunPreview();
-      });
-      const lngInput = makeCoordInput(sun.lng, -180, 180, '-0.1278', v => {
-        sun.lng = v; scheduleSave(); refreshSunPreview();
-      });
-
-      const geoBtn = el('button', { class:'btn btn-ghost btn-sm', style:'font-size:11px;white-space:nowrap', onclick: async () => {
-        geoBtn.textContent = 'Requesting…'; geoBtn.disabled = true;
-        try {
-          const { lat, lng } = await fetchGeoForSchedule();
-          latInput.value = String(lat); lngInput.value = String(lng);
-          latInput.style.borderColor = ''; lngInput.style.borderColor = '';
-          showToast('Location saved ✓'); refreshSunPreview(); tickThemeSchedule();
-        } catch(e) { showToast('Location error: ' + (e.message||'denied')); }
-        geoBtn.textContent = '📍 Detect'; geoBtn.disabled = false;
-      }}, '📍 Detect');
-
-      // Sun-times preview (updates when inputs change)
-      const sunPreviewEl = el('div', { style:'font-size:11px;color:var(--muted);margin:6px 0 12px;min-height:16px' });
-      function refreshSunPreview() {
-        if (sun.lat == null || sun.lng == null) { sunPreviewEl.textContent = ''; return; }
-        const times = calcSunTimes(sun.lat, sun.lng, new Date());
-        if (!times) { sunPreviewEl.textContent = '⚠️ Polar day/night — no sunrise/sunset today'; return; }
-        const fmt = m => { const mm = ((m%1440)+1440)%1440; return String(Math.floor(mm/60)).padStart(2,'0')+':'+String(Math.round(mm%60)).padStart(2,'0'); };
-        const riseM = times.rise + (sun.riseOffset||0), setM = times.set + (sun.setOffset||0);
-        sunPreviewEl.textContent = `Today: ☀️ ${fmt(riseM)}  🌙 ${fmt(setM)}`;
-      }
-      refreshSunPreview();
-
-      // Offset inputs
-      function makeOffsetInput(val, onChange) {
-        return el('input',{type:'number',value:String(val||0),min:'-180',max:'180',
-          style:'width:72px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text);font-size:12px;font-family:inherit;outline:none;text-align:right',
-          oninput:e=>{onChange(Number(e.target.value));scheduleSave();tickThemeSchedule();refreshSunPreview();}});
-      }
-
-      schedBody.append(
-        // Location row: lat / lng inputs + detect button
-        el('div', { style:'margin-bottom:4px' },
-          el('div',{style:'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:6px'},'Location'),
-          el('div',{style:'display:flex;align-items:center;gap:8px;flex-wrap:wrap'},
-            el('label',{style:'font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px'},'Lat', latInput),
-            el('label',{style:'font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px'},'Lng', lngInput),
-            geoBtn,
-            el('span',{style:'font-size:10px;color:var(--muted)'},'or enter manually (±90° / ±180°)')
-          )
-        ),
-        sunPreviewEl,
-        el('div',{style:'display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px'},
-          el('div',{style:'padding:12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border)'},
-            el('div',{style:'font-size:12px;font-weight:700;margin-bottom:8px'},'☀️ Daytime theme'),
-            el('div',{style:'font-size:11px;color:var(--muted);margin-bottom:6px'},'Applied at sunrise'),
-            makePresetSel(sun.dayPreset||'light', k=>{sun.dayPreset=k;scheduleSave();tickThemeSchedule();}),
-            el('div',{style:'font-size:11px;color:var(--muted);margin-top:8px;margin-bottom:4px'},'Offset (min)'),
-            makeOffsetInput(sun.riseOffset, v=>sun.riseOffset=v)
-          ),
-          el('div',{style:'padding:12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border)'},
-            el('div',{style:'font-size:12px;font-weight:700;margin-bottom:8px'},'🌙 Nighttime theme'),
-            el('div',{style:'font-size:11px;color:var(--muted);margin-bottom:6px'},'Applied at sunset'),
-            makePresetSel(sun.nightPreset||'default', k=>{sun.nightPreset=k;scheduleSave();tickThemeSchedule();}),
-            el('div',{style:'font-size:11px;color:var(--muted);margin-top:8px;margin-bottom:4px'},'Offset (min)'),
-            makeOffsetInput(sun.setOffset, v=>sun.setOffset=v)
-          )
-        )
-      );
-    }
-  }
-  renderSchedBody();
-
   // ── Appearance ────────────────────────────────────────────────────────────
-  const thm = state.settings.theme || DEFAULT_THEME;
-  const appearCard = el('div', { class:'card', style:'padding:20px;margin-top:16px' });
-  appearCard.appendChild(el('div', { style:'font-weight:800;margin-bottom:14px;color:var(--blue)' }, '🎨 Appearance'));
+  const appearCard = el('div', { class:'card', style:'padding:20px' });
+  appearCard.appendChild(el('div', { style:'font-weight:800;margin-bottom:14px;color:var(--blue)' }, '🎨 Appearance & Theme'));
 
   // Schedule-override notice
   if (sched.enabled && resolveScheduledTheme(sched, state.settings.customPresets)) {
@@ -845,13 +608,235 @@ function renderSettings(c) {
     scheduleSave(); renderView('settings'); renderSidebar();
   }}));
 
+
+  // ── Theme Schedule ────────────────────────────────────────────────────────
+  // Timed automatic theme switching. Three modes:
+  //  daily  — same time-slots repeat every day
+  //  weekly — different slots per weekday (great for "lighter on weekends")
+  //  sun    — switch at sunrise/sunset with per-slot offsets (uses browser geolocation)
+  // (`sched` itself is declared above the Appearance card — its schedule-
+  // override notice reads it before this section renders.)
+
+  const schedSection = el('div');
+  schedSection.appendChild(el('div', { style:'font-weight:800;margin-bottom:4px' }, '🕐 Theme Schedule'));
+  schedSection.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:14px' }, 'Automatically switch themes at set times or based on sunrise/sunset.'));
+
+  // Enable toggle
+  const schedKnob = el('div', { class:'toggle-knob' });
+  const schedSw   = el('button', { type:'button', role:'switch',
+    class:`toggle${sched.enabled?' on':''}`,
+    'aria-checked':String(!!sched.enabled),
+    'aria-label':'Enable scheduling',
+    title:'Override manual theme at set times',
+    onclick: () => {
+    sched.enabled = !sched.enabled;
+    schedSw.classList.toggle('on', sched.enabled);
+    schedSw.setAttribute('aria-checked', String(!!sched.enabled));
+    scheduleSave(); tickThemeSchedule(); renderSchedBody();
+  }}, schedKnob);
+  schedSection.appendChild(el('div', { class:'toggle-row', style:'margin-bottom:14px' },
+    el('div', { class:'toggle-info' }, el('div', { class:'toggle-label' }, 'Enable scheduling'), el('div', { class:'toggle-desc' }, 'Override manual theme at set times')),
+    schedSw
+  ));
+
+  // Mode selector tabs
+  const modeBar = el('div', { style:'display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap' });
+  [['daily','📅 Daily'],['weekly','🗓 Weekly'],['sun','🌅 Sunrise/Sunset']].forEach(([m,label]) => {
+    const b = el('button', { class:`btn btn-sm ${sched.mode===m?'btn-primary':'btn-ghost'}`, onclick:()=>{
+      sched.mode = m; scheduleSave(); tickThemeSchedule(); renderSchedBody();
+    }}, label);
+    modeBar.appendChild(b);
+  });
+  schedSection.appendChild(modeBar);
+
+  const schedBody = el('div');
+  schedSection.appendChild(schedBody);
+
+  // ── Shared helpers ───────────────────────────────────────────────────────
+  const PRESET_OPTIONS = getAllPresets().map(({ key, name }) => [key, name]);
+
+  function makePresetSel(currentKey, onChange) {
+    const s = el('select', { style:'padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text);font-size:12px;font-family:inherit;outline:none', onchange: e => onChange(e.target.value) });
+    PRESET_OPTIONS.forEach(([k,name]) => { const o = el('option',{value:k,class:'u-bg'},name); if(k===currentKey)o.selected=true; s.appendChild(o); });
+    return s;
+  }
+
+  function makeTimePicker(val, onChange) {
+    return el('input',{type:'time',value:val||'08:00',style:'padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text);font-size:12px;font-family:inherit;outline:none',onchange:e=>onChange(e.target.value)});
+  }
+
+  function makeSlotRow(slot, onDelete, onChange) {
+    const swatch = el('span', { style:`width:18px;height:18px;border-radius:4px;background:linear-gradient(135deg,${(THEME_PRESETS[slot.presetKey]||THEME_PRESETS.default).blue||'#5BCEFA'},${(THEME_PRESETS[slot.presetKey]||THEME_PRESETS.default).pink||'#F5A9B8'});display:inline-block;flex-shrink:0;border:1px solid rgba(255,255,255,0.15)` });
+    const timePick = makeTimePicker(slot.time, v => { slot.time = v; scheduleSave(); tickThemeSchedule(); swatch.style.background = `linear-gradient(135deg,${(THEME_PRESETS[slot.presetKey]||THEME_PRESETS.default).blue},${(THEME_PRESETS[slot.presetKey]||THEME_PRESETS.default).pink})`; });
+    const presetSel = makePresetSel(slot.presetKey, k => { slot.presetKey = k; scheduleSave(); tickThemeSchedule(); swatch.style.background = `linear-gradient(135deg,${(THEME_PRESETS[k]||THEME_PRESETS.default).blue},${(THEME_PRESETS[k]||THEME_PRESETS.default).pink})`; });
+    const del = el('button', { class:'btn btn-ghost btn-sm', style:'padding:3px 8px;color:var(--muted)', title:'Remove slot', onclick:onDelete }, '×');
+    return el('div', { style:'display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border)' }, swatch, timePick, presetSel, del);
+  }
+
+  function addSlotBtn(onClick) {
+    return btn('+ Add Slot', 'ghost', { onclick: onClick, style:'margin-top:4px;width:100%' });
+  }
+
+  // ── Mode renderers ───────────────────────────────────────────────────────
+  function renderSchedBody() {
+    schedBody.innerHTML = '';
+    if (!sched.enabled) {
+      schedBody.appendChild(el('div', { style:'font-size:12px;color:var(--muted);padding:6px 0' }, 'Enable scheduling above to configure time slots.'));
+      return;
+    }
+
+    if (sched.mode === 'daily') {
+      if (!sched.daily) sched.daily = [...DEFAULT_SCHEDULE.daily];
+      const slotList = el('div');
+      const refresh = () => {
+        slotList.innerHTML = '';
+        [...sched.daily].sort((a,b) => hhmm2min(a.time)-hhmm2min(b.time)).forEach((slot,i) => {
+          slotList.appendChild(makeSlotRow(slot,
+            () => { sched.daily.splice(sched.daily.indexOf(slot),1); scheduleSave(); tickThemeSchedule(); refresh(); },
+            () => {}
+          ));
+        });
+      };
+      refresh();
+      schedBody.append(slotList, addSlotBtn(() => {
+        sched.daily.push({ time:'12:00', presetKey:'light' });
+        scheduleSave(); tickThemeSchedule(); refresh();
+      }));
+    }
+
+    else if (sched.mode === 'weekly') {
+      if (!sched.weekly) sched.weekly = { ...DEFAULT_SCHEDULE.weekly };
+      const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      DAY_NAMES.forEach((dayName, d) => {
+        if (!sched.weekly[d]) sched.weekly[d] = [];
+        const daySection = el('div', { style:'margin-bottom:12px' });
+        daySection.appendChild(el('div', { style:'font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:6px' }, dayName));
+        const slotList = el('div');
+        const refresh = () => {
+          slotList.innerHTML = '';
+          [...sched.weekly[d]].sort((a,b)=>hhmm2min(a.time)-hhmm2min(b.time)).forEach(slot => {
+            slotList.appendChild(makeSlotRow(slot,
+              () => { sched.weekly[d].splice(sched.weekly[d].indexOf(slot),1); scheduleSave(); tickThemeSchedule(); refresh(); },
+              () => {}
+            ));
+          });
+          if (!sched.weekly[d].length) slotList.appendChild(el('div',{style:'font-size:11px;color:var(--muted);padding:4px 0;font-style:italic'},'No slots — inherits from previous day'));
+        };
+        refresh();
+        daySection.append(slotList, el('button',{class:'btn btn-ghost btn-sm',style:'font-size:11px;padding:4px 10px',onclick:()=>{ sched.weekly[d].push({time:'08:00',presetKey:'light'}); scheduleSave(); tickThemeSchedule(); refresh(); }},'+ Add'));
+        schedBody.appendChild(daySection);
+      });
+    }
+
+    else if (sched.mode === 'sun') {
+      if (!sched.sun) sched.sun = { ...DEFAULT_SCHEDULE.sun };
+      const sun = sched.sun;
+
+      // Validate helper
+      const validCoord = (v, min, max) => v !== '' && !isNaN(v) && Number(v) >= min && Number(v) <= max;
+
+      // Inline editable lat/lng inputs — always visible, geoBtn fills them automatically
+      function makeCoordInput(val, min, max, placeholder, onChange) {
+        const inp = el('input', {
+          type: 'text', inputmode: 'decimal', placeholder,
+          value: val != null ? String(val) : '',
+          style: 'width:90px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text);font-size:12px;font-family:inherit;outline:none;text-align:right;transition:border-color 0.15s',
+          oninput: e => {
+            const v = e.target.value;
+            inp.style.borderColor = validCoord(v, min, max) ? 'rgba(var(--blue-rgb),0.5)' : 'rgba(239,68,68,0.6)';
+            if (validCoord(v, min, max)) onChange(parseFloat(parseFloat(v).toFixed(4)));
+          },
+          onblur: e => {
+            if (!validCoord(e.target.value, min, max)) {
+              inp.style.borderColor = 'rgba(239,68,68,0.6)';
+              inp.title = `Must be between ${min} and ${max}`;
+            }
+          }
+        });
+        return inp;
+      }
+
+      const latInput = makeCoordInput(sun.lat, -90, 90, '51.5074', v => {
+        sun.lat = v; scheduleSave(); refreshSunPreview();
+      });
+      const lngInput = makeCoordInput(sun.lng, -180, 180, '-0.1278', v => {
+        sun.lng = v; scheduleSave(); refreshSunPreview();
+      });
+
+      const geoBtn = el('button', { class:'btn btn-ghost btn-sm', style:'font-size:11px;white-space:nowrap', onclick: async () => {
+        geoBtn.textContent = 'Requesting…'; geoBtn.disabled = true;
+        try {
+          const { lat, lng } = await fetchGeoForSchedule();
+          latInput.value = String(lat); lngInput.value = String(lng);
+          latInput.style.borderColor = ''; lngInput.style.borderColor = '';
+          showToast('Location saved ✓'); refreshSunPreview(); tickThemeSchedule();
+        } catch(e) { showToast('Location error: ' + (e.message||'denied')); }
+        geoBtn.textContent = '📍 Detect'; geoBtn.disabled = false;
+      }}, '📍 Detect');
+
+      // Sun-times preview (updates when inputs change)
+      const sunPreviewEl = el('div', { style:'font-size:11px;color:var(--muted);margin:6px 0 12px;min-height:16px' });
+      function refreshSunPreview() {
+        if (sun.lat == null || sun.lng == null) { sunPreviewEl.textContent = ''; return; }
+        const times = calcSunTimes(sun.lat, sun.lng, new Date());
+        if (!times) { sunPreviewEl.textContent = '⚠️ Polar day/night — no sunrise/sunset today'; return; }
+        const fmt = m => { const mm = ((m%1440)+1440)%1440; return String(Math.floor(mm/60)).padStart(2,'0')+':'+String(Math.round(mm%60)).padStart(2,'0'); };
+        const riseM = times.rise + (sun.riseOffset||0), setM = times.set + (sun.setOffset||0);
+        sunPreviewEl.textContent = `Today: ☀️ ${fmt(riseM)}  🌙 ${fmt(setM)}`;
+      }
+      refreshSunPreview();
+
+      // Offset inputs
+      function makeOffsetInput(val, onChange) {
+        return el('input',{type:'number',value:String(val||0),min:'-180',max:'180',
+          style:'width:72px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text);font-size:12px;font-family:inherit;outline:none;text-align:right',
+          oninput:e=>{onChange(Number(e.target.value));scheduleSave();tickThemeSchedule();refreshSunPreview();}});
+      }
+
+      schedBody.append(
+        // Location row: lat / lng inputs + detect button
+        el('div', { style:'margin-bottom:4px' },
+          el('div',{style:'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:6px'},'Location'),
+          el('div',{style:'display:flex;align-items:center;gap:8px;flex-wrap:wrap'},
+            el('label',{style:'font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px'},'Lat', latInput),
+            el('label',{style:'font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px'},'Lng', lngInput),
+            geoBtn,
+            el('span',{style:'font-size:10px;color:var(--muted)'},'or enter manually (±90° / ±180°)')
+          )
+        ),
+        sunPreviewEl,
+        el('div',{style:'display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px'},
+          el('div',{style:'padding:12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border)'},
+            el('div',{style:'font-size:12px;font-weight:700;margin-bottom:8px'},'☀️ Daytime theme'),
+            el('div',{style:'font-size:11px;color:var(--muted);margin-bottom:6px'},'Applied at sunrise'),
+            makePresetSel(sun.dayPreset||'light', k=>{sun.dayPreset=k;scheduleSave();tickThemeSchedule();}),
+            el('div',{style:'font-size:11px;color:var(--muted);margin-top:8px;margin-bottom:4px'},'Offset (min)'),
+            makeOffsetInput(sun.riseOffset, v=>sun.riseOffset=v)
+          ),
+          el('div',{style:'padding:12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border)'},
+            el('div',{style:'font-size:12px;font-weight:700;margin-bottom:8px'},'🌙 Nighttime theme'),
+            el('div',{style:'font-size:11px;color:var(--muted);margin-bottom:6px'},'Applied at sunset'),
+            makePresetSel(sun.nightPreset||'default', k=>{sun.nightPreset=k;scheduleSave();tickThemeSchedule();}),
+            el('div',{style:'font-size:11px;color:var(--muted);margin-top:8px;margin-bottom:4px'},'Offset (min)'),
+            makeOffsetInput(sun.setOffset, v=>sun.setOffset=v)
+          )
+        )
+      );
+    }
+  }
+  renderSchedBody();
+
+
+  appearCard.appendChild(el('div',{style:'border-top:1px solid rgba(255,255,255,0.05);margin:18px 0 14px'}));
+  appearCard.appendChild(schedSection);
+
   // ── Subjects ──────────────────────────────────────────────────────────────
   // Subjects group decks and folders. They used to be a fixed built-in list that
   // only the (unported) Mark Tracker could extend, so this card is the
   // dashboard's own editor over the same config.customSubjects store — a subject
   // added here shows up in every deck/folder picker immediately. Hidden subjects
   // are kept (their decks keep their tag) and can be restored.
-  const subjectsCard = el('div', { class:'card', style:'padding:20px;margin-top:16px' });
+  const subjectsCard = el('div', { class:'card', style:'padding:20px' });
   subjectsCard.id = 'tutorial-target-subjects-card';
   subjectsCard.appendChild(el('div', { style:'font-weight:800;margin-bottom:6px' }, '📘 Subjects'));
   subjectsCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:14px' },
@@ -1026,11 +1011,12 @@ function renderSettings(c) {
     addSubjectBtn,
     el('span', { class:'u-muted-11' }, 'Defaults come from shared.js\u2019s SUBJECTS; anything you add or change is stored with your own data.')));
 
+
   // ── Navigation ────────────────────────────────────────────────────────────
   // Reorder sidebar tabs (drag not available here — use up/down arrows) and
   // toggle their visibility. Hidden tabs move to the drawer at the bottom of
   // the sidebar (accessible but not cluttering the main nav list).
-  const navCard = el('div', { class:'card', style:'padding:20px;margin-top:16px' });
+  const navCard = el('div', { class:'card', style:'padding:20px' });
   navCard.appendChild(el('div', { style:'font-weight:800;margin-bottom:6px' }, '🗂️ Navigation'));
   navCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:14px' }, 'Reorder or hide sidebar tabs. Hidden tabs go to the drawer at the bottom of the sidebar.'));
 
@@ -1075,97 +1061,154 @@ function renderSettings(c) {
     }})
   ));
 
-  // ✍️ Scratchpad defaults (spec §32) — persisted under state.settings.scratch
-  // via dashboard-scratchpad.js's spSetting()/spSetSetting() (loaded before
-  // this file on the settings route). Guarded so a stale cache without the
-  // scratchpad module still renders the rest of Settings.
-  const scratchCard = el('div', { class:'card', style:'padding:20px;margin-top:16px' });
-  scratchCard.appendChild(el('div', { style:'font-weight:800;margin-bottom:4px;color:var(--blue)' }, '✍️ Scratchpad'));
-  scratchCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:10px' },
-    'Defaults for the per-question drawing pad in study sessions. Pads are ephemeral — kept only while you answer a question, deleted the moment you answer it, and wiped when the session ends.'));
-  if (typeof spSetting === 'function' && typeof SP_SWATCHES !== 'undefined') {
-    const spRow = (label, desc, node) => scratchCard.appendChild(el('div', { style:'padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05)' },
-      el('div', { style:'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap' },
-        el('div', {},
-          el('div', { style:'font-size:13px;font-weight:600' }, label),
-          desc ? el('div', { style:'font-size:11px;color:var(--muted)' }, desc) : null),
-        node)));
-    const spToggle = (label, desc, key) => {
-      const knob = el('div', { class:'toggle-knob' });
-      const sw = el('button', { type:'button', role:'switch',
-        class:`toggle${spSetting(key) ? ' on' : ''}`,
-        'aria-label': label, 'aria-checked':String(!!spSetting(key)),
-        onclick: () => {
-        spSetSetting(key, !spSetting(key));
-        sw.classList.toggle('on', !!spSetting(key));
-        sw.setAttribute('aria-checked', String(!!spSetting(key)));
-      }}, knob);
-      spRow(label, desc, sw);
-    };
-    // Default pen color — quick swatches + custom picker
-    const swatchRow = el('div', { style:'display:flex;gap:6px;flex-wrap:wrap;align-items:center' });
-    const redrawSwatches = () => {
-      swatchRow.innerHTML = '';
-      for (const c of SP_SWATCHES) {
-        swatchRow.appendChild(el('button', {
-          type:'button', class:'sp-swatch' + (String(spSetting('color')).toLowerCase() === c.toLowerCase() ? ' active' : ''),
-          'aria-label': `Default scratchpad color ${c}`, title: c, style:`background:${c}`,
-          onclick: () => { spSetSetting('color', c); redrawSwatches(); },
-        }));
-      }
-      swatchRow.appendChild(el('button', {
-        type:'button', class:'sp-mini-btn', 'aria-label':'Custom default scratchpad color', title:'Custom color…',
-        onclick: e => { try { openColorPicker(e.currentTarget, spSetting('color'), c => { spSetSetting('color', c); redrawSwatches(); }); } catch (err) {} },
-      }, '🎨'));
-    };
-    redrawSwatches();
-    spRow('Default pen color', 'Applied to fresh pads and new strokes', swatchRow);
-    // Default stroke width
-    const widthRow = el('div', { style:'display:flex;gap:6px' });
-    const redrawWidths = () => {
-      widthRow.innerHTML = '';
-      for (const w of SP_WIDTHS) {
-        widthRow.appendChild(el('button', {
-          type:'button', class:'sp-mini-btn' + (Number(spSetting('width')) === w ? ' active' : ''),
-          'aria-label': `Default stroke width ${w} pixels`,
-          onclick: () => { spSetSetting('width', w); redrawWidths(); },
-        }, String(w)));
-      }
-    };
-    redrawWidths();
-    spRow('Default stroke width', 'Pen / shape outline thickness', widthRow);
-    // Default background style
-    const bgSel = el('select', { class:'u-input', style:'max-width:180px', 'aria-label':'Default scratchpad background', onchange: e => spSetSetting('bg', e.target.value) });
-    for (const b of SP_BG_STYLES) {
-      const o = el('option', { value: b.id }, b.label);
-      if (spSetting('bg') === b.id) o.selected = true;
-      bgSel.appendChild(o);
+
+  const dataCard=el('div',{class:'card',style:'padding:20px;margin-top:16px'},
+    el('div',{style:'font-weight:800;margin-bottom:6px'},'💾 Data Management'),
+    el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:14px'},`${nOf(state.decks.length,'deck')} · ${nOf(state.decks.flatMap(d=>d.cards).length,'card')} · ${nOf(state.sources.length,'source')} · ${nOf(state.folders.length,'folder')}`)
+  );
+  const btnRow=el('div',{style:'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px'});
+
+  btnRow.appendChild(btn('📤 Export All Data (.zip)','ghost',{onclick:()=>{ exportAllDataZip(); }}));
+  btnRow.appendChild(btn('📦 Export Decks Only','ghost',{onclick:()=>{
+    const a=document.createElement('a');
+    const citedSourceIds=new Set(state.decks.flatMap(d=>d.cards).map(c=>c.citation?.sourceId).filter(Boolean));
+    const citedSources=(state.sources||[]).filter(s=>citedSourceIds.has(s.id));
+    function resolveDecks(decks){
+      return decks.map(d=>({...d,cards:d.cards.map(c=>{
+        if(!c.citation)return c;
+        const src=citedSources.find(s=>s.id===c.citation.sourceId);
+        const chap=c.citation.chapterId&&src?.chapters?.find(ch=>ch.id===c.citation.chapterId);
+        const excerpt=src?src.content.slice(c.citation.charStart,c.citation.charEnd):'';
+        return {...c,citation:{...c.citation,sourceName:src?.name||null,chapterTitle:chap?.title||null,excerpt:excerpt||null}};
+      })}));
     }
-    spRow('Default background', 'Paper style behind the drawing canvas', bgSel);
-    // Ranges
-    const SMOOTH_LABELS = ['Off', 'Light', 'Medium', 'Strong'];
-    const spRange = (label, desc, key, min, max, step, fmtv) => {
-      const valSpan = el('span', { style:'font-size:12px;color:var(--muted);min-width:56px;text-align:right' }, fmtv(spSetting(key)));
-      const input = el('input', {
-        type:'range', min:String(min), max:String(max), step:String(step), value:String(spSetting(key)),
-        style:'accent-color:var(--blue);flex:1', 'aria-label': label,
-        oninput: e => { const v = Number(e.target.value); spSetSetting(key, v); valSpan.textContent = fmtv(v); },
+    a.href='data:application/json,'+encodeURIComponent(JSON.stringify(scimaStamp({version:2,decks:resolveDecks(state.decks).map(d=>scimaDeckToShare(d)),folders:state.folders,citedSources},'share','collection'),null,2));
+    a.download=`SCIMA-decks-${today()}.json`; a.click();
+  }}));
+
+  const importInput=el('input',{type:'file',accept:'.zip,.json',style:'display:none',onchange:async e=>{
+    const file=e.target.files?.[0]; if(!file)return;
+    try{
+      let data, pdfFiles={}, htmlFiles={};
+      if(file.name.toLowerCase().endsWith('.zip')){
+        const buf=new Uint8Array(await file.arrayBuffer());
+        const unzipped=fflate.unzipSync(buf);
+        const dataBytes=unzipped['data.json'];
+        if(!dataBytes) throw new Error('data.json not found in archive');
+        data=JSON.parse(new TextDecoder().decode(dataBytes));
+        Object.keys(unzipped).forEach(name=>{
+          if(name.startsWith('pdf/')&&name.endsWith('.pdf')) pdfFiles[name.slice(4,-4)]=unzipped[name];
+          if(name.startsWith('html/')&&name.endsWith('.json')) htmlFiles[name.slice(5,-5)]=unzipped[name];
+        });
+      } else {
+        data=JSON.parse(await file.text());
+      }
+
+      const clsI = scimaClassify(data);
+      if (!clsI || (clsI.kind!=='account' && clsI.kind!=='collection')) {
+        showToast(clsI ? 'That file is a deck/folder export — import it from Decks → + New Deck → Import JSON' : 'Unrecognized file — not a SCIMA backup (schema check failed)');
+        return;
+      }
+      openModal('Import Data', body=>{
+        const deckCount=data.decks?.length||0, folderCount=data.folders?.length||0, sourceCount=data.sources?.length||0;
+        const libFolderCount=data.libraryFolders?.length||0, pdfCount=Object.keys(pdfFiles).length, htmlCount=Object.keys(htmlFiles).length;
+        body.appendChild(el('div',{style:'padding:14px;border-radius:10px;background:rgba(var(--blue-rgb),0.08);border:1px solid rgba(var(--blue-rgb),0.2);margin-bottom:16px'},
+          el('div',{style:'font-weight:700;color:var(--blue);margin-bottom:8px'},'📦 Import Contents'),
+          deckCount?el('div',{class:'u-muted-12'},`📚 ${deckCount} deck${deckCount!==1?'s':''}`):'',
+          folderCount?el('div',{class:'u-muted-12'},`📁 ${folderCount} folder${folderCount!==1?'s':''}`):'',
+          sourceCount?el('div',{class:'u-muted-12'},`📖 ${sourceCount} source${sourceCount!==1?'s':''}`):'',
+          libFolderCount?el('div',{class:'u-muted-12'},`🗂️ ${libFolderCount} library folder${libFolderCount!==1?'s':''}`):'',
+          pdfCount?el('div',{class:'u-muted-12'},`📄 ${pdfCount} PDF${pdfCount!==1?'s':''} bundled`):'',
+          htmlCount?el('div',{class:'u-muted-12'},`🖼️ ${htmlCount} illustrated book${htmlCount!==1?'s':''} bundled`):'',
+          data.reviewHistory?el('div',{class:'u-muted-12'},'📅 Review history included'):'',
+          data.trackerState?el('div',{class:'u-muted-12'},'⭐ XP/tracker data included'):'',
+          data.streak!==undefined?el('div',{class:'u-muted-12'},'🔥 Streak included'):'',
+          data.settings?el('div',{class:'u-muted-12'},'⚙️ Settings/preferences included'):'',
+          data.settings?.theme?el('div',{class:'u-muted-12'},'🎨 Appearance/theme included'):''
+        ));
+
+        async function restoreBinaries(){
+          for(const [srcId,bytes] of Object.entries(pdfFiles)){
+            let bin=''; const CH=8192; for(let i=0;i<bytes.length;i+=CH) bin+=String.fromCharCode(...bytes.subarray(i,i+CH));
+            await writePdfChunks(srcId, 'data:application/pdf;base64,'+btoa(bin));
+          }
+          for(const [srcId,bytes] of Object.entries(htmlFiles)){
+            try{ await saveHtmlChapters(srcId, JSON.parse(new TextDecoder().decode(bytes))); }
+            catch(e){ console.warn(`[SCIMA] import: failed to restore HTML/EPUB content for source ${srcId} — the source entry exists but its content will be empty:`, e); }
+          }
+        }
+
+        body.append(
+          btn('Merge (keep existing + add imported)','primary',{full:true,onclick:async ()=>{
+            const mf = sanitizeMfState(data);
+            if(data.decks){ const ids=new Set(state.decks.map(d=>d.id)); state.decks.push(...mf.decks.filter(d=>!ids.has(d.id))); }
+            if(data.folders){ const ids=new Set(state.folders.map(f=>f.id)); state.folders.push(...mf.folders.filter(f=>!ids.has(f.id))); }
+            if(data.libraryFolders){ if(!state.libraryFolders)state.libraryFolders=[]; const ids=new Set(state.libraryFolders.map(f=>f.id)); state.libraryFolders.push(...mf.libraryFolders.filter(f=>!ids.has(f.id))); }
+            if(data.sources){ const ids=new Set(state.sources.map(s=>s.id)); state.sources.push(...mf.sources.filter(s=>!ids.has(s.id))); }
+            if(data.recentStudyScopes){ const keys=new Set(state.recentStudyScopes.map(r=>r.key)); state.recentStudyScopes.push(...mf.recentStudyScopes.filter(r=>!keys.has(r.key))); }
+            // reviewHistory entries are keyed by date — keep the existing entry for any
+            // date already present locally, and only add dates the import doesn't overlap.
+            if(data.reviewHistory){ if(!state.reviewHistory)state.reviewHistory=[]; const dates=new Set(state.reviewHistory.map(r=>r.date)); state.reviewHistory.push(...mf.reviewHistory.filter(r=>!dates.has(r.date))); }
+            // achievements are plain unlocked-id strings — union, don't overwrite.
+            if(data.achievements){ if(!state.achievements)state.achievements=[]; const ids=new Set(state.achievements); mf.achievements.forEach(a=>{ if(!ids.has(a)){ state.achievements.push(a); ids.add(a); } }); }
+            if(data.settings) Object.assign(state.settings, mf.settings);
+            // Daily streak: was previously dropped entirely on Merge (even though the
+            // export includes it) — keep whichever side's lastStreakDate is more
+            // recent, so a fresher local streak isn't clobbered by an older backup
+            // and vice versa; fall back to the higher count if dates tie or are missing.
+            if(data.streak!==undefined || data.lastStreakDate!==undefined){
+              const importedIsFresher = mf.lastStreakDate && (!state.lastStreakDate || mf.lastStreakDate > state.lastStreakDate);
+              if(importedIsFresher){ state.streak=mf.streak; state.lastStreakDate=mf.lastStreakDate; }
+              else if(!state.lastStreakDate && !mf.lastStreakDate){ state.streak=Math.max(state.streak||0, mf.streak||0); }
+            }
+            // Was previously silently dropped on import even though the export
+            // includes it (and the summary above literally says "XP/tracker data
+            // included") — now a real merge (see mergeTrackerState in shared.js)
+            // instead of a blind overwrite, so existing Mark Tracker progress
+            // (subject XP/marks, predicted grades, streak) is combined with the
+            // imported backup rather than replaced by it.
+            if(data.trackerState) state.trackerState=mergeTrackerState(state.trackerState, data.trackerState);
+            await restoreBinaries();
+            tickThemeSchedule(); scheduleSave(); closeModal(); renderView('settings'); renderSidebar(); showToast('Data merged ✓');
+          }}),
+          btn('Replace (overwrite all existing data)','danger',{full:true,onclick:async ()=>{
+            if(!confirm('Replace ALL your existing data?'))return;
+            const mf = sanitizeMfState(data);
+            if(data.decks)state.decks=mf.decks; if(data.folders)state.folders=mf.folders;
+            if(data.libraryFolders)state.libraryFolders=mf.libraryFolders;
+            if(data.sources)state.sources=mf.sources; if(data.reviewHistory)state.reviewHistory=mf.reviewHistory;
+            if(data.achievements)state.achievements=mf.achievements; if(data.settings)Object.assign(state.settings,mf.settings);
+            if(data.streak!==undefined)state.streak=mf.streak; if(data.lastStreakDate!==undefined)state.lastStreakDate=mf.lastStreakDate;
+            if(data.recentStudyScopes)state.recentStudyScopes=mf.recentStudyScopes;
+            // Same fix as Merge above: this was silently dropped despite being exported.
+            if(data.trackerState) state.trackerState=sanitizeState(data.trackerState);
+            await restoreBinaries();
+            tickThemeSchedule(); scheduleSave(); closeModal(); renderView('settings'); renderSidebar(); showToast('Data replaced ✓');
+          }})
+        );
       });
-      spRow(label, desc, el('div', { style:'display:flex;align-items:center;gap:10px;min-width:200px;flex:1' }, input, valSpan));
-    };
-    spRange('Stroke smoothing', 'Filters jitter out of freehand lines', 'smoothing', 0, 3, 1, v => SMOOTH_LABELS[v] || 'Medium');
-    spRange('Undo history steps', 'How many undos a pad remembers', 'undoSteps', 20, 300, 20, v => `${v} steps`);
-    // Toggles
-    spToggle('Show grid on open', 'Start new pads with the background grid visible', 'gridVisible');
-    spToggle('Snap to grid', 'Drawing and dragging snap to the (rotated) grid', 'snap');
-    spToggle('Autosave while answering', 'Restore the pad if you close and reopen it on the same question', 'autosave');
-    spToggle('Confirm before clearing', 'Ask before 🧹 Clear pad wipes the drawing', 'confirmClear');
-    spToggle('Open in fullscreen', 'The pad covers the whole window instead of docking to the side', 'fullscreen');
-  }
+    }catch(err){ showToast('Could not read file: '+(err?.message||String(err))); }
+    importInput.value='';
+  }});
+  btnRow.appendChild(btn('📥 Import','ghost',{onclick:()=>importInput.click()}));
+  dataCard.append(btnRow, importInput,
+    el('div',{style:'padding-top:14px;border-top:1px solid rgba(255,255,255,0.05)'},
+      btn('🗑️ Clear All Data','danger',{onclick:()=>{
+        if(confirm('Delete ALL flashcard data? This cannot be undone.')){
+          try{localStorage.removeItem('mf_state');}catch(e){ console.warn('[SCIMA] Clear All Data: localStorage.removeItem failed:', e); }
+          location.reload();
+        }
+      }})
+    )
+  );
+
+  // Panel pairing (rows of the grid): study|scratchpad, appearance|subjects,
+  // accessibility|AI, library|navigation — similar-height neighbours, and a
+  // logical reading order once the grid collapses to one column on phones.
+  grid.append(studyCard, scratchCard, appearCard, subjectsCard, a11yCard, aiCard, libraryCard, navCard);
 
   c.append(
     el('div', { style:'margin-bottom:24px' }, el('div', { class:'section-title' }, 'Settings')),
-    helpCard, grid, llmCard, schedCard, appearCard, scratchCard, subjectsCard, navCard, dataCard
+    helpCard, grid, dataCard
   );
 }
-

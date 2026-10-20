@@ -16,6 +16,41 @@ const byId = id => ROOT.querySelector(`[id="${id}"]`);
 const qs   = s  => ROOT.querySelector(s);
 const qsa  = s  => ROOT.querySelectorAll(s);
 
+// -- URL deep links: #community/<deckId> --------------------------------------
+// Same contract as the decks/library/packs deep links (dashboard-core.js's
+// scParseHash/scReplaceHash): opening a community deck mirrors its server id
+// into the hash, so any deck detail is shareable as /#community/<id> (the
+// landing page's init resolves the head segment into this view — see
+// dashboard-bootstrap.js). The view is rebuilt from scratch on every entry
+// (renderCommunity below), so the tracked id is a module-scope variable that
+// the rebuild resets and init()'s hash apply re-populates.
+let _scCommunityDeckId = null;
+let _scCommunityLastHash = null;
+
+function scCommunityDeckLink(id) {
+  const base = location.origin + location.pathname.replace(/index\.html$/, '');
+  return `${base}#community/${encodeURIComponent(id)}`;
+}
+function scCommunityMirrorHash() {
+  if (typeof scReplaceHash !== 'function') return;
+  const frag = _scCommunityDeckId
+    ? `community/${encodeURIComponent(_scCommunityDeckId)}`
+    : 'community';
+  scReplaceHash(frag);
+  _scCommunityLastHash = frag;
+}
+// State -> URL mirror, called by renderView right after renderCommunity —
+// which kicks off an ASYNC init (health check, popular decks, deep-link
+// apply). A payload hash that hasn't been applied yet must survive that
+// window instead of being folded back to bare "#community".
+window.SCIMA_URL_SYNC = window.SCIMA_URL_SYNC || {};
+window.SCIMA_URL_SYNC.community = function () {
+  const h = (typeof scParseHash === 'function') ? scParseHash() : null;
+  if (h && h.segs[0] === 'community' && h.segs[1]
+      && _scCommunityLastHash !== h.raw && !_scCommunityDeckId) return;
+  scCommunityMirrorHash();
+};
+
 const COMMUNITY_MARKUP = `<div class="sc-root-bar"><span class="dot" id="api-dot"></span><span id="api-label">checking API…</span></div>
 <!-- ───────────────────────────────────────────────────────────── -->
   <!-- Community -->
@@ -862,6 +897,13 @@ function showScreen(name) {
         screen.id === `screen-${name}`
       );
     });
+
+  // Back to the list closes any open deck's deep-link payload
+  // (#community/<id> → #community), keeping the URL in step with the screen.
+  if (name === 'search' && _scCommunityDeckId) {
+    _scCommunityDeckId = null;
+    scCommunityMirrorHash();
+  }
 
   window.scrollTo({
     top: 0,
@@ -2317,6 +2359,10 @@ function resetUploadForm() {
 // ─────────────────────────────────────────────────────────────────────
 
 async function openDeck(id) {
+  // Deep-link mirror: the detail screen is shareable as #community/<id>.
+  _scCommunityDeckId = id;
+  scCommunityMirrorHash();
+
   const container =
     byId(
       'deck-detail'
@@ -2578,6 +2624,35 @@ function renderDeckDetail(deck) {
         );
 
         return button;
+      })(),
+
+      (() => {
+        // Shareable deep link to THIS deck's detail screen (#community/<id>).
+        const button =
+          btn(
+            '🔗 Copy link',
+            'ghost'
+          );
+
+        button.addEventListener(
+          'click',
+          async () => {
+            const link =
+              scCommunityDeckLink(deck.id);
+            const ok =
+              (typeof copyTextToClipboard === 'function') &&
+              (await copyTextToClipboard(link));
+            if (typeof showToast === 'function') {
+              showToast(
+                ok ? 'Deck link copied ✓' : `Copy failed — link: ${link}`,
+                ok ? 2500 : 6000
+              );
+            }
+            if (ok) button.textContent = '✓ Copied';
+          }
+        );
+
+        return button;
       })()
     );
 
@@ -2810,6 +2885,18 @@ async function checkApiHealth() {
 async function init() {
   await checkApiHealth();
   await loadPopularDecks();
+
+  // Deep link: #community/<deckId> opens that deck's detail screen directly
+  // (shareable link — see scCommunityMirrorHash above). Applied after the
+  // list loads so "← Back to decks" always lands on a populated search screen.
+  const h =
+    (typeof scParseHash === 'function')
+      ? scParseHash()
+      : null;
+  if (h && h.segs[0] === 'community' && h.segs[1]) {
+    _scCommunityLastHash = h.raw;
+    openDeck(h.segs[1]);
+  }
 }
 
 return init;
@@ -2818,6 +2905,9 @@ return init;
 
 /** View entry point (dashboard-core.js viewRenderer → window.renderCommunity). */
 window.renderCommunity = function (c) {
+  // Every entry rebuilds the view from scratch (fresh search screen) — the
+  // deep-link apply in init() below re-opens the payload deck, if any.
+  _scCommunityDeckId = null;
   c.classList.add('sc-root');
   c.innerHTML = COMMUNITY_MARKUP;
   ROOT = c;

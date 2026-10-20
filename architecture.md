@@ -131,15 +131,22 @@ document and none of the cross-page machinery below runs.
   their views on merged pages. `/decks/` deep links carry the full path —
   `#decks/<Subject>/<folder…>/<Deck>` — and re-open the deck detail on load
   (deferred one tick so the containing view renders first); opening a deck
-  mirrors its segment back into the hash.
+  mirrors its segment back into the hash. `/packs/<pack>` (file stem, full
+  file name or display name, resolved leniently) opens that pack's detail
+  modal once the async list lands; `#community/<deckId>` (server id) opens
+  the registry deck's detail screen, mirrored back by openDeck() and folded
+  by "← Back to decks". bootstrap's init() resolves the hash's FIRST path
+  segment into the view (`#community/x` boots the landing page into the
+  Community view), so payloads survive a cold load.
 - **Page memory**: SPA-only state that must survive "leave and come back"
   (active study session, study scope/refine, decks sub-navigation, quests
   tab) is written to `sessionStorage["scima_pagemem_<page>"]` on `pagehide`
   and restored by `init()` — which is why a reload mid-session resumes the
   flashcard queue.
 - Chrome: collapsible nav drawer (`#logo-icon` ↔ `#sidebar`, Esc/outside
-  click close), command palette (Ctrl/Cmd+K), modal host (`#modal-backdrop`),
-  guided tour overlay (`#tutorial-overlay`, sandboxed — §3.6).
+  click close), command palette (Ctrl/Cmd+K — desktop pointers only, see
+  §3.7), modal host (`#modal-backdrop`), guided tour overlay
+  (`#tutorial-overlay`, sandboxed — §3.6).
 - Keyboard: Alt+Shift+1…9 jump to nav tabs; study/quiz hotkeys per mode.
 
 ### 3.4 State and persistence (the frontend's "database")
@@ -204,7 +211,10 @@ document and none of the cross-page machinery below runs.
   (remixable by default; forks extend the chain). Charts are declarative
   data — no author code executes. Design rationale: `game-packages-design.md`.
 - **Packs (hidden route)**: `/packs/` lists official deck packs from
-  `assets/packs/` — two actions only (➕ Add to Decks, ⬇ Download). Discovery:
+  `assets/packs/` — three actions per pack (➕ Add to Decks, ⬇ Download,
+  🔗 copy a `#packs/<pack>` share link) plus a detail modal (open a pack's
+  title, or follow a share link) that dry-runs `importPackData()` to show
+  the pack's decks/folders/cards before import. Discovery:
   `GET /api/v1/packs` (backend dir scan + optional `manifest.json` metadata,
   bucket `packs`) → static `manifest.json` fallback → empty state.
   `importPackData()` accepts stamped scima envelopes and legacy v2 deck/folder
@@ -255,6 +265,41 @@ Skip/Discard restores the snapshot (plus marks onboarding complete), so the
 tour can never leave residue. `sessionStorage["scima_tour_active"]` carries
 a mid-tour replay across route navigations.
 
+### 3.7 Mobile layer (`dashboard.css`'s trailing MOBILE LAYER block)
+
+Phone-width and touch behaviour lives in three keyed blocks at the end of
+`app/dashboard.css`, so "mobile" switches on/off in one place:
+
+- **`(hover:none)/(pointer:coarse)` capability block** — hover-revealed row
+  actions (`.folder-actions`, `.source-actions`, `.pinned-deck-study`) are
+  permanently visible without a pointer to hover with; `.touch-only`
+  controls render (the table-card editor's ▲▼/◀▶ row/column reorder buttons
+  beside its drag grips); the command palette's `#cmd-hint` pill disappears
+  and core.js skips the Ctrl/Cmd+K binding there — the nav drawer reaches
+  every destination the palette lists, so on a keyboardless device both are
+  redundancy.
+- **`≤720px` phone block** (same line as the existing gutter breakpoint) —
+  modals (`#modal-box`, `#cmd-box`, community's `.sc-modal-box`) become
+  edge-to-edge sheets: full bleed left→right, a sliver of air at the top,
+  rounded top corners, `100dvh`-clamped height; `grid-2`/`grid-3` panel grids
+  collapse to ONE panel wide while button-scale grids stay two-up
+  (`grid-4` stat tiles, the `.rating-grid`'s four rating buttons → 2×2);
+  form controls jump to 16px (below that iOS Safari zooms the page on
+  focus); tap targets grow; `.ui-action-bar`/`.ui-action-group` header rows
+  wrap instead of overflowing; `#app` switches to `100dvh`.
+- **`≤820px` reader block** (same line as the scratchpad's full-screen
+  sheet) — the library reader's docked sidebars (chapter list, PDF
+  extracted-text panel) become slide-over panels toggled by the header's
+  `.reader-mobile-only` 📑/📄 buttons, and the reader hides the floating
+  ≡/ⓘ chrome marks while open (they'd sit on its header).
+
+Touch-parity workflows back the CSS: folder re-parenting (drag-only before)
+has the 📂 "Move to Folder…" modal (`openMoveFolderModal`, subtree-aware,
+cross-subject moves reuse `moveFolderToSubject`); deck/card selection was
+already tap-toggle; text selection in the reader finalizes through a
+debounced `selectionchange` on coarse pointers (touch never fires the
+`mouseup` the toolbar positions from).
+
 ---
 
 ## 4. Backend: `backend/`
@@ -280,7 +325,7 @@ a mid-tour replay across route navigations.
 | `/community` | repo `community/` | deprecated standalone page |
 | `/` | landing dir | canonical family; directory URLs serve each route's `index.html`; `/study` 307s to `/study/` |
 | `/community` | legacy page dir | **conditional**: mounted only if a `community[-deprecated]/` dir exists next to (or above) the backend — the minified bundle ships without it and must still boot |
-| 404 handler | — | `/api/*` → honest JSON 404; path-form deep links (`/decks/<subj>/<deck>`, `/library/<a>/<b>`) 302 to the hash form the frontend parses; dotted last segments (assets) → JSON 404; everything else 302 to `/#home` (or `/dashboard/#home` inside that family) |
+| 404 handler | — | `/api/*` → honest JSON 404; path-form deep links (`/decks/<subj>/<deck>`, `/library/<a>/<b>`, `/packs/<pack>`) 302 to the hash form the frontend parses, `/community/<deckId>` 302s to the landing `/#community/<deckId>`; dotted last segments (assets) → JSON 404; everything else 302 to `/#home` (or `/dashboard/#home` inside that family) |
 
 ### 4.3 API surface (`/api/v1`, all rate-limited per client IP, in-memory)
 
@@ -326,7 +371,7 @@ so a statically-hosted frontend can point at a separately-deployed API
 |---|---|---|
 | Boot of `#community` | `GET /health`, `GET /decks?sort=…` | status line "Server online/offline at /api/v1"; renders `items` as deck cards |
 | Search/filter | `GET /search?q=…` (+ params) | results replace the list; query length capped client-side first |
-| Inspect | `GET /decks/{id}` | detail pane |
+| Inspect | `GET /decks/{id}` | detail pane; openDeck() mirrors `#community/<id>` into the hash (shareable), 🔗 Copy link copies the absolute URL |
 | Download | `GET /decks/{id}/export` | payload is fed through the same `sanitize*()`/import path as local files → becomes a local deck in `mf_state` (server data never bypasses client sanitization) |
 | Publish | `POST /decks` | client serializes a local deck (or chosen file) to an interchange envelope, client-side size-checks it (`MAX_REQUEST_BODY_BYTES` mirror), posts JSON |
 | Failure | any | `throwForStatus` → offline/error banner; the rest of the app is unaffected |
@@ -398,6 +443,12 @@ Server: `/data/study/data/scima.db` + `/data/study/data/decks/` (§4.4).
 
 ## 8. Design notes & gotchas
 
+- **Settings panel map**: eight domain panels in one `grid-2` (rows pair
+  similar heights: Study & Scheduling\|Scratchpad, Appearance & Theme\|
+  Subjects, Accessibility & Notifications\|AI & Integrations, Library &
+  Reading\|Navigation) between a full-width ❓ Help card and a full-width
+  💾 Data Management card; the Theme Schedule is a subsection of
+  Appearance. The grid collapses to one column at the phone breakpoint.
 - **Debounce**: writes are debounced ~600 ms; tests wait ~900 ms before
   asserting on localStorage.
 - **UTC dates** everywhere in history/streak math.

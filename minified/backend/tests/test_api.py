@@ -528,3 +528,30 @@ def test_packs_endpoint_ships_sample(client):
     r = client.get("/api/v1/packs")
     files = [i["file"] for i in r.json()["packs"]]
     assert "spanish-starter.json" in files
+
+
+def test_deeplink_rewrite_packs_path_to_hash(client):
+    """/packs/<stem> (path form) 302s to the hash form the frontend parses
+    (#packs/<stem> opens that pack's detail modal)."""
+    r = client.get("/packs/spanish-starter", follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers["location"] == "/packs/#packs/spanish-starter"
+
+
+def test_deeplink_rewrite_community_path_to_hash(client):
+    """/community/<deckId> 302s to the LANDING document's hash view —
+    the community deck registry lives at /#community/<deckId>, not under
+    the deprecated /community/ mount."""
+    r = client.get("/community/d_abc123", follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers["location"] == "/#community/d_abc123"
+
+
+def test_deeplink_rewrite_keeps_asset_404s_honest(client):
+    """A missing file under /packs/ that the frontend can still parse is
+    rewritten (lenient resolution shows the list), but a missing ASSET under
+    another route (dotted segment outside the deep-link prefixes) stays a
+    JSON 404 — <script>/<link> tags must never receive an HTML redirect."""
+    r = client.get("/app/does-not-exist.js", follow_redirects=False)
+    assert r.status_code == 404
+    assert r.json() == {"detail": "Not Found"}

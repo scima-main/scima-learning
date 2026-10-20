@@ -872,10 +872,17 @@ function openLibraryReader(sourceId) {
     animation:fadeIn 0.2s ease;
   `});
 
-  // The info button is fixed-position and sits above the reader's z-index, so it
-  // has to be hidden explicitly while the reader is open (restored in closeReader).
+  // The fixed top-left chrome buttons (ⓘ page help and the ≡ nav mark) sit
+  // ABOVE the reader's z-index, so they have to be hidden explicitly while
+  // the reader is open (restored in closeReader) — otherwise the floating
+  // circles land on top of the reader's own header, which on phone widths
+  // (where the header wraps to two rows) covers the title outright. The
+  // reader is a full-screen surface: ✕ Close returns you to the dashboard
+  // chrome, exactly like the scratchpad sheet covering them at z-1080.
   const infoBtn = document.getElementById('info-btn');
   if (infoBtn) infoBtn.style.display = 'none';
+  const logoBtn = document.getElementById('logo-icon');
+  if (logoBtn) logoBtn.style.display = 'none';
 
   let activeChapterId='';
   // Forward reference — the real renderText is defined inside the non-PDF branch below.
@@ -1594,6 +1601,8 @@ function openLibraryReader(sourceId) {
     closeAnnotPopover();
     clearTimeout(annotPopoverTimer);
     document.removeEventListener('selectionchange',onSelChange);
+    document.removeEventListener('selectionchange',onSelTouchChange);
+    clearTimeout(_selTouchTimer);
     selectionRoot.removeEventListener('mouseup',onSelFinalize);
     selectionRoot.removeEventListener('keyup',onSelFinalize);
     textBody.removeEventListener('scroll',onSelectionScroll);
@@ -1602,6 +1611,7 @@ function openLibraryReader(sourceId) {
     if (onSidebarResizeMove) document.removeEventListener('mousemove', onSidebarResizeMove);
     if (onSidebarResizeEnd) document.removeEventListener('mouseup', onSidebarResizeEnd);
     if (infoBtn) infoBtn.style.display = '';
+    if (logoBtn) logoBtn.style.display = '';
     overlay.remove();
   }
 
@@ -1614,7 +1624,23 @@ function openLibraryReader(sourceId) {
     onclick:()=>exportSourceWithBookmarks(source.id)
   },'⬇ Export');
 
-  const header=el('div',{style:'display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);flex-shrink:0;gap:12px'},
+  // ── Mobile sidebar toggles ────────────────────────────────────────────────
+  // On narrow screens the chapter list / extracted-text sidebar stop being
+  // docked columns (they'd eat the whole viewport) and become slide-over
+  // panels — see dashboard.css's reader @media block. These buttons are the
+  // openers; .reader-mobile-only keeps them hidden on desktop, where the
+  // sidebars are permanently docked as before.
+  const readerHdrBtnStyle='background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text);width:34px;height:34px;cursor:pointer;font-size:15px;font-family:inherit;display:flex;align-items:center;justify-content:center;flex-shrink:0';
+  const chaptersToggleBtn=(!IS_PDF && source.chapters?.length) ? el('button',{
+    class:'reader-mobile-only',title:'Chapters','aria-label':'Toggle chapter list',style:readerHdrBtnStyle,
+    onclick:()=>overlay.classList.toggle('reader-chapters-open')
+  },'📑') : null;
+  const pdfTextToggleBtn=IS_PDF ? el('button',{
+    class:'reader-mobile-only',title:'Extracted text','aria-label':'Toggle extracted-text sidebar',style:readerHdrBtnStyle,
+    onclick:()=>overlay.classList.toggle('reader-pdfside-open')
+  },'📄') : null;
+
+  const header=el('div',{class:'reader-header',style:'display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);flex-shrink:0;gap:12px'},
     el('div',{style:'display:flex;align-items:center;gap:10px;min-width:0'},
       el('span',{style:'font-size:18px'},sourceTypeIcon(source)),
       el('div',{style:'min-width:0'},
@@ -1622,11 +1648,13 @@ function openLibraryReader(sourceId) {
         el('div',{style:'font-size:11px;color:var(--muted);margin-top:1px'},`${nOf(source.content.length,'char')} · ${IS_PDF?'Select text on the right to create flashcards':'Select text to create flashcards'}`)
       )
     ),
-    el('div',{style:'display:flex;align-items:center;gap:6px;flex-shrink:0'},
+    el('div',{class:'ui-action-group',style:'display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end'},
       zoomControls,
       editToggleBtn,
       editSaveBtn,
       editCancelBtn,
+      chaptersToggleBtn,
+      pdfTextToggleBtn,
       quickAddBtn,
       hamburgerBtn,
       readerExportBtn,
@@ -1637,7 +1665,7 @@ function openLibraryReader(sourceId) {
   // Chapter sidebar — left-hand jump list, like the heading navigator in Word/Docs
   let _htmlChapters = null; // declared here so renderChapterSidebar can reference it
   let _htmlPartOffsets = null; // cached per-part char offsets, built once after _htmlChapters loads
-  const chapterSidebar = source.chapters?.length ? el('div',{style:'width:220px;flex-shrink:0;overflow-y:auto;border-right:1px solid var(--border);padding:14px 8px'}) : null;
+  const chapterSidebar = source.chapters?.length ? el('div',{class:'reader-chapter-sidebar',style:'width:220px;flex-shrink:0;overflow-y:auto;border-right:1px solid var(--border);padding:14px 8px'}) : null;
   function renderChapterSidebar(){
     if(!chapterSidebar) return;
     chapterSidebar.innerHTML='';
@@ -2118,6 +2146,22 @@ function openLibraryReader(sourceId) {
     if(scrollRAF) cancelAnimationFrame(scrollRAF);
     scrollRAF=requestAnimationFrame(()=>positionSelectionToolbar(currentSelRange));
   }
+  // Touch devices never fire the mouseup that finalizes a selection: the
+  // native long-press + drag handles only fire selectionchange. Debounce a
+  // finalize ~280 ms after the selection settles so the toolbar appears for
+  // finger-selected text too (coarse pointers only — desktop keeps its exact
+  // mouseup/keyup behaviour).
+  let _selTouchTimer=null;
+  function onSelTouchChange(){
+    if(!document.body.contains(overlay)){
+      document.removeEventListener('selectionchange',onSelTouchChange);
+      return;
+    }
+    clearTimeout(_selTouchTimer);
+    _selTouchTimer=setTimeout(onSelFinalize,280);
+  }
+  const _coarsePointer = typeof matchMedia==='function' && matchMedia('(pointer: coarse)').matches;
+  if (_coarsePointer) document.addEventListener('selectionchange',onSelTouchChange);
   document.addEventListener('selectionchange',onSelChange);
   selectionRoot.addEventListener('mouseup',onSelFinalize);
   selectionRoot.addEventListener('keyup',onSelFinalize);

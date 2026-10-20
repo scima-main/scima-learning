@@ -145,16 +145,21 @@ async function init() {
 
   const hash=location.hash.replace('#','');
   // Hash selects a VIEW — which may be a sub-view of the current page
-  // (#capture on Decks, #quests on Analytics), not just a nav entry.
-  if(hash&&(hash in VIEW_ROUTES)){
-    if (PAGE_VIEWS.includes(hash)) {
-      state.view=hash;
+  // (#capture on Decks, #quests on Analytics), not just a nav entry. Deep-link
+  // payloads ride along after the view id (#community/<deckId>,
+  // #decks/<Subject>/<Deck>, #study?scope=…), so the view is the FIRST path
+  // segment — the payload itself is parsed by the view module's applier
+  // (scPacksApplyHash, the community init, scDeeksApplyHash, …) after render.
+  const hashView=hash.split(/[/?]/)[0];
+  if(hashView&&(hashView in VIEW_ROUTES)){
+    if (PAGE_VIEWS.includes(hashView)) {
+      state.view=hashView;
     } else if (isSitePage) {
       // Legacy/deep link (e.g. an old index.html#decks bookmark, or a
       // hand-typed URL): this view lives on another page now — send the
       // browser there instead of rendering nothing. replace(), not href=,
       // so the wrong page doesn't stay in the history stack.
-      location.replace(urlForView(hash));
+      location.replace(urlForView(hashView));
       return;
     }
   }
