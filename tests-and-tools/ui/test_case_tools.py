@@ -123,7 +123,7 @@ def test_folder_and_subject_scopes(page, site_base, seeded):
     pages.goto_app(page, site_base, "/decks/")
     page.evaluate("() => { state.deckNav = {view:'subject', subjectKey:'misc'};"
                   " renderView('decks'); }")
-    page.locator(".ui-action-bar button", has_text="Aa Case…").click()
+    page.get_by_role("button", name="Aa Case…").first.click()
     pages.expect_modal(page, "Standardize Case")
     expect(page.locator("#modal-body")).to_contain_text("2 cards")
     page.locator("#modal-body button", has_text="all lowercase").click()
@@ -253,7 +253,7 @@ def test_scope_deck_and_folder_names(page, site_base, seeded):
     pages.goto_app(page, site_base, "/decks/")
     page.evaluate("() => { state.deckNav = {view:'folder', subjectKey:'misc',"
                   " folderId:'f_case'}; renderView('decks'); }")
-    page.locator(".ui-action-bar button", has_text="Aa Case…").click()
+    page.get_by_role("button", name="Aa Case…").first.click()
     pages.expect_modal(page, "Standardize Case")
     # names on, card fields off → only the two names change
     page.locator("#modal-body button", has_text="Deck names").click()

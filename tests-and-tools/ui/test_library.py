@@ -48,3 +48,27 @@ def test_add_plain_text_source(page, base_url, seeded):
     mf = storage.read_mf_state(page)
     src = next(s for s in mf["sources"] if s["name"] == "Test Notes — Playwright")
     assert "powerhouse" in src["content"]
+
+
+def test_delete_source_asks_and_undoes_with_citations(page, site_base, seeded):
+    """Source delete goes through the confirm modal; Undo restores the
+    source AND the card citations it cleared (blob cleanup is deferred)."""
+    seeded("preset:demo")
+    pages.goto_app(page, site_base, "/library/")
+    src = page.locator(".source-item").first
+    expect(src).to_be_visible()
+    src.locator("button", has_text="Delete").click()
+    pages.expect_modal(page, "Delete source?")
+    expect(page.locator("#modal-body")).to_contain_text(
+        "Are you sure you want to delete")
+    page.locator("#modal-body button", has_text="Cancel").click()
+    expect(page.locator(".source-item")).to_be_visible()
+
+    src.locator("button", has_text="Delete").click()
+    pages.expect_modal(page, "Delete source?")
+    page.locator("#modal-body button", has_text="Delete").click()
+    page.wait_for_timeout(300)
+    assert page.evaluate("() => state.sources.length") == 0
+    page.locator("#toast button", has_text="Undo").click()
+    page.wait_for_timeout(300)
+    assert page.evaluate("() => state.sources.length") == 1

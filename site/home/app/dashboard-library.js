@@ -434,11 +434,22 @@ function renderLibrary(c) {
         btn('Rename','ghost',{small:true,onclick:e=>{e.stopPropagation();openLibraryFolderModal(folder.parentId||null,folder.id);}}),
         btn('Delete','danger',{small:true,onclick:e=>{
           e.stopPropagation();
-          if(confirm('Delete folder "'+folder.name+'"? Sources inside will move to root.')){
-            state.sources.forEach(s=>{if(s.libraryFolderId===folder.id)s.libraryFolderId=null;});
-            state.libraryFolders=state.libraryFolders.filter(f=>f.id!==folder.id);
-            scheduleSave();renderView('library');
-          }
+          const idx = state.libraryFolders.findIndex(f=>f.id===folder.id);
+          if (idx < 0) return;
+          confirmDestructive('Delete library folder?',
+            `Are you sure you want to delete "${folder.name}"? Sources inside will move to the library root.`,
+            'Delete', () => {
+              const moved = state.sources.filter(s=>s.libraryFolderId===folder.id).map(s=>s.id);
+              moved.forEach(id=>{ const src=state.sources.find(s=>s.id===id); if(src) src.libraryFolderId=null; });
+              state.libraryFolders.splice(idx,1);
+              scheduleSave();renderView('library');
+              undoToast(`Deleted "${folder.name}" 🗑️`, () => {
+                state.libraryFolders.splice(Math.min(idx,state.libraryFolders.length),0,folder);
+                moved.forEach(id=>{ const src=state.sources.find(s=>s.id===id); if(src) src.libraryFolderId=folder.id; });
+                scheduleSave();renderView('library');
+                showToast('Folder restored ↩');
+              });
+            });
         }})
       )
     ));
@@ -478,15 +489,35 @@ function renderLibrary(c) {
           btn('Move','ghost',{small:true,onclick:e=>{e.stopPropagation();openMoveSourceModal(src.id);}}),
           btn('Delete','danger',{small:true,onclick:e=>{
             e.stopPropagation();
-            if(confirm('Delete "'+src.name+'"? Citations will be removed.')){
-              state.decks.forEach(d=>d.cards.forEach(card=>{if(card.citation?.sourceId===src.id)card.citation=null;}));
-              state.sources=state.sources.filter(s=>s.id!==src.id);
-              // Clean up any stored PDF chunks
-              blobStore.deleteChunks('pdf', src.id);
-              // Clean up any stored HTML chapter chunks
-              deleteHtmlChapters(src.id);
-              scheduleSave();renderView('library');
-            }
+            const idx = state.sources.findIndex(x=>x.id===src.id);
+            if (idx < 0) return;
+            confirmDestructive('Delete source?',
+              `Are you sure you want to delete "${src.name}"? Citations on cards will be removed.`,
+              'Delete', () => {
+                const citePrev = [];
+                state.decks.forEach(d=>d.cards.forEach(card=>{
+                  if(card.citation?.sourceId===src.id){ citePrev.push({deckId:d.id,cardId:card.id,citation:card.citation}); card.citation=null; }
+                }));
+                state.sources.splice(idx,1);
+                // Blob cleanup is deferred past the undo window so Undo can
+                // bring the source back WITH its PDF/chapter bytes.
+                const blobTimer = setTimeout(()=>{
+                  blobStore.deleteChunks('pdf', src.id);
+                  deleteHtmlChapters(src.id);
+                }, 8000);
+                scheduleSave();renderView('library');
+                undoToast(`Deleted "${src.name}" 🗑️`, () => {
+                  clearTimeout(blobTimer);
+                  state.sources.splice(Math.min(idx,state.sources.length),0,src);
+                  citePrev.forEach(pp=>{
+                    const d=state.decks.find(x=>x.id===pp.deckId);
+                    const card=d&&d.cards.find(cc=>cc.id===pp.cardId);
+                    if(card) card.citation=pp.citation;
+                  });
+                  scheduleSave();renderView('library');
+                  showToast('Source restored ↩');
+                });
+              });
           }})
         )
       ));
@@ -1317,12 +1348,24 @@ function openLibraryReader(sourceId) {
       style:'flex:1;padding:6px 8px;border-radius:6px;border:none;background:var(--grad);color:var(--on-gradient);cursor:pointer;font-size:11px;font-weight:800;font-family:inherit;',
       onclick:()=>{ bm.name=nameInput.value.trim(); bm.note=noteInput.value.trim(); scheduleSave(); if(bmPanelOpen) renderBmPanel(); showToast('Annotation updated'); }
     },'Save');
+    let _rmArmed=false, _rmTimer=null;
     const removeBtn=el('button',{
       style:'flex:1;padding:6px 8px;border-radius:6px;border:1px solid rgba(248,113,113,0.4);background:rgba(248,113,113,0.1);color:#f87171;cursor:pointer;font-size:11px;font-weight:800;font-family:inherit;',
       onclick:()=>{
+        if(!_rmArmed){           // first tap arms it ("are you sure?")
+          _rmArmed=true; removeBtn.textContent='Sure? Remove';
+          _rmTimer=setTimeout(()=>{ _rmArmed=false; removeBtn.textContent='Remove'; },2500);
+          return;
+        }
+        clearTimeout(_rmTimer);
+        const bmIdx=source.bookmarks.findIndex(b=>b.id===bm.id);
         source.bookmarks=source.bookmarks.filter(b=>b.id!==bm.id);
         scheduleSave(); closeAnnotPopover(); renderText(); if(bmPanelOpen) renderBmPanel();
-        showToast('Annotation removed');
+        undoToast('Annotation removed 🗑️', () => {
+          source.bookmarks.splice(Math.min(bmIdx<0?source.bookmarks.length:bmIdx,source.bookmarks.length),0,bm);
+          scheduleSave(); renderText(); if(bmPanelOpen) renderBmPanel();
+          showToast('Annotation restored ↩');
+        });
       }
     },'Remove');
     const pop=el('div',{class:'annot-popover'}, excerpt, nameInput, noteInput, colorRow,

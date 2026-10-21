@@ -142,6 +142,9 @@ def test_clear_history(page, site_base, seeded):
     abort_after_one_rating(page)
     open_history(page)
     page.get_by_role("button", name="Clear history").click()
+    pages.expect_modal(page, "Clear session history?")
+    page.locator("#modal-body button", has_text="Clear").click()
+    page.wait_for_timeout(300)
     expect(page.locator(f"{PANEL} .card")).to_have_count(0)
     expect(page.locator(PANEL)).to_contain_text("No sessions yet")
 
@@ -214,3 +217,18 @@ def test_answers_survive_reload_and_trim_with_queues(page, site_base, seeded):
     assert len(entry["answers"]) == 5
     # sanitizeMfState keeps the records (pass-through for log entries)
     assert all(set(a) >= {"id", "r", "ok"} for a in entry["answers"])
+
+
+def test_clear_history_asks_and_undoes(page, site_base, seeded):
+    goto_study(page, site_base, seeded)
+    abort_after_one_rating(page)
+    open_history(page)
+    page.locator("#session-history-panel button", has_text="Clear history").click()
+    pages.expect_modal(page, "Clear session history?")
+    expect(page.locator("#modal-body")).to_contain_text("Are you sure")
+    page.locator("#modal-body button", has_text="Clear").click()
+    page.wait_for_timeout(300)
+    assert page.evaluate("() => state.sessionLog.length") == 0
+    page.locator("#toast button", has_text="Undo").click()
+    page.wait_for_timeout(300)
+    assert page.evaluate("() => state.sessionLog.length") == 1

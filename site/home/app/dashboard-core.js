@@ -1064,6 +1064,25 @@ function btn(label, variant = 'primary', opts = {}) {
   return b;
 }
 
+// ── Destructive-action gate + undo ─────────────────────────────────────────
+// Every delete in the app runs through confirmDestructive() ("are you sure
+// you want to delete …") instead of bare clicks or native confirm(), and
+// pairs with undoToast() — a 7 s toast whose Undo action restores the
+// deleted entity from a snapshot the caller captures before mutating.
+function confirmDestructive(title, message, confirmLabel, onConfirm) {
+  openModal(title, body => {
+    body.appendChild(el('div', { style: 'font-size:13px;line-height:1.6;color:var(--muted)' }, message));
+    const row = el('div', { style: 'display:flex;gap:10px;margin-top:6px' });
+    row.appendChild(btn(confirmLabel || 'Delete', 'danger', { full: true,
+      onclick: () => { closeModal(); onConfirm(); } }));
+    row.appendChild(btn('Cancel', 'ghost', { full: true, onclick: () => closeModal() }));
+    body.appendChild(row);
+  });
+}
+function undoToast(msg, undoFn) {
+  showToast(msg, 7000, { label: 'Undo', onClick: undoFn });
+}
+
 // ── Custom color picker ───────────────────────────────────────────────────
 // Replaces native <input type="color">, whose popup is positioned by the
 // browser/OS and can render partially off-screen with no way for page code

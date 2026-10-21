@@ -425,7 +425,17 @@ function renderStudyHistorySection() {
         ));
       });
       panel.appendChild(btn('Clear history', 'ghost', { small: true, onclick: () => {
-        state.sessionLog = []; scheduleSave(); renderView('study');
+        const count = (state.sessionLog || []).length;
+        confirmDestructive('Clear session history?',
+          `Are you sure you want to delete ${count} session record${count !== 1 ? 's' : ''}? Resume/Repeat and Repeat-wrong stop working for them.`,
+          'Clear', () => {
+            const prev = state.sessionLog;
+            state.sessionLog = []; scheduleSave(); renderView('study');
+            undoToast('Session history cleared 🗑️', () => {
+              state.sessionLog = prev; scheduleSave(); renderView('study');
+              showToast('History restored ↩');
+            });
+          });
       } }));
     }
   }

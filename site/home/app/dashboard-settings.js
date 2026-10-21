@@ -347,9 +347,20 @@ function renderSettings(c) {
       if (isCustom) {
         const del = el('button', { title:'Delete preset', style:'position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:50%;background:rgba(239,68,68,0.9);border:none;cursor:pointer;color:#fff;font-size:9px;line-height:14px;text-align:center;padding:0', onclick: e => {
           e.stopPropagation();
-          if (!confirm(`Delete preset "${name}"?`)) return;
-          state.settings.customPresets = (state.settings.customPresets||[]).filter(p => p.key !== key);
-          scheduleSave(); renderView('settings');
+          const idx = (state.settings.customPresets||[]).findIndex(p => p.key === key);
+          if (idx < 0) return;
+          const preset = state.settings.customPresets[idx];
+          confirmDestructive('Delete preset?',
+            `Are you sure you want to delete the preset "${name}"?`,
+            'Delete', () => {
+              state.settings.customPresets.splice(idx, 1);
+              scheduleSave(); renderView('settings');
+              undoToast(`Deleted preset "${name}" 🗑️`, () => {
+                state.settings.customPresets.splice(Math.min(idx, state.settings.customPresets.length), 0, preset);
+                scheduleSave(); renderView('settings');
+                showToast('Preset restored ↩');
+              });
+            });
         }}, '×');
         wrap.appendChild(del);
       }
@@ -1209,10 +1220,12 @@ function renderSettings(c) {
   dataCard.append(btnRow, importInput,
     el('div',{style:'padding-top:14px;border-top:1px solid rgba(255,255,255,0.05)'},
       btn('🗑️ Clear All Data','danger',{onclick:()=>{
-        if(confirm('Delete ALL flashcard data? This cannot be undone.')){
-          try{localStorage.removeItem('mf_state');}catch(e){ console.warn('[SCIMA] Clear All Data: localStorage.removeItem failed:', e); }
-          location.reload();
-        }
+        confirmDestructive('Delete ALL flashcard data?',
+          'Are you sure you want to delete every deck, card, source, stat and setting in this browser? This cannot be undone — export a backup first if in doubt.',
+          'Delete forever', () => {
+            try{localStorage.removeItem('mf_state');}catch(e){ console.warn('[SCIMA] Clear All Data: localStorage.removeItem failed:', e); }
+            location.reload();
+          });
       }})
     )
   );

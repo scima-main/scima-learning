@@ -300,12 +300,21 @@ button; and bootstrap's init() resolves the hash's FIRST path
 - **Unified decks browser**: subjects are folders as far as the browser is
   concerned — the root lists them as folder-style rows (▶ study / ⬇ export
   subject / ✏️ edit-subject row actions, drop targets for the subject top
-  level), and subject and folder containers render through ONE view with
-  ONE action-bar layout (▶ Study · + New Deck · + New Folder · ⬇ Export ·
-  Aa Case… · then folder-only 📂 Move / 📚 Move-to-subject / ✏ Rename /
-  × Delete, or ✏️ Edit Subject). Child folder rows carry the same six
-  actions at both levels; `exportSubject()` ships a subject as a stamped
-  `collection` envelope.
+  level), and subject and folder containers render through ONE view: the
+  container name sits on its own line and the actions form ONE merged
+  segmented bar (the analytics/quests `.tab-bar` anatomy) with the same
+  labels in the same order at every level (▶ Study · + New Deck ·
+  + New Folder · ⬇ Export · Aa Case… · then folder-only 📂 Move /
+  📚 Move-to-subject / ✏ Rename / × Delete, or ✏️ Edit Subject). Child
+  folder rows carry the same six actions at both levels; `exportSubject()`
+  ships a subject as a stamped `collection` envelope.
+- **Destructive-action gate**: every delete (deck, folder, card, library
+  source/folder, annotation, session history, theme preset, clear-all)
+  runs through `confirmDestructive()` — a modal "are you sure you want to
+  delete …" with Delete/Cancel — and pairs with `undoToast()`: a 7 s Undo
+  that restores the entity from a pre-mutation snapshot (source blobs are
+  cleaned up only after the undo window; annotations, living inside a
+  popover, use a two-step armed button instead of the modal).
 - **Card/deck/folder surgery**: duplicate-card action, move-decks-between-
   subjects (deck selection bar), move-folder-between-subjects (📚 row action,
   folder toolbar, subtree-aware: subfolders and contained decks are retagged

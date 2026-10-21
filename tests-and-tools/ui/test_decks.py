@@ -124,20 +124,61 @@ def test_create_folder_flow(page, base_url, seeded):
     assert any(f["name"] == "Verbs" for f in st["folders"])
 
 
-def test_delete_deck(page, base_url, seeded):
-    """× on a deck card deletes it immediately (no confirm) and persists."""
-    goto_decks(page, base_url, seeded)
+def test_delete_deck_asks_and_undoes(page, site_base, seeded):
+    """× on a deck card now asks "are you sure", and the delete toast carries
+    an Undo that brings the deck (with its cards) back."""
+    goto_decks(page, site_base, seeded)
     page.locator(".subject-tile", has_text="Biology").click()
     card = page.locator(".deck-card", has_text="Biology - Cells")
     expect(card).to_be_visible()
 
     card.locator("button[title='Delete deck']").click()
+    pages.expect_modal(page, "Delete deck?")
+    expect(page.locator("#modal-body")).to_contain_text("Are you sure you want to delete")
+    # cancel keeps the deck
+    page.locator("#modal-body button", has_text="Cancel").click()
+    expect(page.locator(".deck-card", has_text="Biology - Cells")).to_be_visible()
 
+    card.locator("button[title='Delete deck']").click()
+    pages.expect_modal(page, "Delete deck?")
+    page.locator("#modal-body button", has_text="Delete").click()
     expect(page.locator(".deck-card", has_text="Biology - Cells")).to_have_count(0,
                                                                                 timeout=5000)
+    # undo restores it, cards included
+    page.locator("#toast button", has_text="Undo").click()
+    page.wait_for_timeout(400)
+    expect(page.locator(".deck-card", has_text="Biology - Cells")).to_be_visible()
+    st = storage.read_app_state(page)
+    deck = next(d for d in st["decks"] if d["name"] == "Biology - Cells")
+    assert len(deck["cards"]) == 3
+
+    # …and without undo it persists gone
+    page.locator(".deck-card", has_text="Biology - Cells") \
+        .locator("button[title='Delete deck']").click()
+    pages.expect_modal(page, "Delete deck?")
+    page.locator("#modal-body button", has_text="Delete").click()
     page.wait_for_timeout(900)
     st = storage.read_app_state(page)
     assert all(d["name"] != "Biology - Cells" for d in st["decks"])
+
+
+def test_delete_folder_asks_and_undoes(page, site_base, seeded):
+    goto_decks(page, site_base, seeded)
+    page.locator(".subject-tile", has_text="x") if False else None
+    page.evaluate("() => { state.deckNav = {view:'subject', subjectKey:'misc'};"
+                  " renderView('decks'); }")
+    page.locator(".folder-item button[title='Delete folder']").first.click()
+    pages.expect_modal(page, "Delete folder?")
+    expect(page.locator("#modal-body")).to_contain_text("move up to the parent level")
+    page.locator("#modal-body button", has_text="Delete").click()
+    page.wait_for_timeout(300)
+    assert page.evaluate("() => state.folders.length") == 0
+    page.locator("#toast button", has_text="Undo").click()
+    page.wait_for_timeout(300)
+    assert page.evaluate("() => state.folders.length") == 1
+    assert page.evaluate(
+        "() => state.decks.find(d => d.id === 'd_seed_spanish').folderId"
+    ) == "f_seed_lang"
 
 
 def test_study_now_scopes_to_deck(page, base_url, seeded):
@@ -171,7 +212,7 @@ def _import_file_via_modal(page, path):
     # folder creation lives in the container bar — enter a subject first
     if page.locator(".subject-tile").count():
         page.locator(".subject-tile").first.click()
-        page.wait_for_selector(".ui-action-bar", timeout=8000)
+        page.wait_for_selector(".container-actions", timeout=8000)
     page.get_by_role("button", name="+ New Folder").first.click()
     pages.expect_modal(page)
     page.locator("#modal-body button", has_text="⬆ Import Folder").click()
@@ -339,12 +380,12 @@ def test_subject_and_folder_bars_share_one_layout(page, site_base, seeded):
     seeded("preset:demo")
     pages.goto_app(page, site_base, "/decks/")
     page.locator(".subject-tile", has_text="Miscellaneous").click()
-    page.wait_for_selector(".ui-action-bar", timeout=8000)
-    subject_bar = page.locator(".ui-action-bar .ui-action-group").first
+    page.wait_for_selector(".container-actions", timeout=8000)
+    subject_bar = page.locator(".container-actions").first
     subject_labels = subject_bar.locator("button").all_inner_texts()
     page.locator(".folder-item", has_text="Languages").click()
     page.wait_for_timeout(300)
-    folder_bar = page.locator(".ui-action-bar .ui-action-group").first
+    folder_bar = page.locator(".container-actions").first
     folder_labels = folder_bar.locator("button").all_inner_texts()
     assert subject_labels == ["▶ Study", "+ New Deck", "+ New Folder",
                               "⬇ Export", "Aa Case…", "✏️ Edit Subject"], subject_labels

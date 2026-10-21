@@ -282,6 +282,17 @@ function renderDecks(c) {
   else renderDecksHome(c);
 }
 
+/** One segment of a merged .tab-bar action bar (analytics/quests structure):
+ *  flex-1 cells inside a single pill container instead of loose buttons. */
+function actionTab(label, opts = {}) {
+  const b = el('button', { type: 'button',
+    class: 'tab-btn container-action' + (opts.variant ? ` ${opts.variant}` : ''),
+    ...(opts.title ? { title: opts.title } : {}),
+    ...(opts.aria ? { 'aria-label': opts.aria } : {}) }, label);
+  b.addEventListener('click', opts.onclick || (() => {}));
+  return b;
+}
+
 // ── Unified decks browser ──────────────────────────────────────────────────
 // Subjects ARE folders as far as the browser is concerned: the root lists
 // them as folder-style rows, and subject/folder containers render through
@@ -289,17 +300,13 @@ function renderDecks(c) {
 // ⬇ Export · Aa Case… · move/rename/delete where they apply), so every level
 // of the tree offers the same buttons in the same order.
 function renderDecksHome(c) {
-  const topBar = el('div',{class:'ui-action-bar',style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:24px'},
-    el('div',{},
-      el('div',{class:'section-title'},'Decks'),
-      el('div',{class:'section-sub',style:'margin-bottom:0'},`${state.decks.length} deck${state.decks.length!==1?'s':''} · ${state.folders.length} folder${state.folders.length!==1?'s':''}`)
-    ),
-    el('div',{class:'ui-action-group',style:'display:flex;gap:8px'},
-      (()=>{ const b=btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal()}); b.id='tutorial-target-new-deck'; return b; })(),
-      btn('+ New Folder','ghost',{title:'Create a folder — pick its subject',
-        onclick:()=>openCreateFolderModal(null,null)}),
-      btn('📚 Manage Subjects','ghost',{title:'Add, rename or delete subjects in Settings',
-        onclick:()=>{ if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('subjects'); else navigate('settings'); }}))
+  const topBar = el('div',{style:'margin-bottom:18px'},
+    el('div',{class:'section-title'},'Decks'),
+    el('div',{class:'section-sub',style:'margin-bottom:10px'},`${state.decks.length} deck${state.decks.length!==1?'s':''} · ${state.folders.length} folder${state.folders.length!==1?'s':''}`),
+    el('div',{class:'tab-bar container-actions'},
+      (()=>{ const b=actionTab('+ New Deck',{variant:'primary',onclick:()=>openCreateDeckModal()}); b.id='tutorial-target-new-deck'; return b; })(),
+      actionTab('+ New Folder',{title:'Create a folder — pick its subject',onclick:()=>openCreateFolderModal(null,null)}),
+      actionTab('📚 Manage Subjects',{title:'Add, rename or delete subjects in Settings',onclick:()=>{ if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('subjects'); else navigate('settings'); }}))
   );
 
   const subjects = new Set([
@@ -382,31 +389,30 @@ function renderContainerView(c, subjectKey, folderId) {
     ? state.decks.filter(d=>folderSubtreeIds(folderId).includes(d.folderId))
     : state.decks.filter(d=>(d.subject||DEFAULT_SUBJECT_KEY)===subjectKey);
 
-  // ── one action bar for both container kinds, same order ──
-  const bar = el('div',{class:'ui-action-bar',style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px'},
-    el('div',{},
-      el('div',{style:`font-weight:900;font-size:20px;${folder?'':'color:'+(s.defaultColor||'var(--text)')+';'}`}, folder ? `📁 ${folder.name}` : s.name),
-      el('div',{class:'u-muted-12'},`${nOf(allDecks.length,'deck')}${childFolders.length?` · ${nOf(childFolders.length,'folder')}`:''}`)
-    ),
-    el('div',{class:'ui-action-group',style:'display:flex;gap:8px;flex-wrap:wrap'},
-      btn('▶ Study','ghost',{title:folder?'Study this folder now':'Study this subject now',
+  // ── one merged action bar for both container kinds, same order — the
+  // name sits ABOVE it so the bar gets the full container width ──
+  const bar = el('div',{class:'container-head',style:'margin-bottom:18px'},
+    el('div',{style:`font-weight:900;font-size:20px;margin-bottom:2px;${folder?'':'color:'+(s.defaultColor||'var(--text)')+';'}`}, folder ? `📁 ${folder.name}` : s.name),
+    el('div',{class:'u-muted-12',style:'margin-bottom:10px'},`${nOf(allDecks.length,'deck')}${childFolders.length?` · ${nOf(childFolders.length,'folder')}`:''}`),
+    el('div',{class:'tab-bar container-actions'},
+      actionTab('▶ Study',{title:folder?'Study this folder now':'Study this subject now',
         onclick:()=>{ state.studyScope= folder ? [{type:'folder',id:folderId}] : [{type:'subject',id:subjectKey}]; navigate('study'); }}),
-      btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal(subjectKey, folderId||null)}),
-      btn('+ New Folder','ghost',{title:folder?'Create a subfolder here':'Create a folder in this subject',
+      actionTab('+ New Deck',{variant:'primary',onclick:()=>openCreateDeckModal(subjectKey, folderId||null)}),
+      actionTab('+ New Folder',{title:folder?'Create a subfolder here':'Create a folder in this subject',
         onclick:()=>openCreateFolderModal(subjectKey, folderId||null)}),
-      btn('⬇ Export','ghost',{title:folder?'Export folder as JSON':'Export subject as JSON',
+      actionTab('⬇ Export',{title:folder?'Export folder as JSON':'Export subject as JSON',
         onclick:()=>{ folder ? exportFolder(folderId) : exportSubject(subjectKey); }}),
-      btn('Aa Case…','ghost',{title:'Standardize letter case / endings across this '+(folder?'folder (subfolders included)':'subject'),
+      actionTab('Aa Case…',{title:'Standardize letter case / endings across this '+(folder?'folder (subfolders included)':'subject'),
         onclick:()=>{ const sub=new Set(folder?folderSubtreeIds(folderId):[]);
           const decks = folder ? state.decks.filter(d=>sub.has(d.folderId)) : allDecks;
           const folders = folder ? state.folders.filter(f=>sub.has(f.id)) : state.folders.filter(f=>(f.subjectKey||DEFAULT_SUBJECT_KEY)===subjectKey);
           openCaseStandardizeModal(folder ? `the folder "${folder.name}" (incl. subfolders)` : `the subject "${s.name}"`,
             { cards: decks.flatMap(d=>d.cards), decks, folders }); }}),
-      folder ? btn('📂 Move to Folder…','ghost',{onclick:()=>openMoveFolderModal(folderId)}) : null,
-      folder ? btn('📚 Move to Subject…','ghost',{onclick:()=>openMoveFolderSubjectModal(folderId)}) : null,
-      folder ? btn('✏ Rename','ghost',{title:`Rename folder ${folder.name}`,onclick:()=>openRenameFolderModal(folderId)})
-             : btn('✏️ Edit Subject','ghost',{title:'Edit this subject in Settings',onclick:()=>{ if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('subjects'); else navigate('settings'); }}),
-      folder ? btn('× Delete','danger',{title:`Delete folder ${folder.name}`,onclick:()=>deleteFolder(folderId)}) : null
+      folder ? actionTab('📂 Move to Folder…',{onclick:()=>openMoveFolderModal(folderId)}) : null,
+      folder ? actionTab('📚 Move to Subject…',{onclick:()=>openMoveFolderSubjectModal(folderId)}) : null,
+      folder ? actionTab('✏ Rename',{title:`Rename folder ${folder.name}`,onclick:()=>openRenameFolderModal(folderId)})
+             : actionTab('✏️ Edit Subject',{title:'Edit this subject in Settings',onclick:()=>{ if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('subjects'); else navigate('settings'); }}),
+      folder ? actionTab('× Delete',{variant:'danger',title:`Delete folder ${folder.name}`,aria:`Delete folder ${folder.name}`,onclick:()=>deleteFolder(folderId)}) : null
     )
   );
   c.append(breadcrumb, bar);
@@ -790,7 +796,22 @@ function renderDeckCard(deck, grid) {
   grid.appendChild(cardEl);
 }
 
-function deleteDeck(id) { state.decks=state.decks.filter(d=>d.id!==id); scheduleSave(); renderView('decks'); renderSidebar(); }
+function deleteDeck(id) {
+  const idx = state.decks.findIndex(d=>d.id===id);
+  if (idx < 0) return;
+  const deck = state.decks[idx];
+  confirmDestructive('Delete deck?',
+    `Are you sure you want to delete "${deck.name}"? ${nOf(deck.cards.length,'card')} go with it.`,
+    'Delete', () => {
+      state.decks.splice(idx, 1);
+      scheduleSave(); renderView('decks'); renderSidebar();
+      undoToast(`Deleted "${deck.name}" 🗑️`, () => {
+        state.decks.splice(Math.min(idx, state.decks.length), 0, deck);
+        scheduleSave(); renderView('decks'); renderSidebar();
+        showToast('Deck restored ↩');
+      });
+    });
+}
 
 // ── Deck multi-select (subject/folder views) ────────────────────────────
 // Same sticky click-to-toggle / shift+click range-select interaction as the
@@ -1510,12 +1531,30 @@ ${pagesHtml}
   }
 }
 function deleteFolder(id) {
-  const folder = state.folders.find(f=>f.id===id);
-  const parentId = folder?.parentId||null;
-  state.decks.forEach(d=>{ if(d.folderId===id) d.folderId=parentId; });
-  state.folders.forEach(f=>{ if(f.parentId===id) f.parentId=parentId; });
-  state.folders = state.folders.filter(f=>f.id!==id);
-  scheduleSave(); renderView('decks');
+  const idx = state.folders.findIndex(f=>f.id===id);
+  if (idx < 0) return;
+  const folder = state.folders[idx];
+  const parentId = folder.parentId||null;
+  const decksIn = state.decks.filter(d=>d.folderId===id);
+  const subsIn = state.folders.filter(f=>f.parentId===id);
+  confirmDestructive('Delete folder?',
+    `Are you sure you want to delete "${folder.name}"? ` +
+    `${nOf(decksIn.length,'deck')}${subsIn.length?` and ${nOf(subsIn.length,'subfolder')}`:''} inside move up to the parent level.`,
+    'Delete', () => {
+      const deckPrev = decksIn.map(d=>({id:d.id, folderId:d.folderId}));
+      const subPrev = subsIn.map(f=>({id:f.id, parentId:f.parentId}));
+      state.decks.forEach(d=>{ if(d.folderId===id) d.folderId=parentId; });
+      state.folders.forEach(f=>{ if(f.parentId===id) f.parentId=parentId; });
+      state.folders.splice(idx, 1);
+      scheduleSave(); renderView('decks');
+      undoToast(`Deleted "${folder.name}" 🗑️`, () => {
+        state.folders.splice(Math.min(idx, state.folders.length), 0, folder);
+        deckPrev.forEach(pp=>{ const d=state.decks.find(x=>x.id===pp.id); if(d) d.folderId=pp.folderId; });
+        subPrev.forEach(pp=>{ const f=state.folders.find(x=>x.id===pp.id); if(f) f.parentId=pp.parentId; });
+        scheduleSave(); renderView('decks');
+        showToast('Folder restored ↩');
+      });
+    });
 }
 
 function openCreateFolderModal(subjectKey, parentId) {
@@ -2930,7 +2969,21 @@ function duplicateCard(deckId, cardId) {
 
 function deleteCard(deckId, cardId) {
   const deck = state.decks.find(d=>d.id===deckId);
-  if(deck){ deck.cards=deck.cards.filter(c=>c.id!==cardId); scheduleSave(); }
+  if(!deck) return;
+  const idx = deck.cards.findIndex(c=>c.id===cardId);
+  if (idx < 0) return;
+  const card = deck.cards[idx];
+  confirmDestructive('Delete card?',
+    `Are you sure you want to delete this card? "${(card.front||'').slice(0,80)}"`,
+    'Delete', () => {
+      deck.cards.splice(idx, 1);
+      scheduleSave(); renderView('decks');
+      undoToast('Card deleted 🗑️', () => {
+        deck.cards.splice(Math.min(idx, deck.cards.length), 0, card);
+        scheduleSave(); renderView('decks');
+        showToast('Card restored ↩');
+      });
+    });
 }
 
 function openCardModal(deckId, cardId) {

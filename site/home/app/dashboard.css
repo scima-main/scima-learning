@@ -118,6 +118,7 @@ body::after {
 /* A breadcrumb directly followed by an action bar (the decks browser's
    subject/folder containers) needs the same gutter indent — otherwise the
    bar's title lands under the floating ⓘ mark. */
+#page-tabs ~ .view > .breadcrumb + .container-head,
 #page-tabs ~ .view > .breadcrumb + .ui-action-bar { margin-left: 28px; }
 #page-tabs .tab-bar { width: auto; margin-bottom: 0; }
 .page-tab-icon { font-size: 13px; line-height: 1; }
@@ -313,6 +314,7 @@ body.nav-open #sidebar-version {
   /* narrower gutter: indent the header past the button column (14+36+8) */
   #page-tabs ~ .view > :first-child { margin-left: 44px; }
   #page-tabs ~ .view > .section-sub { margin-left: 44px; }
+  #page-tabs ~ .view > .breadcrumb + .container-head,
   #page-tabs ~ .view > .breadcrumb + .ui-action-bar { margin-left: 44px; }
   #page-tabs:not(:empty) ~ .view { padding-top: 16px; }
 }
@@ -1540,6 +1542,27 @@ input[type="number"]:focus { border-color: rgba(var(--blue-rgb),0.5); }
   justify-content: space-between; flex-wrap: wrap; padding: 10px 12px;
   border-radius: 10px; background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border); }
+
+/* ── Merged container action bars (decks browser) ──────────────────────────
+   The subject/folder action sets wear the analytics/quests segmented-bar
+   anatomy (.tab-bar/.tab-btn): one long pill, flex-1 cells, instead of a
+   row of loose buttons squeezed beside the title — the title now sits on
+   its own line above, giving the bar the full container width. */
+.container-actions { margin-bottom: 16px; }
+.container-actions .tab-btn { color: var(--text); font-weight: 700;
+  padding: 10px 8px; flex: 1 1 auto; min-width: 96px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.container-actions .tab-btn:hover { background: rgba(255, 255, 255, 0.08);
+  color: var(--text); }
+.container-actions .tab-btn.primary { background: var(--grad);
+  color: var(--on-gradient); }
+.container-actions .tab-btn.primary:hover { filter: brightness(1.08); }
+.container-actions .tab-btn.danger { color: #ef4444; }
+.container-actions .tab-btn.danger:hover { background: rgba(239, 68, 68, 0.12); }
+@media (max-width: 720px) {
+  .container-actions { flex-wrap: wrap; }
+  .container-actions .tab-btn { flex: 1 1 42%; min-width: 42%; }
+}
 @media (prefers-reduced-motion: reduce) {
   #study-opts-panel, #study-opts-backdrop { transition: none; }
 }
