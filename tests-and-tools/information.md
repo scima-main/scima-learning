@@ -142,9 +142,11 @@ Key fixtures: `app` (booted `/` on empty), `demo_app` (booted `/` on demo),
   - Review dates use **UTC** (`today()` = `toISOString()`); `seed.utc_day()`
     matches.
   - Quiz parameters (`state.settings.quizParams`): types/limit/timeLimitMin/
-  shuffle/multiRequired/exam — set via the picker panel or evaluate; exam
-  sessions save answers with “💾 Save answer”, navigate with ← Prev /
-  Next →, grade at “🏁 Finish & reveal” (summary lists every answer).
+  shuffle/multiRequired/exam — set via the “⚙ Session options” drawer
+  (`#study-opts-btn` → `#study-opts-panel`; toggles keep their old ids
+  #img-toggle/#reverse-toggle/#quiz-timed/#timed-quiz-seconds/#qp-*) or by
+  evaluating state directly; exam sessions auto-cache inputs on ← Prev /
+  Next → (Enter caches + advances), grade at “🏁 Finish & reveal”.
 - Session answers: every rated card lands in `sessionLog[0].answers`
   (`{id, r, ok, ms}`); the history row's “Repeat wrong (N)” replays only
   `ok === false` cards. Case tools: “Aa Case…” buttons (subject/folder/

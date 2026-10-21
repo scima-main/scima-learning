@@ -245,7 +245,7 @@ def test_quiz_params_filter_limit_and_override(page, site_base, seeded):
     pages.goto_app(page, site_base, "/study/")
     _set_qp(page, types=["multi"], limit=5, multiRequired=2)
     page.evaluate("() => renderView('study')")
-    expect(page.locator("#view-study")).to_contain_text("5 cards in queue")
+    expect(page.locator("#study-opts-summary")).to_contain_text("5 cards")
     page.locator("#view-study .card", has_text="Written Quiz") \
         .get_by_role("button", name="Start").click()
     page.wait_for_selector(".quiz-input-area")
@@ -268,10 +268,8 @@ def test_exam_mode_navigates_and_reveals_at_end(page, site_base, seeded):
     page.wait_for_selector(".quiz-input-area")
     # global clock in the progress row
     expect(page.locator("#view-study span", has_text="⏱")).to_be_visible()
-    # save, move on, come back — answer prefilled, no feedback shown
+    # type, move on, come back — answer auto-cached, no feedback shown
     page.locator(".quiz-input-area").first.fill("alpha")
-    page.get_by_role("button", name="💾 Save answer").click()
-    expect(page.locator("#toast")).to_contain_text("Answer saved")
     expect(page.locator(".quiz-compare")).to_be_hidden()
     page.get_by_role("button", name="Next →").click()
     page.get_by_role("button", name="← Prev").click()
@@ -333,7 +331,6 @@ def test_exam_inputs_clear_on_new_card_and_restore_cached(page, site_base,
     assert vals() == ["alpha", "beta"], vals()
     # explicit save, wander two cards, return: still restored, and only the
     # answered card counts as recorded
-    page.get_by_role("button", name="💾 Save answer").click()
     page.get_by_role("button", name="Next →").click()
     page.get_by_role("button", name="Next →").click()
     page.wait_for_timeout(200)
@@ -344,3 +341,87 @@ def test_exam_inputs_clear_on_new_card_and_restore_cached(page, site_base,
     assert vals() == ["alpha", "beta"]
     assert page.evaluate("() => Object.keys(studySession.recorded)") == \
         [page.evaluate("() => studySession.queue[0].id")]
+
+
+def test_exam_footer_has_big_nav_and_no_save_button(page, site_base, seeded):
+    seeded(mf_state=_multi_state())
+    pages.goto_app(page, site_base, "/study/")
+    _set_qp(page, types=["multi"], limit=3, exam=True, multiRequired=2)
+    page.evaluate("() => renderView('study')")
+    page.locator("#view-study .card", has_text="Written Quiz") \
+        .get_by_role("button", name="Start").click()
+    page.wait_for_selector(".quiz-input-area")
+    assert page.get_by_role("button", name="💾 Save answer").count() == 0
+    prev_b = page.get_by_role("button", name="← Prev")
+    next_b = page.get_by_role("button", name="Next →")
+    expect(prev_b).to_be_visible()
+    expect(next_b).to_be_visible()
+    # big tap targets
+    assert next_b.bounding_box()["height"] >= 44
+    # Enter caches and advances instead of grading
+    page.locator(".quiz-input-area").first.fill("alpha")
+    page.locator(".quiz-input-area").first.press("Enter")
+    page.wait_for_timeout(250)
+    assert page.evaluate("() => studySession.idx") == 1
+    assert page.evaluate(
+        "() => Object.keys(studySession.recorded).length") == 1
+
+
+def test_options_drawer_groups_and_merged_time_limits(page, site_base, seeded):
+    seeded("preset:demo")
+    pages.goto_app(page, site_base, "/study/")
+    page.click("#study-opts-btn")
+    page.wait_for_selector("#study-opts-panel.open")
+    panel = page.locator("#study-opts-panel")
+    for label in ("Display", "Time limits", "Queue", "Exam mode"):
+        expect(panel.locator(".u-section-label", has_text=label)).to_be_visible()
+    # merged time section: both toggles + both inputs live under it
+    time_sec = panel.locator(".study-opts-section", has_text="Time limits")
+    expect(time_sec.locator("#quiz-timed")).to_have_count(1)
+    expect(time_sec.locator("#timed-quiz-seconds")).to_have_count(1)
+    expect(time_sec.locator("#qp-session-timed")).to_have_count(1)
+    expect(time_sec.locator("#qp-minutes")).to_have_count(1)
+    # toggling the session limit switch enables a default of 5 minutes
+    time_sec.locator("#qp-session-timed").click()
+    assert page.evaluate("() => state.settings.quizParams.timeLimitMin") == 5
+    time_sec.locator("#qp-session-timed").click()
+    assert page.evaluate("() => state.settings.quizParams.timeLimitMin") == 0
+    # live queue preview inside the drawer
+    expect(page.locator("#study-opts-preview")).to_contain_text("cards in queue")
+    # Esc closes and the picker summary reflects active options
+    page.keyboard.press("Escape")
+    page.wait_for_selector("#study-opts-panel.open", state="detached",
+                          timeout=5000)
+    expect(page.locator("#study-opts-summary")).to_contain_text("defaults")
+    # re-open: the session-limit toggle round-tripped back off
+    page.click("#study-opts-btn")
+    page.wait_for_selector("#study-opts-panel.open")
+    expect(page.locator("#qp-session-timed")).to_have_attribute("aria-checked", "false")
+    page.get_by_role("button", name="Done").click()
+    page.wait_for_timeout(300)
+
+
+def test_recents_never_duplicate_the_all_decks_pill(page, site_base, seeded):
+    seeded("preset:demo")
+    pages.goto_app(page, site_base, "/study/")
+    # studying "All Decks" must not add a second All-Decks pill (the old bug:
+    # a pinned duplicate that never went away)
+    page.evaluate("() => { pushRecentScope([{type:'all',id:null}]);"
+                  " pushRecentScope([{type:'all',id:null}]); renderView('study'); }")
+    pills = page.evaluate("""() => [...document.querySelectorAll('#view-study button')]
+        .map(b => b.textContent.trim()).filter(t => t === '🌍 All Decks').length""")
+    assert pills == 1, pills
+    # and a legacy saved duplicate entry is deduped at render time
+    page.evaluate("""() => { state.recentStudyScopes.unshift(
+        {key:'all:null', scopes:[{type:'all',id:null}], icon:'🌍', label:'All Decks',
+         ts: Date.now(), pinned:true},
+        {key:'deck:d_demo_1', scopes:[{type:'deck',id:'d_demo_1'}], icon:'📚',
+         label:'Dupe', ts: Date.now(), pinned:false},
+        {key:'deck:d_demo_1', scopes:[{type:'deck',id:'d_demo_1'}], icon:'📚',
+         label:'Dupe', ts: Date.now()-1, pinned:false}); renderView('study'); }""")
+    dupes = page.evaluate("""() => [...document.querySelectorAll('#view-study button')]
+        .map(b => b.textContent.trim()).filter(t => t.startsWith('📚 Dupe')).length""")
+    assert dupes == 1, dupes
+    pills = page.evaluate("""() => [...document.querySelectorAll('#view-study button')]
+        .map(b => b.textContent.trim()).filter(t => t === '🌍 All Decks').length""")
+    assert pills == 1, pills

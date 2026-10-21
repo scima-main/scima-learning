@@ -1510,6 +1510,35 @@ input[type="number"]:focus { border-color: rgba(var(--blue-rgb),0.5); }
   .sc-root .deck-detail-title { font-size: 19px; }
 }
 
+/* ── Study session-options drawer ──────────────────────────────────────────
+   The picker's old stack of four full-width option strips (images / per-card
+   timer / reverse / quiz parameters) lives in one slide-over panel now,
+   grouped Display · Time limits · Queue · Exam. Same modal-pattern chrome
+   as the nav drawer: dim backdrop, Esc/outside-click close, transform-only
+   slide, visibility parked out of the tab order when closed. */
+#study-opts-backdrop { position: fixed; inset: 0; z-index: 1070;
+  background: rgba(0, 0, 0, 0.6); opacity: 0; pointer-events: none;
+  transition: opacity 0.22s ease; }
+#study-opts-backdrop.open { opacity: 1; pointer-events: auto; }
+#study-opts-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 1075;
+  width: min(400px, 94vw); background: var(--surface);
+  border-left: 1px solid var(--border); box-shadow: -18px 0 50px rgba(0, 0, 0, 0.5);
+  display: flex; flex-direction: column; outline: none;
+  transform: translateX(105%); visibility: hidden;
+  transition: transform 0.26s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s linear 0.26s; }
+#study-opts-panel.open { transform: none; visibility: visible;
+  transition: transform 0.26s cubic-bezier(0.32, 0.72, 0, 1); }
+#study-opts-body { flex: 1; overflow-y: auto; padding: 16px;
+  display: flex; flex-direction: column; gap: 18px; }
+.study-opts-section { display: flex; flex-direction: column; gap: 8px; }
+.study-opts-row { display: flex; align-items: center; gap: 10px;
+  justify-content: space-between; flex-wrap: wrap; padding: 10px 12px;
+  border-radius: 10px; background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border); }
+@media (prefers-reduced-motion: reduce) {
+  #study-opts-panel, #study-opts-backdrop { transition: none; }
+}
+
 /* ── Touch-device modal sheets beyond the 720px phone line ────────────────
    A phone in landscape (or a small tablet) is still a phone: the centred
    580px dialog floating in a 844×390 viewport reads as a desktop leftover

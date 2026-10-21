@@ -1550,6 +1550,10 @@ function applyStudyRefine(cards, refine) {
 function pushRecentScope(scopes) {
   if (!scopes || !scopes.length) return;
   const key = scopes.map(scopeKey).sort().join('|');
+  // "All Decks" is a permanent first pill in every recents row — storing it
+  // as a recent too produced a second, identical pill (permanent once
+  // pinned). It never needs a history entry.
+  if (key === scopeKey({ type: 'all', id: null })) return;
   const existing = state.recentStudyScopes.find(r => r.key === key);
   const pinned = existing?.pinned || false;
   state.recentStudyScopes = state.recentStudyScopes.filter(r => r.key !== key);
@@ -1561,9 +1565,15 @@ function pushRecentScope(scopes) {
   state.recentStudyScopes = [...pinnedEntries, ...unpinnedEntries];
   scheduleSave();
 }
-/** Pinned recents first (most-recent-first among pinned), then unpinned by recency. */
+/** Pinned recents first (most-recent-first among pinned), then unpinned by
+ *  recency. Deduped by key (older saves may carry duplicates) and minus the
+ *  "All Decks" key, which the row's permanent first pill already covers. */
 function orderedRecentScopes() {
-  return [...state.recentStudyScopes].sort((a,b) => (b.pinned?1:0)-(a.pinned?1:0) || b.ts-a.ts);
+  const allKey = scopeKey({ type: 'all', id: null });
+  const seen = new Set();
+  return [...(state.recentStudyScopes || [])]
+    .filter(r => r && r.key && r.key !== allKey && !seen.has(r.key) && (seen.add(r.key), true))
+    .sort((a,b) => (b.pinned?1:0)-(a.pinned?1:0) || b.ts-a.ts);
 }
 function toggleRecentPin(key) {
   const r = state.recentStudyScopes.find(x => x.key === key);

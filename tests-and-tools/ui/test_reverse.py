@@ -45,6 +45,8 @@ def current_front_back(page):
 def test_toggle_present_off_by_default_and_persists(page, site_base, seeded):
     seeded("preset:empty")
     pages.goto_app(page, site_base, "/study/")
+    page.click("#study-opts-btn")          # options live in the drawer now
+    page.wait_for_selector("#study-opts-panel.open")
     toggle = page.locator("#reverse-toggle")
     expect(toggle).to_be_visible()
     expect(toggle).not_to_be_checked()
@@ -54,6 +56,8 @@ def test_toggle_present_off_by_default_and_persists(page, site_base, seeded):
     assert storage.read_mf_state(page)["settings"]["studyReverse"] is True
     page.reload(wait_until="load")
     pages.app_ready(page)
+    page.click("#study-opts-btn")
+    page.wait_for_selector("#study-opts-panel.open")
     expect(page.locator("#reverse-toggle")).to_be_checked()
 
 

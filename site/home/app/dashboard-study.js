@@ -92,12 +92,6 @@ function writeExamCache(card, answers) {
     delete sess.recorded[card.id];
   }
 }
-/** Stores a typed/boxed answer without grading it. */
-function saveExamAnswer(card, answers) {
-  writeExamCache(card, answers);
-  showToast('Answer saved — 🏁 Finish & reveal grades everything', 2000);
-  studySession._examNavRefresh?.();
-}
 /** Caches whatever is in the live inputs of the CURRENT card — called on
  *  every question change and before grading, so half-typed answers survive
  *  navigation even without pressing 💾 (and each card's boxes are then
@@ -408,6 +402,172 @@ function renderStudy(c) {
   renderStudyPicker(c);
 }
 
+// ── Exam navigation (shared by the footer buttons and the Enter key) ───────
+function examNav(d) {
+  const sess = studySession;
+  if (!sess || !sess.exam) return;
+  cacheExamAnswer();                 // keep this card's typing before leaving
+  const ni = Math.max(0, Math.min(sess.queue.length - 1, sess.idx + d));
+  if (ni === sess.idx) return;
+  sess.idx = ni;
+  clearQuizTimer(); clearNextTimer();
+  renderStudySession(document.getElementById('view-study'));
+}
+
+// ── Session options drawer ──────────────────────────────────────────────────
+// One slide-over panel for everything that shapes a session, grouped:
+// Display · Time limits (per-card countdown AND whole-session limit, each
+// with its own toggle) · Queue (type chips, card limit, multi override,
+// shuffle) · Exam mode. Values persist to state.settings / quizParams.
+let _studyOptsNodes = null;
+function studyOptionsSummary() {
+  const qp = quizParams();
+  const bits = [];
+  if (qp.types && qp.types.length) bits.push(`types:${qp.types.length}`);
+  if (qp.limit > 0) bits.push(`${qp.limit} cards`);
+  if (qp.timeLimitMin > 0) bits.push(`${qp.timeLimitMin} min`);
+  if (qp.multiRequired > 0) bits.push(`multi≤${qp.multiRequired}`);
+  if (qp.shuffle === false) bits.push('no shuffle');
+  if (qp.exam) bits.push('exam');
+  if (state.settings.quizTimed) bits.push(`${state.settings.timedQuizSeconds || 30}s/card`);
+  if (state.settings.studyReverse) bits.push('reversed');
+  if (state.settings.showStudyImages === false) bits.push('no images');
+  return bits.length ? bits.join(' · ') : 'defaults';
+}
+function refreshStudyOptionsSummary() {
+  const span = document.getElementById('study-opts-summary');
+  if (span) span.textContent = studyOptionsSummary();
+}
+function closeStudyOptions() {
+  if (!_studyOptsNodes) return;
+  const { backdrop, panel, onKey } = _studyOptsNodes;
+  document.removeEventListener('keydown', onKey, true);
+  backdrop.classList.remove('open');
+  panel.classList.remove('open');
+  setTimeout(() => { backdrop.remove(); panel.remove(); }, 240);
+  _studyOptsNodes = null;
+  refreshStudyOptionsSummary();
+  renderView('study');
+}
+function openStudyOptionsDrawer() {
+  if (_studyOptsNodes) return;
+  // a closing drawer lingers ~240ms for its slide-out; drop any such orphan
+  // so ids never resolve to two panels
+  document.getElementById('study-opts-panel')?.remove();
+  document.getElementById('study-opts-backdrop')?.remove();
+  const qp = quizParams();
+  const backdrop = el('div', { id: 'study-opts-backdrop' });
+  const panel = el('div', { id: 'study-opts-panel', tabindex: '-1', role: 'dialog', 'aria-label': 'Session options' });
+  const body = el('div', { id: 'study-opts-body' });
+  const head = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0' },
+    el('div', { style: 'font-weight:900;font-size:15px' }, '⚙ Session options'),
+    el('button', { 'aria-label': 'Close session options', style: 'background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:2px 6px' , onclick: () => closeStudyOptions() }, '×'));
+  const preview = el('div', { id: 'study-opts-preview', class: 'u-muted-11', style: 'padding:10px 12px;border-radius:10px;background:rgba(var(--blue-rgb),0.08);border:1px solid rgba(var(--blue-rgb),0.2)' });
+  const section = (title) => {
+    const sec = el('div', { class: 'study-opts-section' });
+    sec.appendChild(el('div', { class: 'u-section-label', style: 'margin-bottom:2px' }, title));
+    body.appendChild(sec);
+    return sec;
+  };
+  const row = (sec) => {
+    const r = el('div', { class: 'study-opts-row' });
+    sec.appendChild(r);
+    return r;
+  };
+  const sw = (label, desc, get, set, id) => {
+    const knob = el('div', { class: 'toggle-knob' });
+    const b = el('button', { type: 'button', role: 'switch', id: id || '',
+      class: `toggle${get() ? ' on' : ''}`, 'aria-checked': String(!!get()),
+      'aria-label': label, title: desc || label,
+      onclick: () => { set(!get()); b.classList.toggle('on', get());
+        b.setAttribute('aria-checked', String(!!get())); afterChange(); } }, knob);
+    return el('div', { style: 'flex:1;min-width:180px;display:flex;align-items:center;justify-content:space-between;gap:10px' },
+      el('div', {}, el('div', { style: 'font-size:13px;font-weight:600' }, label),
+        desc ? el('div', { class: 'u-muted-11' }, desc) : null), b);
+  };
+  const num = (val, max, set, label, title, id) => el('span', { style: 'display:flex;align-items:center;gap:6px', title },
+    el('label', { class: 'u-muted-11', style: 'font-weight:700', for: id || '' }, label),
+    (() => { const inp = el('input', { type: 'number', min: '0', max: String(max), id: id || '', title,
+      style: 'width:56px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-weight:700;font-size:12px' });
+      inp.value = String(val);
+      inp.addEventListener('change', () => { set(Math.max(0, Math.min(max, parseInt(inp.value, 10) || 0))); afterChange(); });
+      return inp; })());
+  function afterChange() {
+    state.settings.quizParams = qp;
+    scheduleSave();
+    preview.textContent = `→ ${qpQueueCountFor(refinedCardsPreview(), qp)} cards in queue · ${studyOptionsSummary()}`;
+  }
+  // queue preview needs the picker's refined list — recompute independently
+  function refinedCardsPreview() { return applyStudyRefine(getScopeSetCards(state.studyScope), state.studyRefine || { mode: 'all', cardIds: [], n: 20, easeDir: 'hardest' }); }
+  function qpQueueCountFor(list, q) {
+    let l = list;
+    if (q.types && q.types.length) l = l.filter(cc => qp.types.some(t => qpTypeMatch(cc, t)));
+    if (q.limit > 0) l = l.slice(0, q.limit);
+    return l.length;
+  }
+
+  // 1 · Display
+  const sDisplay = section(' Display');
+  row(sDisplay).appendChild(sw('Show card images', 'Display front/back images during study',
+    () => state.settings.showStudyImages !== false,
+    v => { state.settings.showStudyImages = v; scheduleSave(); }, 'img-toggle'));
+  row(sDisplay).appendChild(sw('🔁 Reverse cards', 'See the back, answer the front (basic cards)',
+    () => !!state.settings.studyReverse,
+    v => { state.settings.studyReverse = v; scheduleSave(); }, 'reverse-toggle'));
+
+  // 2 · Time limits — per-card and whole-session, one section, own toggles
+  const sTime = section('⏱ Time limits');
+  row(sTime).appendChild(sw('Per-card countdown', 'Written Quiz auto-submits each card when its timer runs out',
+    () => !!state.settings.quizTimed,
+    v => { state.settings.quizTimed = v; scheduleSave(); }, 'quiz-timed'));
+  row(sTime).appendChild(num(state.settings.timedQuizSeconds || 30, 300,
+    v => { state.settings.timedQuizSeconds = v; scheduleSave(); },
+    'Seconds per card:', 'Per-card countdown length', 'timed-quiz-seconds'));
+  row(sTime).appendChild(sw('Whole-session limit', 'A session-wide countdown; at zero the session finishes (exam mode grades what is saved)',
+    () => (qp.timeLimitMin | 0) > 0,
+    v => { qp.timeLimitMin = v ? (qp.timeLimitMin || 5) : 0; }, 'qp-session-timed'));
+  row(sTime).appendChild(num(qp.timeLimitMin | 0, 600,
+    v => { qp.timeLimitMin = v; }, 'Minutes:', 'Global time limit in minutes (0 = off)', 'qp-minutes'));
+
+  // 3 · Queue shaping
+  const sQueue = section('🧾 Queue');
+  const chips = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' });
+  function refreshChips() {
+    chips.innerHTML = '';
+    chips.appendChild(btn(qp.types.length ? 'Types: custom ✕' : 'All card types',
+      qp.types.length ? 'primary' : 'ghost', { small: true, onclick: () => { qp.types = []; afterChange(); refreshChips(); } }));
+    QP_TYPES.forEach(([tid, tlabel]) => {
+      const on = qp.types.includes(tid);
+      chips.appendChild(btn(tlabel, on ? 'primary' : 'ghost', { small: true,
+        onclick: () => { qp.types = on ? qp.types.filter(x => x !== tid) : [...qp.types, tid]; afterChange(); refreshChips(); } }));
+    });
+  }
+  refreshChips();
+  sQueue.appendChild(chips);
+  const qRow = row(sQueue);
+  qRow.append(
+    num(qp.limit, 500, v => { qp.limit = v; }, 'Card limit:', 'Max cards in the queue (0 = no limit)', 'qp-limit'),
+    num(qp.multiRequired, 20, v => { qp.multiRequired = v; }, 'Multi needs:', 'Multi-answer required-count override (0 = card\u2019s own)', 'qp-multi'),
+    sw('Shuffle', 'Random queue order (off = deck order)', () => qp.shuffle !== false, v => { qp.shuffle = v; }, 'qp-shuffle'));
+
+  // 4 · Exam mode
+  const sExam = section('📝 Exam mode');
+  row(sExam).appendChild(sw('Exam mode', 'Move freely between questions with ← / →; answers are cached per card and nothing is graded or revealed until 🏁 Finish & reveal (Written Quiz & Fill in the Gaps)',
+    () => !!qp.exam, v => { qp.exam = v; }, 'qp-exam'));
+
+  body.appendChild(preview);
+  panel.append(head, body,
+    el('div', { style: 'padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0' },
+      btn('Done', 'primary', { full: true, onclick: () => closeStudyOptions() })));
+  document.body.append(backdrop, panel);
+  const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); closeStudyOptions(); } };
+  document.addEventListener('keydown', onKey, true);
+  backdrop.addEventListener('click', () => closeStudyOptions());
+  _studyOptsNodes = { backdrop, panel, onKey };
+  requestAnimationFrame(() => { backdrop.classList.add('open'); panel.classList.add('open'); panel.focus(); });
+  afterChange();
+}
+
 function renderStudyPicker(c) {
   studySession = null;
   c.style.cssText='';
@@ -478,108 +638,16 @@ function renderStudyPicker(c) {
   if(refine.mode!=='all') refineRow.append(btn('✕ Clear','ghost',{small:true,onclick:()=>{ refine.mode='all'; scheduleSave(); renderView('study'); }}));
   refineRow.append(el('span',{style:'font-size:11px;color:var(--muted);margin-left:auto'}, refine.mode==='all' ? nOf(scopedCards.length,'card') : `${refinedCards.length} of ${nOf(scopedCards.length,'card')} selected`));
 
-  if(state.settings.showStudyImages===undefined)state.settings.showStudyImages=true;
-  const hasImages=refinedCards.some(c=>c.frontImage||c.backImage);
-  const imgToggleRow=el('div',{style:'display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:10px;'+(hasImages?'':'opacity:0.4;pointer-events:none')});
-  const imgChk=el('input',{type:'checkbox',id:'img-toggle',style:'width:16px;height:16px;accent-color:var(--blue);cursor:pointer'});
-  imgChk.checked=state.settings.showStudyImages;
-  imgChk.addEventListener('change',function(){state.settings.showStudyImages=imgChk.checked;scheduleSave();});
-  imgToggleRow.append(imgChk,el('label',{for:'img-toggle',style:'font-size:12px;font-weight:700;cursor:pointer;color:var(--text)'},'Show card images during study'),el('span',{style:'font-size:11px;color:var(--muted);margin-left:auto'},hasImages?'Images available':'No images in scope'));
-
-  if(state.settings.timedQuizSeconds===undefined)state.settings.timedQuizSeconds=30;
-  if(state.settings.quizTimed===undefined)state.settings.quizTimed=false;
-  const timerRow=el('div',{style:'display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:10px;'});
-  const timedChk=el('input',{type:'checkbox',id:'quiz-timed',style:'width:16px;height:16px;accent-color:var(--blue);cursor:pointer'});
-  timedChk.checked=state.settings.quizTimed;
-  const timerInput=el('input',{type:'number',id:'timed-quiz-seconds',min:'5',max:'300',step:'5',style:'width:60px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-weight:700;font-size:12px'});
-  timerInput.value=state.settings.timedQuizSeconds;
-  timerInput.disabled=!state.settings.quizTimed;
-  timerInput.style.opacity=state.settings.quizTimed?1:0.4;
-  timedChk.addEventListener('change',function(){
-    state.settings.quizTimed=timedChk.checked;
-    timerInput.disabled=!timedChk.checked;
-    timerInput.style.opacity=timedChk.checked?1:0.4;
-    scheduleSave();
-  });
-  timerInput.addEventListener('change',function(){
-    const v=Math.max(5,Math.min(300,parseInt(timerInput.value,10)||30));
-    timerInput.value=v; state.settings.timedQuizSeconds=v; scheduleSave();
-  });
-  timerRow.append(timedChk,el('label',{for:'quiz-timed',style:'font-size:12px;font-weight:700;color:var(--text);cursor:pointer'},'⏱️ Timed'),el('label',{for:'timed-quiz-seconds',style:'font-size:12px;font-weight:700;color:var(--muted)'},'Seconds per card:'),timerInput,el('span',{style:'font-size:11px;color:var(--muted);margin-left:auto'},'Applies to Written Quiz · auto-submits when time runs out'));
-
-  // Reverse orientation: show the back (definition), recall the front (term).
-  if(state.settings.studyReverse===undefined)state.settings.studyReverse=false;
-  const revRow=el('div',{style:'display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:10px;'});
-  const revChk=el('input',{type:'checkbox',id:'reverse-toggle',style:'width:16px;height:16px;accent-color:var(--pink);cursor:pointer'});
-  revChk.checked=!!state.settings.studyReverse;
-  revChk.addEventListener('change',function(){state.settings.studyReverse=revChk.checked;scheduleSave();});
-  revRow.append(revChk,el('label',{for:'reverse-toggle',style:'font-size:12px;font-weight:700;cursor:pointer;color:var(--text)'},'🔁 Reverse cards (see the back, answer the front)'),el('span',{style:'font-size:11px;color:var(--muted);margin-left:auto'},'Basic cards study definition → term'));
-
-  // ── Quiz parameters: queue shaping + exam-style session rules ──────────
-  // "create a quiz with a five minute limit that takes five of the
-  // multi-answer cards from the scope, I can move between questions and
-  // only see answers at the end, and multi-answers only need two answers"
-  // — every knob for that sentence lives in this panel, persisted under
-  // state.settings.quizParams so a configured quiz survives reloads.
-  const qp = quizParams();
-  const qpRow = el('div',{style:'margin-bottom:14px;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:10px'});
-  const qpPreview = el('span',{style:'font-size:11px;color:var(--muted);margin-left:auto'});
-  const qpTypesRow = el('div',{style:'display:flex;gap:6px;flex-wrap:wrap;margin:8px 0'});
-  function qpSave(){ state.settings.quizParams = qp; scheduleSave(); qpRefresh(); }
-  function qpQueueCount(){
-    let list = refinedCards;
-    if (qp.types && qp.types.length) list = list.filter(cc => qp.types.some(t => qpTypeMatch(cc, t)));
-    if (qp.limit > 0) list = list.slice(0, qp.limit);
-    return list.length;
-  }
-  function qpRefresh(){
-    qpTypesRow.innerHTML = '';
-    qpTypesRow.appendChild(btn(qp.types.length ? 'Types: custom ✕' : 'All card types',
-      qp.types.length ? 'primary' : 'ghost',
-      { small: true, title: 'Click to clear the card-type filter',
-        onclick: () => { qp.types = []; qpSave(); } }));
-    QP_TYPES.forEach(([tid, tlabel]) => {
-      const on = qp.types.includes(tid);
-      qpTypesRow.appendChild(btn(tlabel, on ? 'primary' : 'ghost', { small: true,
-        title: `Only ${tlabel.toLowerCase()} cards enter the queue`,
-        onclick: () => { qp.types = on ? qp.types.filter(x => x !== tid) : [...qp.types, tid]; qpSave(); } }));
-    });
-    qpPreview.textContent = `→ ${qpQueueCount()} card${qpQueueCount() !== 1 ? 's' : ''} in queue` +
-      (qp.timeLimitMin ? ` · ${qp.timeLimitMin} min` : '') + (qp.exam ? ' · exam' : '');
-  }
-  const qpNum = (val, max, onchange, title) => {
-    const inp = el('input',{type:'number',min:'0',max:String(max),title,
-      style:'width:56px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-weight:700;font-size:12px'});
-    inp.value = String(val);
-    inp.addEventListener('change',()=>{ onchange(Math.max(0, Math.min(max, parseInt(inp.value,10)||0))); qpSave(); });
-    return inp;
-  };
-  const qpChk = (checked, label, title, onchange, id) => {
-    const c2 = el('input',{type:'checkbox',id,style:'width:16px;height:16px;accent-color:var(--blue);cursor:pointer'});
-    c2.checked = checked;
-    c2.addEventListener('change',()=>{ onchange(c2.checked); qpSave(); });
-    return el('span',{style:'display:flex;align-items:center;gap:6px',title},
-      c2, el('label',{for:id,style:'font-size:12px;font-weight:700;cursor:pointer;color:var(--text)'},label));
-  };
-  qpRow.append(
-    el('div',{style:'display:flex;align-items:center;gap:10px;flex-wrap:wrap'},
-      el('span',{style:'font-weight:800;font-size:12px'},'🧾 Quiz parameters'),
-      qpPreview),
-    qpTypesRow,
-    el('div',{style:'display:flex;gap:14px;align-items:center;flex-wrap:wrap'},
-      el('span',{style:'display:flex;align-items:center;gap:6px',title:'Max cards in the queue (0 = no limit)'},
-        el('label',{style:'font-size:12px;font-weight:700;color:var(--muted)'},'Card limit:'),
-        qpNum(qp.limit, 500, v => qp.limit = v, 'Max cards in the queue (0 = no limit)')),
-      el('span',{style:'display:flex;align-items:center;gap:6px',title:'Whole-session countdown (0 = off); at zero the session finishes'},
-        el('label',{style:'font-size:12px;font-weight:700;color:var(--muted)'},'⏱ Minutes:'),
-        qpNum(qp.timeLimitMin, 600, v => qp.timeLimitMin = v, 'Global time limit in minutes (0 = off)')),
-      el('span',{style:'display:flex;align-items:center;gap:6px',title:'Caps how many answers multi-answer cards require this session (0 = each card\u2019s own)'},
-        el('label',{style:'font-size:12px;font-weight:700;color:var(--muted)'},'Multi needs:'),
-        qpNum(qp.multiRequired, 20, v => qp.multiRequired = v, 'Multi-answer required-count override (0 = card\u2019s own)')),
-      qpChk(qp.shuffle !== false, 'Shuffle', 'Random queue order (off = deck order)', v => qp.shuffle = v, 'qp-shuffle'),
-      qpChk(!!qp.exam, 'Exam mode', 'Move freely between questions and see every answer only at the end (Written Quiz & Fill in the Gaps)', v => qp.exam = v, 'qp-exam'))
-  );
-  qpRefresh();
+  // ── Session options live in a slide-over drawer (⚙) — the old stack of
+  // full-width rows (images / per-card timer / reverse / quiz parameters)
+  // had grown into four inconsistent strips; the drawer groups them into
+  // Display / Time limits / Queue / Exam sections. See openStudyOptionsDrawer().
+  const optionsBar = el('div',{style:'display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:10px'});
+  const optsBtn = btn('⚙ Session options','ghost',{small:true,onclick:()=>openStudyOptionsDrawer()});
+  optsBtn.id = 'study-opts-btn';
+  const optsSummary = el('span',{class:'u-muted-11',style:'margin-left:auto',id:'study-opts-summary'});
+  optionsBar.append(optsBtn, optsSummary);
+  optsSummary.textContent = studyOptionsSummary();   // span isn't in the DOM yet
 
 
 // "How it works" copy for the six study modes — opened from the ⓘ button in
@@ -648,10 +716,7 @@ function openModeHelp(id) {
     scopeSummaryBar,
     refineRow,
     el('div',{class:'u-section-label'},'Options'),
-    imgToggleRow,
-    timerRow,
-    revRow,
-    qpRow,
+    optionsBar,
     el('div',{style:'font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px'},'Mode'),
     modeGrid
   );
@@ -862,17 +927,21 @@ function renderStudySession(c) {
     };
     refreshNav();
     sess._examNavRefresh = refreshNav;
-    const go = d => {
-      cacheExamAnswer();          // keep this card's typing before leaving it
-      sess.idx = Math.max(0, Math.min(sess.queue.length - 1, sess.idx + d));
-      clearQuizTimer(); clearNextTimer();
-      renderStudySession(document.getElementById('view-study'));
+    const bigBtn = (label, variant, opts) => {
+      const b = btn(label, variant, opts);
+      b.style.cssText += 'flex:1;padding:14px 12px;font-size:14px;font-weight:800;';
+      return b;
     };
-    stickyFooter.appendChild(el('div', { style: 'display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap' },
-      btn('← Prev', 'ghost', { small: true, ...(sess.idx === 0 ? { disabled: '' } : {}), onclick: () => go(-1) }),
-      navLabel,
-      btn('Next →', 'ghost', { small: true, ...(sess.idx + 1 >= sess.queue.length ? { disabled: '' } : {}), onclick: () => go(1) }),
-      btn('🏁 Finish & reveal', 'primary', { small: true, title: 'Grade every saved answer and reveal the results', onclick: () => examFinish() })));
+    const prevB = bigBtn('← Prev', 'ghost', { onclick: () => examNav(-1) });
+    if (sess.idx === 0) prevB.disabled = true;
+    const nextB = bigBtn('Next →', 'ghost', { onclick: () => examNav(1) });
+    if (sess.idx + 1 >= sess.queue.length) nextB.disabled = true;
+    const finishB = btn('🏁 Finish & reveal', 'primary', { full: true,
+      title: 'Grade every cached answer and reveal the results', onclick: () => examFinish() });
+    finishB.style.cssText += 'padding:13px 12px;font-size:13px;font-weight:800;';
+    stickyFooter.appendChild(el('div', { style: 'display:flex;gap:10px;align-items:center' },
+      prevB, navLabel, nextB));
+    stickyFooter.appendChild(finishB);
   }
   scrollArea.appendChild(scrollContent);
   c.append(scrollArea,stickyFooter);
@@ -1207,19 +1276,17 @@ function renderGapCard(card, citBadge) {
     inp.addEventListener('keydown',e=>{
       sess._keystrokes++;
       if(e.key==='Backspace'||e.key==='Delete') sess._backspaces++;
-      if(e.key==='Enter') (sess.exam ? saveGap : checkGapAnswer)();
+      if(e.key==='Enter') (sess.exam ? examSubmit : checkGapAnswer)();
     });
     inputAreas.push(inp);
   }
 
   const compareEl=el('div',{style:'display:none'});
   let checked=false;
-  function saveGap(){ saveExamAnswer(card, inputAreas.map(inp=>inp.value)); }
-  const checkBtn = sess.exam
-    ? btn('💾 Save answer','primary',{full:true,onclick:saveGap})
-    : btn('Check Answer (↵)','primary',{full:true,onclick:checkGapAnswer});
+  function examSubmit(){ cacheExamAnswer(); examNav(1); }   // Enter = cache + next
+  const checkBtn=btn('Check Answer (↵)','primary',{full:true,onclick:checkGapAnswer});
   const stickyFooter=el('div',{class:'quiz-sticky-footer'});
-  stickyFooter.append(...inputAreas,checkBtn);
+  stickyFooter.append(...inputAreas, ...(sess.exam ? [] : [checkBtn]));
 
   function checkGapAnswer(){
     if(checked)return; checked=true;
@@ -1513,7 +1580,7 @@ function renderCalcQuizCard(card, citBadge) {
   const scrollContent=el('div',{style:'padding-bottom:8px'});
   scrollContent.append(questionCard,compareEl);
   const stickyFooter=el('div',{class:'quiz-sticky-footer'});
-  stickyFooter.append(inputWrap,checkBtn);
+  stickyFooter.append(inputWrap, ...(sess.exam ? [] : [checkBtn]));
   setTimeout(()=>answerInput.focus(),50);
   return {scrollContent,stickyFooter};
 }
@@ -1747,11 +1814,9 @@ function renderQuizCard(card, citBadge, scrollArea) {
 
   const compareEl=el('div',{style:'display:none'});
   let checked=false;
-  function saveQuiz(){ saveExamAnswer(card, inputAreas.map(b=>b.value)); }
-  const submitFn = sess.exam ? saveQuiz : checkQuizAnswer;
-  const checkBtn = sess.exam
-    ? btn('💾 Save answer','primary',{full:true,onclick:submitFn})
-    : btn('Check Answer (Ctrl+↵)','primary',{full:true,onclick:submitFn});
+  function examSubmit(){ cacheExamAnswer(); examNav(1); }   // Enter = cache + next
+  const submitFn = sess.exam ? examSubmit : checkQuizAnswer;
+  const checkBtn = btn('Check Answer (Ctrl+↵)','primary',{full:true,onclick:submitFn});
 
   function checkQuizAnswer(){
     if(checked)return; checked=true;

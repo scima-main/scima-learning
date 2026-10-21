@@ -1,4 +1,9 @@
-# CHANGELOG (last updated 20th October 2026, UTC)
+# CHANGELOG (last updated 21th October 2026, UTC)
+
+#### VERSION 2026.10.22-ALPHA
+
+- IA improvements
+- bug fixes
 
 #### VERSION 2026.10.21-ALPHA
 
