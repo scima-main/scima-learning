@@ -251,8 +251,11 @@ button; and bootstrap's init() resolves the hash's FIRST path
   card on every move (Enter caches and advances; no Save button needed),
   nothing is graded or revealed until “🏁 Finish & reveal” grades every
   recorded answer through the same matchers the live Check buttons use
-  (`examGradeAll`), applies ratings via `applyRating()` and lists
-  your-answer-vs-expected on the summary screen.
+  (`examGradeAll` — single, multi, mark-scheme, process and calculation
+  branches; table cards skip exam queues), applies ratings via
+  `applyRating()` and lists your-answer-vs-expected on the summary screen.
+  Exam renders no Check/Skip buttons at all, and the per-card countdown
+  controls grey out in the options drawer while exam is on.
 - **Session history**: `state.sessionLog` records every session —
   completed ones via `finishSession()`, abandoned ones (← Exit, tab closed,
   reload) as `status:'aborted'` with a `queueIds` snapshot — surfaced in the

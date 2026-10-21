@@ -425,3 +425,102 @@ def test_recents_never_duplicate_the_all_decks_pill(page, site_base, seeded):
     pills = page.evaluate("""() => [...document.querySelectorAll('#view-study button')]
         .map(b => b.textContent.trim()).filter(t => t === '🌍 All Decks').length""")
     assert pills == 1, pills
+
+
+def _mixed_state():
+    cards = [seedlib.make_card("single q", "single answer", card_id="c_single")]
+    c = seedlib.make_card("multi q", "x", card_id="c_multi")
+    c.update(answerCount=3, requiredAnswers=3, back="m1\nm2\nm3")
+    cards.append(c)
+    c = seedlib.make_card("marks q", "x", card_id="c_mark")
+    c.update(type="markscheme", answerCount=2, requiredAnswers=2,
+             back="keyword1\nkeyword2")
+    cards.append(c)
+    c = seedlib.make_card("process q", "x", card_id="c_proc")
+    c.update(type="process", answerCount=2, requiredAnswers=2,
+             back="rain falls\nrivers carry it")
+    cards.append(c)
+    c = seedlib.make_card("calc q", "x", card_id="c_calc")
+    c.update(type="calculation", back="42")
+    cards.append(c)
+    c = seedlib.make_card("table q", "x", card_id="c_tab")
+    c.update(type="table",
+             tableData={"columns": [{"key": "a", "label": "A", "group": None}],
+                        "rows": [{"a": "1"}],
+                        "combinations": [{"name": "c1", "cells": [["a"]]}]})
+    cards.append(c)
+    return seedlib.make_mf_state(
+        decks=[seedlib.make_deck("Mix", cards, deck_id="d_mix")])
+
+
+def _start_exam(page, qp):
+    page.evaluate("(v) => { state.settings.quizParams = Object.assign("
+                  "{types:[],limit:0,timeLimitMin:0,exam:true,multiRequired:0,"
+                  "shuffle:true}, v); renderView('study'); }", qp)
+    page.locator("#view-study .card", has_text="Written Quiz") \
+        .get_by_role("button", name="Start").click()
+    page.wait_for_selector(".quiz-sticky-footer", timeout=8000)
+
+
+def test_exam_has_no_check_buttons_and_skips_table_cards(page, site_base,
+                                                         seeded):
+    seeded(mf_state=_mixed_state())
+    pages.goto_app(page, site_base, "/study/")
+    _start_exam(page, {})
+    types = page.evaluate("() => studySession.queue.map(c => c.type || 'basic')")
+    assert "table" not in types and len(types) == 5, types
+    for i in range(5):
+        for name in ("Check Answer (Ctrl+↵)", "Check Answer (↵)", "Skip →"):
+            assert page.get_by_role("button", name=name).count() == 0, (i, name)
+        expect(page.get_by_role("button", name="Next →")).to_be_visible() \
+            if i < 4 else None
+        if i < 4:
+            page.get_by_role("button", name="Next →").click()
+            page.wait_for_timeout(150)
+
+
+def test_exam_grades_process_calc_markscheme_at_reveal(page, site_base, seeded):
+    seeded(mf_state=_mixed_state())
+    pages.goto_app(page, site_base, "/study/")
+    _start_exam(page, {"shuffle": False})
+    answers = {"c_calc": ["42"],
+               "c_proc": ["rain falls", "rivers carry it"],
+               "c_mark": ["keyword1 and keyword2 both here"],
+               "c_single": ["single answer"],
+               "c_multi": ["m1", "m2", "m3"]}
+    for i in range(5):
+        cid = page.evaluate("() => studySession.queue[studySession.idx].id")
+        vals = answers[cid]
+        for k in range(page.locator(".quiz-input-area").count()):
+            page.locator(".quiz-input-area").nth(k).fill(
+                vals[k] if k < len(vals) else "")
+        if i < 4:
+            page.get_by_role("button", name="Next →").click()
+            page.wait_for_timeout(150)
+    page.get_by_role("button", name="🏁 Finish & reveal").click()
+    page.wait_for_selector("text=Answers revealed", timeout=8000)
+    graded = page.evaluate(
+        "() => Object.fromEntries(state.sessionLog[0].answers"
+        ".map(a => [a.id, a.ok]))")
+    assert graded == {"c_calc": True, "c_proc": True, "c_mark": True,
+                      "c_single": True, "c_multi": True}, graded
+
+
+def test_drawer_greys_per_card_timer_in_exam(page, site_base, seeded):
+    seeded("preset:demo")
+    pages.goto_app(page, site_base, "/study/")
+    page.click("#study-opts-btn")
+    page.wait_for_selector("#study-opts-panel.open")
+    assert page.evaluate("() => document.getElementById('quiz-timed').disabled") \
+        is False
+    page.locator("#qp-exam").click()          # exam on → per-card timer greyed
+    assert page.evaluate("() => document.getElementById('quiz-timed').disabled") \
+        is True
+    assert page.evaluate(
+        "() => getComputedStyle(document.getElementById('quiz-timed'))"
+        ".opacity") == "0.4"
+    assert page.evaluate(
+        "() => document.getElementById('timed-quiz-seconds').disabled") is True
+    page.locator("#qp-exam").click()          # …and back
+    assert page.evaluate("() => document.getElementById('quiz-timed').disabled") \
+        is False

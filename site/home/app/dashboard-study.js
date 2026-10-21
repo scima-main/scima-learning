@@ -101,7 +101,9 @@ function cacheExamAnswer() {
   if (!sess || !sess.exam || !sess.active) return;
   const card = sess.queue[sess.idx];
   if (!card) return;
-  const vals = sess._examIsMulti ? (sess.quizAnswers || []) : [(sess.quizAnswer || '')];
+  const vals = sess._examIsMulti ? (sess.quizAnswers || [])
+    : sess._examKind === 'calc' ? [(sess.quizAnswer || ''), (sess.quizWorking || '')]
+    : [(sess.quizAnswer || '')];
   writeExamCache(card, vals);
 }
 /** Grades every recorded answer at reveal time, reusing the same matchers
@@ -119,6 +121,40 @@ function examGradeAll(sess) {
       const nc = hits.filter(h => h === 'correct').length;
       result = nc === hits.length ? 'correct' : nc > 0 ? 'close' : 'wrong';
       userText = rec.answers.join(' / ');
+    } else if (meta.kind === 'markscheme') {
+      const exact = sess.matchMode === 'exact';
+      const userVal = (rec.answers[0] || '').trim();
+      const hits = userVal ? meta.expected.map(k => markschemeMatch(userVal, k, exact))
+                           : meta.expected.map(() => false);
+      const hitCount = hits.filter(Boolean).length;
+      const awarded = Math.min(hitCount, meta.required);
+      result = awarded === meta.required ? 'correct' : awarded > 0 ? 'close' : 'wrong';
+      userText = userVal;
+    } else if (meta.kind === 'process') {
+      const exact = sess.matchMode === 'exact';
+      const hits = meta.expected.map((exp, i) => (rec.answers[i] || '').trim()
+        ? processStepMatch(rec.answers[i].trim(), exp, (meta.syn || [])[i], exact) : false);
+      const hitCount = hits.filter(Boolean).length;
+      const awarded = Math.min(hitCount, meta.required);
+      result = awarded === meta.required ? 'correct' : awarded > 0 ? 'close' : 'wrong';
+      userText = rec.answers.join(' / ');
+    } else if (meta.kind === 'calc') {
+      const userVal = (rec.answers[0] || '').trim();
+      const finalResult = userVal ? calcMatch(userVal, card) : 'wrong';
+      const finalMark = finalResult === 'correct' ? 1 : 0;
+      const methodRequired = Math.min((card.methodPool || []).length, Math.max(0, card.methodRequired || 0));
+      const totalMarks = 1 + methodRequired;
+      let methodMark = 0;
+      if (methodRequired > 0) {
+        const workingText = (rec.answers[1] || '').trim();
+        if (finalResult === 'correct') methodMark = methodRequired;
+        else methodMark = workingText
+          ? Math.min(card.methodPool.filter(k => markschemeMatch(workingText, k, false)).length, methodRequired)
+          : 0;
+      }
+      const totalAwarded = finalMark + methodMark;
+      result = totalAwarded === totalMarks ? 'correct' : totalAwarded > 0 ? 'close' : 'wrong';
+      userText = userVal;
     } else if (meta.isMulti) {
       const remaining = [...meta.expected];
       let correctCount = 0;
@@ -403,6 +439,9 @@ function renderStudy(c) {
 }
 
 // ── Exam navigation (shared by the footer buttons and the Enter key) ───────
+/** Enter in exam mode: cache this card's inputs, then move on. There is no
+ *  Check/Save button in exam — nothing may be graded or revealed early. */
+function examSubmitAndNext() { cacheExamAnswer(); examNav(1); }
 function examNav(d) {
   const sess = studySession;
   if (!sess || !sess.exam) return;
@@ -495,7 +534,25 @@ function openStudyOptionsDrawer() {
   function afterChange() {
     state.settings.quizParams = qp;
     scheduleSave();
+    syncTimedGrey();
     preview.textContent = `→ ${qpQueueCountFor(refinedCardsPreview(), qp)} cards in queue · ${studyOptionsSummary()}`;
+  }
+  // Per-card countdowns never run in exam mode (the session clock and the
+  // free navigation own the pacing), so grey the pair out while exam is on.
+  function syncTimedGrey() {
+    const off = !!qp.exam;
+    const tsw = document.getElementById('quiz-timed');
+    const tin = document.getElementById('timed-quiz-seconds');
+    if (tsw) {
+      tsw.disabled = off;
+      tsw.style.opacity = off ? 0.4 : 1;
+      tsw.title = off ? 'Per-card countdowns are unused in exam mode'
+                      : 'Written Quiz auto-submits each card when its timer runs out';
+    }
+    if (tin) {
+      tin.disabled = off || !state.settings.quizTimed;
+      tin.style.opacity = tin.disabled ? 0.4 : 1;
+    }
   }
   // queue preview needs the picker's refined list — recompute independently
   function refinedCardsPreview() { return applyStudyRefine(getScopeSetCards(state.studyScope), state.studyRefine || { mode: 'all', cardIds: [], n: 20, easeDir: 'hardest' }); }
@@ -554,12 +611,15 @@ function openStudyOptionsDrawer() {
   const sExam = section('📝 Exam mode');
   row(sExam).appendChild(sw('Exam mode', 'Move freely between questions with ← / →; answers are cached per card and nothing is graded or revealed until 🏁 Finish & reveal (Written Quiz & Fill in the Gaps)',
     () => !!qp.exam, v => { qp.exam = v; }, 'qp-exam'));
+  sExam.appendChild(el('div', { class: 'u-muted-11', style: 'font-size:11px;line-height:1.5' },
+    'Exam grades written answers: single, multi-answer, mark-scheme, process and calculation cards. Table cards sit exam sessions out — their grid editor is a live-check surface.'));
 
   body.appendChild(preview);
   panel.append(head, body,
     el('div', { style: 'padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0' },
       btn('Done', 'primary', { full: true, onclick: () => closeStudyOptions() })));
   document.body.append(backdrop, panel);
+  syncTimedGrey();
   const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); closeStudyOptions(); } };
   document.addEventListener('keydown', onKey, true);
   backdrop.addEventListener('click', () => closeStudyOptions());
@@ -837,6 +897,9 @@ function startStudySession(scopes, mode) {
   pushRecentScope(scopes);
   const timePerCard=state.settings.timedQuizSeconds||30;
   const exam = !!qp.exam && (mode==='quiz' || mode==='gaps');
+  // Exam grades written answers only: the table editor's grid UI is a
+  // live-check surface, so table cards sit exam sessions out.
+  if (exam) cards = cards.filter(c => (c.type || 'basic') !== 'table');
   studySession={active:true,scope:scopes,mode,queue:qp.shuffle===false?[...cards]:shuffleArr(cards),idx:0,flipped:false,showHint:false,showImages:state.settings.showStudyImages!==false,quizAnswer:'',quizAnswers:[],gapChoice:null,stats:{correct:0,incorrect:0,skipped:0},answers:[],combo:0,maxCombo:0,startTime:Date.now(),matchMode:state.settings.quizMatchMode||'fuzzy',timePerCard,timeLeft:timePerCard,timedOut:false,timed:mode==='quiz'&&!!state.settings.quizTimed&&!exam,reverse:!!state.settings.studyReverse,exam,timeLimitSec:(qp.timeLimitMin|0)*60,multiRequired:qp.multiRequired|0,recorded:{},_examMeta:{},examResults:null,
     // ── per-session stat accumulators (prefixed _ to distinguish from display fields) ──
     _cardStart: Date.now(),   // timestamp when current card was shown
@@ -1276,14 +1339,13 @@ function renderGapCard(card, citBadge) {
     inp.addEventListener('keydown',e=>{
       sess._keystrokes++;
       if(e.key==='Backspace'||e.key==='Delete') sess._backspaces++;
-      if(e.key==='Enter') (sess.exam ? examSubmit : checkGapAnswer)();
+      if(e.key==='Enter') (sess.exam ? examSubmitAndNext : checkGapAnswer)();
     });
     inputAreas.push(inp);
   }
 
   const compareEl=el('div',{style:'display:none'});
   let checked=false;
-  function examSubmit(){ cacheExamAnswer(); examNav(1); }   // Enter = cache + next
   const checkBtn=btn('Check Answer (↵)','primary',{full:true,onclick:checkGapAnswer});
   const stickyFooter=el('div',{class:'quiz-sticky-footer'});
   stickyFooter.append(...inputAreas, ...(sess.exam ? [] : [checkBtn]));
@@ -1423,6 +1485,12 @@ function renderProcessQuizCard(card, citBadge) {
   qChildren.push(el('div',{style:'font-size:12px;color:var(--muted);margin-top:8px'},`Fill in the ${steps.length}-step process, in order.`));
   const questionCard=el('div',{class:'flashcard front',style:'cursor:default;min-height:160px'},...qChildren);
 
+  if (sess.exam) { sess._examMeta = sess._examMeta || {};
+    sess._examMeta[card.id] = { kind: 'process', expected: steps, syn: synonymsList, required: requiredAnswers };
+    sess._examIsMulti = true; sess._examKind = 'process';
+    const rec = (sess.recorded || {})[card.id];
+    sess.quizAnswers = rec ? [...rec.answers] : [];
+  }
   const inputWrap=el('div',{});
   const boxes=[];
   const onKeystroke=e=>{ sess._keystrokes++; if(e.key==='Backspace'||e.key==='Delete') sess._backspaces++; };
@@ -1437,8 +1505,8 @@ function renderProcessQuizCard(card, citBadge) {
 
   const compareEl=el('div',{style:'display:none'});
   let checked=false;
-  const checkBtn=btn('Check Answer (Ctrl+↵)','primary',{full:true,onclick:()=>finish(false)});
-  const skipBtn=btn('Skip →','ghost',{onclick:()=>finish(true)});
+  const checkBtn = sess.exam ? null : btn('Check Answer (Ctrl+↵)','primary',{full:true,onclick:()=>finish(false)});
+  const skipBtn  = sess.exam ? null : btn('Skip →','ghost',{onclick:()=>finish(true)});
 
   function finish(skipped){
     if(checked)return; checked=true;
@@ -1474,12 +1542,12 @@ function renderProcessQuizCard(card, citBadge) {
     stickyFooter.appendChild(rateRow);
     boxes.forEach(b=>b.disabled=true); checkBtn.style.display='none'; skipBtn.style.display='none';
   }
-  boxes.forEach(box=>box.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)) finish(false); }));
+  boxes.forEach(box=>box.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(sess.exam||e.ctrlKey||e.metaKey)) (sess.exam ? examSubmitAndNext() : finish(false)); }));
 
   const scrollContent=el('div',{style:'padding-bottom:8px'});
   scrollContent.append(questionCard,compareEl);
   const stickyFooter=el('div',{class:'quiz-sticky-footer'});
-  stickyFooter.append(inputWrap,el('div',{style:'display:flex;gap:8px'},checkBtn,skipBtn));
+  stickyFooter.append(inputWrap, ...(sess.exam ? [] : [el('div',{style:'display:flex;gap:8px'},checkBtn,skipBtn)]));
   setTimeout(()=>boxes[0]?.focus(),50);
   return {scrollContent,stickyFooter};
 }
@@ -1500,6 +1568,13 @@ function renderCalcQuizCard(card, citBadge) {
   qChildren.push(setRichText(el('div',{class:'flashcard-front-text',style:'font-size:18px'}),formatCardFront(card)));
   const questionCard=el('div',{class:'flashcard front',style:'cursor:default;min-height:160px'},...qChildren);
 
+  if (sess.exam) { sess._examMeta = sess._examMeta || {};
+    sess._examMeta[card.id] = { kind: 'calc', expected: [card.back], required: 1 };
+    sess._examIsMulti = false; sess._examKind = 'calc';
+    const rec = (sess.recorded || {})[card.id];
+    sess.quizAnswer = rec ? (rec.answers[0] || '') : '';
+    sess.quizWorking = rec ? (rec.answers[1] || '') : '';
+  }
   const answerInput=el('input',{type:'text',class:'quiz-input-area',style:'min-height:unset',placeholder:card.calcUnit?`Your answer… (e.g. 12.5 ${card.calcUnit})`:'Your answer… (e.g. 12.5, 1/2, 50%)'});
   answerInput.value=sess.quizAnswer||'';
   const onKeystroke=e=>{ sess._keystrokes++; if(e.key==='Backspace'||e.key==='Delete') sess._backspaces++; };
@@ -1511,13 +1586,15 @@ function renderCalcQuizCard(card, citBadge) {
   if((card.methodPool||[]).length){
     inputWrap.appendChild(el('div',{style:'font-size:11px;color:var(--muted);margin:8px 0 4px'},`Show your working (optional — ${methodRequired} method mark${methodRequired===1?'':'s'} available):`));
     workingInput=el('textarea',{class:'quiz-input-area',style:'min-height:70px',placeholder:'Your working…'});
+    workingInput.value=sess.quizWorking||'';
+    workingInput.addEventListener('input',e=>{ sess.quizWorking=e.target.value; });
     workingInput.addEventListener('keydown',onKeystroke);
     inputWrap.appendChild(workingInput);
   }
 
   const compareEl=el('div',{style:'display:none'});
   let checked=false;
-  const checkBtn=btn('Check Answer (Ctrl+↵)','primary',{full:true,onclick:checkCalcAnswer});
+  const checkBtn = sess.exam ? null : btn('Check Answer (Ctrl+↵)','primary',{full:true,onclick:checkCalcAnswer});
 
   function checkCalcAnswer(){
     if(checked)return; checked=true;
@@ -1575,7 +1652,7 @@ function renderCalcQuizCard(card, citBadge) {
     if(result==='correct') attachNextControls(compareEl, 4);
     answerInput.disabled=true; if(workingInput) workingInput.disabled=true; checkBtn.style.display='none';
   }
-  answerInput.addEventListener('keydown',e=>{ if(e.key==='Enter') checkCalcAnswer(); });
+  answerInput.addEventListener('keydown',e=>{ if(e.key==='Enter') (sess.exam ? examSubmitAndNext() : checkCalcAnswer()); });
 
   const scrollContent=el('div',{style:'padding-bottom:8px'});
   scrollContent.append(questionCard,compareEl);
@@ -1780,8 +1857,10 @@ function renderQuizCard(card, citBadge, scrollArea) {
   const requiredAnswers = (isMulti || isMarkscheme) ? (isMulti ? sessRequired(card) : Math.min(answerCount, Math.max(1, card.requiredAnswers || answerCount))) : 1;
 
   if (sess.exam) { sess._examMeta = sess._examMeta || {};
-    sess._examMeta[card.id] = { expected: expectedAnswers, isMulti, required: requiredAnswers };
+    sess._examMeta[card.id] = { expected: expectedAnswers, isMulti, required: requiredAnswers,
+      kind: isMulti ? 'multi' : isMarkscheme ? 'markscheme' : 'single' };
     sess._examIsMulti = isMulti;
+    sess._examKind = isMarkscheme ? 'markscheme' : isMulti ? 'multi' : 'single';
     // Per-card input state: restore this card's cached answers, or CLEAR the
     // session-level fields so the previous question's typing never bleeds
     // into this one's boxes.
@@ -1914,7 +1993,7 @@ function renderQuizCard(card, citBadge, scrollArea) {
   scrollContent.append(questionCard,compareEl);
   // stickyFooter: input + check, swaps to rate buttons after check
   const stickyFooter=el('div',{class:'quiz-sticky-footer'});
-  stickyFooter.append(modeToggleRow,inputWrap,checkBtn);
+  stickyFooter.append(modeToggleRow,inputWrap,...(sess.exam ? [] : [checkBtn]));
   // Patch rateRow injection: after checkQuizAnswer appends rateRow to compareEl,
   // move it into stickyFooter so it stays visible
   const _origAppendChild=compareEl.appendChild.bind(compareEl);
