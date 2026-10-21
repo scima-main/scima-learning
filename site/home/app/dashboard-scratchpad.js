@@ -481,28 +481,16 @@ function spBuildPanel() {
     _sp.dockBtns.push(b);
     dockGroup.appendChild(b);
   }
-  // ⚙ — "change my defaults" cross-link: opens the Settings page's
-  // Scratchpad panel in a NEW TAB, deep-linked and highlighted
-  // (#settings/scratch — see dashboard-settings.js's scSettingsApplyHash).
-  // Single-document builds (extension) jump in-page instead of spawning a
-  // tab that would just host the same document.
-  const settingsBtn = el('button', {
-    type: 'button', class: 'sp-icon-btn',
-    title: 'Scratchpad defaults — open Settings in a new tab',
-    'aria-label': 'Open the scratchpad defaults section of Settings in a new tab',
-    onclick: () => {
-      if (typeof isExtension !== 'undefined' && isExtension) {
-        if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('scratch');
-        return;
-      }
-      window.open(`${ROOT_REL}settings/#settings/scratch`, '_blank');
-    },
-  }, '⚙');
+  // The "change my defaults" cross-link that used to sit here as a ⚙ now
+  // lives at the bottom of the ⋯ popover — its "⚙ Edit Defaults" footer
+  // button (spShowMorePopover) opens the Settings page's Scratchpad panel in
+  // a new tab, so the session never navigates away. The header keeps only
+  // the pad's own window controls.
   const head = el('div', { class: 'sp-head' },
     el('div', { class: 'sp-title' }, '✍️ Scratchpad'),
     dockGroup,
     el('div', { class: 'sp-head-spacer' }),
-    settingsBtn, _sp.fullBtn, closeBtn);
+    _sp.fullBtn, closeBtn);
 
   // Toolbar ────────────────────────────────────────────────────────────────
   const toolbar = el('div', { class: 'sp-toolbar', role: 'toolbar', 'aria-label': 'Scratchpad tools', 'aria-orientation': 'vertical' });
@@ -2535,6 +2523,26 @@ function spShowMorePopover(anchor) {
       help.appendChild(el('div', { class: 'sp-help-row' }, el('kbd', {}, k), el('span', {}, d)));
     }
     pop.appendChild(help);
+
+    // ── Footer: Edit Defaults ──
+    // Everything above tweaks THIS pad only; the persistent defaults (pen
+    // colour, stroke width, paper, grid, autosave…) live in the Settings
+    // page's ✍️ Scratchpad panel. Following the app-wide settings
+    // cross-link pattern, the jump sits as a button at the very bottom of
+    // this popover and opens the full defaults in a NEW TAB — deep-linked
+    // and highlighted (#settings/scratch) — so the study session stays
+    // exactly as it is. Single-document builds (extension) close the
+    // popover and jump in-page instead of spawning a same-document tab.
+    pop.appendChild(el('div', { class: 'sp-pop-foot' },
+      el('button', {
+        type: 'button', class: 'sp-edit-defaults',
+        'aria-label': 'Edit scratchpad defaults — open Settings in a new tab',
+        title: 'Open the full Scratchpad defaults panel in Settings (new tab)',
+        onclick: () => {
+          if (typeof isExtension !== 'undefined' && isExtension) spClosePopovers();
+          openSettingsInNewTab('scratch');
+        },
+      }, '⚙ Edit Defaults')));
   });
 }
 function spSetGridAngle(a) {

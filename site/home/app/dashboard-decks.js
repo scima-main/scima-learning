@@ -304,7 +304,7 @@ function renderDecksHome(c) {
     el('div',{class:'section-title'},'Decks'),
     el('div',{class:'section-sub',style:'margin-bottom:10px'},`${state.decks.length} deck${state.decks.length!==1?'s':''} · ${state.folders.length} folder${state.folders.length!==1?'s':''}`),
     el('div',{class:'tab-bar container-actions'},
-      actionTab('📚 Manage Subjects',{title:'Add, rename or delete subjects in Settings',onclick:()=>{ if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('subjects'); else navigate('settings'); }}),
+      actionTab('📚 Manage Subjects',{title:'Add, rename or delete subjects — no page jump',onclick:()=>{ if (typeof openSettingsPanelModal === 'function') openSettingsPanelModal('subjects'); else openSettingsInNewTab('subjects'); }}),
       actionTab('+ New Folder',{title:'Create a folder — pick its subject',onclick:()=>openCreateFolderModal(null,null)}),
       (()=>{ const b=actionTab('+ New Deck',{variant:'primary',onclick:()=>openCreateDeckModal()}); b.id='tutorial-target-new-deck'; return b; })())
   );
@@ -344,7 +344,7 @@ function renderDecksHome(c) {
       el('div',{class:'folder-actions'},
         btn('▶','ghost',{small:true,title:'Study this subject now','aria-label':`Study subject ${s.name} now`,onclick:e=>{e.stopPropagation();state.studyScope=[{type:'subject',id:sk}];navigate('study');}}),
         btn('⬇','ghost',{small:true,title:'Export subject as JSON','aria-label':`Export subject ${s.name} as JSON`,onclick:e=>{e.stopPropagation();exportSubject(sk);}}),
-        btn('✏️','ghost',{small:true,title:'Edit subject (Settings)','aria-label':`Edit subject ${s.name}`,onclick:e=>{e.stopPropagation(); if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('subjects'); else navigate('settings');}})
+        btn('✏️','ghost',{small:true,title:'Edit subject','aria-label':`Edit subject ${s.name}`,onclick:e=>{e.stopPropagation(); if (typeof openSettingsPanelModal === 'function') openSettingsPanelModal('subjects'); else openSettingsInNewTab('subjects');}})
       ),
       el('span',{style:'color:var(--muted);font-size:16px;margin-left:4px'},'›')
     );
@@ -408,7 +408,7 @@ function renderContainerView(c, subjectKey, folderId) {
       folder ? actionTab('📂 Move to Folder…',{onclick:()=>openMoveFolderModal(folderId)}) : null,
       folder ? actionTab('📚 Move to Subject…',{onclick:()=>openMoveFolderSubjectModal(folderId)}) : null,
       folder ? actionTab('✏ Rename',{title:`Rename folder ${folder.name}`,onclick:()=>openRenameFolderModal(folderId)})
-             : actionTab('✏️ Edit Subject',{title:'Edit this subject in Settings',onclick:()=>{ if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('subjects'); else navigate('settings'); }}),
+             : actionTab('✏️ Edit Subject',{title:'Edit this subject',onclick:()=>{ if (typeof openSettingsPanelModal === 'function') openSettingsPanelModal('subjects'); else openSettingsInNewTab('subjects'); }}),
       folder ? actionTab('× Delete',{variant:'danger',title:`Delete folder ${folder.name}`,aria:`Delete folder ${folder.name}`,onclick:()=>deleteFolder(folderId)}) : null,
       actionTab('+ New Folder',{title:folder?'Create a subfolder here':'Create a folder in this subject',
         onclick:()=>openCreateFolderModal(subjectKey, folderId||null)}),
@@ -1725,7 +1725,7 @@ function renderAICapture(wrap) {
       el('div', { class: 'empty-icon' }, '🔌'),
       el('div', { class: 'empty-title' }, 'No AI server configured'),
       el('div', { class: 'empty-sub' }, 'Add a local server address (e.g. LM Studio’s http://127.0.0.1:1234) in Settings, or switch to 📋 Copy / Paste above to use any chat AI instead.'),
-      btn('Go to Settings', 'primary', { onclick: () => { closeModal(); navigate('settings'); } })
+      btn('Go to Settings', 'primary', { title: 'Open AI settings in a new tab — this dialog stays put', onclick: () => openSettingsInNewTab('ai') })
     ));
     return;
   }
@@ -4457,12 +4457,12 @@ function openCitationPicker(onSelect) {
     if(!state.sources.length){
       body.appendChild(el('div',{style:'text-align:center;padding:24px;display:flex;flex-direction:column;align-items:center;gap:10px'},
         el('div',{style:'font-size:13px;color:var(--muted)'},'No sources yet.'),
-        btn('Go to Library','primary',{onclick:()=>{ closeModal(); navigate('library'); }})
+        btn('Go to Library','primary',{onclick:()=>{ closeModal(true); navigate('library'); }})
       ));
       return;
     }
     state.sources.forEach(src => {
-      body.appendChild(el('div',{class:'source-item card',style:'margin-bottom:8px;cursor:pointer',onclick:()=>openCitationRangeModal(src,onSelect)},
+      body.appendChild(el('div',{class:'source-item card',style:'margin-bottom:8px;cursor:pointer',onclick:()=>{ closeModal(); openCitationRangeModal(src,onSelect); }},
         el('div',{class:'source-icon'},sourceTypeIcon(src)),
         el('div',{},el('div',{class:'source-name'},src.name),el('div',{class:'source-meta'},`${nOf(src.content.length,'char')} · ${nOf(src.chapters?.length||0,'chapter')}`))
       ));

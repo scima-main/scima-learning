@@ -236,19 +236,33 @@ def test_settings_panel_copy_link_button(page, site_base, seeded, context):
     assert clip.endswith("/settings/#settings/study"), clip
 
 
-def test_scratchpad_gear_opens_settings_deeplink_in_new_tab(page, site_base,
-                                                            seeded, context):
-    """The scratchpad's ⚙ is the "change my defaults" cross-link: new tab,
-    deep-linked, highlighted."""
+def test_scratchpad_edit_defaults_opens_settings_in_new_tab(page, site_base,
+                                                             seeded, context):
+    """The scratchpad→Settings cross-link is the "⚙ Edit Defaults" button at
+    the BOTTOM of the ⋯ preferences popover: the full defaults panel opens in
+    a new tab, deep-linked and highlighted, while the session's own tab never
+    navigates. (The old header ⚙ is gone — the popover footer is the entry.)"""
     seeded("preset:demo")
     pages.goto_app(page, site_base, "/study/")
     page.click("#tutorial-target-study-start")
     page.wait_for_selector(".scratch-open-btn", timeout=10000)
     page.click(".scratch-open-btn")
+    # the header gear no longer exists — window controls only up there
+    expect(page.locator(".sp-head button[title*='Scratchpad defaults']")).to_have_count(0)
+    # bottom bar ⋯ → preferences popover → footer button
+    page.click("button[aria-label='More scratchpad options']")
+    page.wait_for_selector(".sp-popover.sp-open", timeout=5000)
+    edit = page.locator(".sp-pop-foot .sp-edit-defaults")
+    expect(edit).to_be_visible()
+    expect(edit).to_contain_text("Edit Defaults")
+    url_before = page.url
     with context.expect_page() as new_page:
-        page.click(".sp-icon-btn[title*='Scratchpad defaults']")
+        edit.click()
     tab = new_page.value
     tab.wait_for_load_state("load")
     assert tab.url.endswith("/settings/#settings/scratch"), tab.url
     expect(tab.locator("[data-settings-panel='scratch']")).to_have_class(
         re.compile(r"settings-flash"), timeout=8000)
+    # the study session tab stayed exactly where it was
+    assert page.url == url_before
+    expect(page.locator("#scratch-panel")).to_be_visible()

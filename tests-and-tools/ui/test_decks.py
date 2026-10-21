@@ -407,7 +407,7 @@ def test_subject_rows_are_folder_rows_with_export(page, site_base, seeded):
     expect(row).to_have_class(re.compile(r"folder-item"))
     assert row.locator("button[title='Study this subject now']").count() == 1
     assert row.locator("button[title='Export subject as JSON']").count() == 1
-    assert row.locator("button[title='Edit subject (Settings)']").count() == 1
+    assert row.locator("button[title='Edit subject']").count() == 1
     assert row.get_attribute("data-drop-folder") is not None
     with page.expect_download(timeout=10000) as dl:
         row.locator("button[title='Export subject as JSON']").click()
@@ -451,3 +451,118 @@ def test_action_orders_primary_at_the_ends(page, site_base, seeded):
     assert labels2 == ["▶ Study Selected", "Aa Case…",
                        "Select All", "Clear", "Move to Deck…"], labels2
     assert "primary" in sel2.locator("button").nth(len(labels2) - 1).get_attribute("class")
+
+
+# ── Settings cross-links open panel modals, not redirects ────────────────────
+# (site/home until re-minified: the decks route only gained its
+# dashboard-settings.js script tag + the modal pattern in this change.)
+
+def test_manage_subjects_opens_modal_not_redirect(page, site_base, seeded,
+                                                  context):
+    """📚 Manage Subjects opens the Settings page's real subjects editor in a
+    modal IN PLACE — the decks page never redirects to /settings/ — and the
+    modal's footer button opens the full Settings page in a new tab,
+    deep-linked to the subjects panel and flashed."""
+    seeded("preset:demo")
+    pages.goto_app(page, site_base, "/decks/")
+    page.locator(".container-actions button",
+                 has_text="📚 Manage Subjects").click()
+    expect(page.locator("#modal-backdrop")).not_to_have_class(re.compile(r"hidden"))
+    expect(page.locator("#modal-title")).to_contain_text("Manage Subjects")
+    body = page.locator("#modal-body")
+    # the real Settings panel: subject rows, the add button, the footer CTA
+    expect(body.locator(".subject-edit-row").first).to_be_visible()
+    expect(body.locator("button", has_text="+ Add Subject")).to_have_count(1)
+    expect(body.locator("button", has_text="Open full Settings")).to_have_count(1)
+    assert "/settings/" not in page.url          # no redirect happened
+    with context.expect_page() as new_page:
+        body.locator("button", has_text="Open full Settings").click()
+    tab = new_page.value
+    tab.wait_for_load_state("load")
+    assert tab.url.endswith("/settings/#settings/subjects"), tab.url
+    expect(tab.locator("[data-settings-panel='subjects']")).to_have_class(
+        re.compile(r"settings-flash"), timeout=8000)
+    # the originating tab kept its modal and its page
+    expect(page.locator("#modal-backdrop")).not_to_have_class(re.compile(r"hidden"))
+    expect(page.locator("#modal-title")).to_contain_text("Manage Subjects")
+
+
+def test_subjects_modal_stacks_subdialogs_and_edits_in_place(page, site_base,
+                                                             seeded):
+    """Sub-dialogs (Add/Edit Subject) STACK on the subjects modal instead of
+    replacing it: Escape pops back, saving an edit refreshes the modal's
+    list in place and the decks browser behind it."""
+    seeded("preset:demo")
+    pages.goto_app(page, site_base, "/decks/")
+    page.locator(".container-actions button",
+                 has_text="📚 Manage Subjects").click()
+    body = page.locator("#modal-body")
+    # Add Subject stacks on top …
+    body.locator("button", has_text="+ Add Subject").click()
+    expect(page.locator("#modal-title")).to_contain_text("Add Subject")
+    # … and Escape pops back to the subjects modal (not out of everything)
+    page.keyboard.press("Escape")
+    expect(page.locator("#modal-title")).to_contain_text("Manage Subjects")
+    expect(page.locator("#modal-backdrop")).not_to_have_class(re.compile(r"hidden"))
+    # rename the catch-all through the stacked Edit dialog
+    row = body.locator(".subject-edit-row", has_text="Miscellaneous").first
+    row.locator("button[title='Edit subject']").click()
+    expect(page.locator("#modal-title")).to_contain_text("Edit Miscellaneous")
+    page.fill("#tutorial-target-subject-name-input", "Catch-All Renamed")
+    page.click("#tutorial-target-subject-submit")
+    # popped back to the subjects modal, list refreshed in place
+    expect(page.locator("#modal-title")).to_contain_text("Manage Subjects")
+    expect(body.locator(".subject-edit-row",
+                        has_text="Catch-All Renamed").first).to_be_visible()
+    # close everything — the decks browser behind shows the new name too
+    page.keyboard.press("Escape")
+    expect(page.locator("#modal-backdrop")).to_have_class(re.compile(r"hidden"))
+    expect(page.locator("#view-decks")).to_contain_text("Catch-All Renamed")
+
+
+def test_edit_subject_actions_open_the_same_modal(page, site_base, seeded):
+    """The subject container bar's ✏️ Edit Subject and the root subject-row
+    ✏️ both open the Manage Subjects modal — same pattern, no page jump."""
+    seeded("preset:demo")
+    pages.goto_app(page, site_base, "/decks/")
+    # subject row ✏️ (root browser)
+    row = page.locator(".subject-tile", has_text="Miscellaneous")
+    row.locator("button[title='Edit subject']").click()
+    expect(page.locator("#modal-title")).to_contain_text("Manage Subjects")
+    expect(page.locator("#modal-body .subject-edit-row").first).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(page.locator("#modal-backdrop")).to_have_class(re.compile(r"hidden"))
+    # container bar ✏️ Edit Subject (inside the subject)
+    row.click()
+    page.wait_for_selector(".container-actions", timeout=8000)
+    page.locator(".container-actions button", has_text="✏️ Edit Subject").click()
+    expect(page.locator("#modal-title")).to_contain_text("Manage Subjects")
+    expect(page.locator("#modal-body .subject-edit-row").first).to_be_visible()
+    assert "/settings/" not in page.url
+
+
+def test_ai_capture_go_to_settings_opens_new_tab_keeps_dialog(page, site_base,
+                                                              seeded, context):
+    """The AI Capture tab's 'Go to Settings' (no endpoint configured) opens
+    the AI panel in a new tab and KEEPS the Create New Deck dialog open —
+    the old behaviour closed the dialog and redirected the page."""
+    blob = seedlib.preset_demo()
+    blob["mf_state"].setdefault("settings", {})["aiEndpoint"] = ""
+    seeded(mf_state=blob["mf_state"], tracker=blob.get("SCIMATracker"))
+    pages.goto_app(page, site_base, "/decks/")
+    page.locator(".container-actions button", has_text="+ New Deck").click()
+    expect(page.locator("#modal-title")).to_contain_text("Create New Deck")
+    page.locator("#modal-body button", has_text="✨ AI Capture").click()
+    go = page.locator("#modal-body button", has_text="Go to Settings")
+    expect(go).to_be_visible()
+    with context.expect_page() as new_page:
+        go.click()
+    tab = new_page.value
+    tab.wait_for_load_state("load")
+    assert tab.url.endswith("/settings/#settings/ai"), tab.url
+    expect(tab.locator("[data-settings-panel='ai']")).to_have_class(
+        re.compile(r"settings-flash"), timeout=8000)
+    # the capture dialog is still right where it was
+    expect(page.locator("#modal-backdrop")).not_to_have_class(re.compile(r"hidden"))
+    expect(page.locator("#modal-title")).to_contain_text("Create New Deck")
+    assert "/settings/" not in page.url

@@ -1138,6 +1138,19 @@ input[type="number"]:focus { border-color: rgba(var(--blue-rgb),0.5); }
 .sp-help summary { cursor: pointer; font-size: 12px; font-weight: 800; color: var(--muted); padding: 4px 0; }
 .sp-help[open] summary { margin-bottom: 6px; }
 .sp-help-row { display: flex; gap: 8px; align-items: baseline; font-size: 11px; padding: 3px 0; color: var(--muted); }
+/* Settings cross-link footer of the ⋯ popover — "⚙ Edit Defaults" opens the
+   full Scratchpad defaults panel in a NEW TAB (in-page jump in the extension
+   build), so the study session behind the pad is never navigated away. The
+   help section above keeps its border-bottom and acts as the divider. */
+.sp-pop-foot { padding: 10px 0 2px; }
+.sp-edit-defaults {
+  width: 100%; padding: 8px 10px; cursor: pointer;
+  background: rgba(var(--blue-rgb), .1); border: 1px solid rgba(var(--blue-rgb), .45);
+  border-radius: 9px; color: var(--blue);
+  font-family: inherit; font-size: 12px; font-weight: 800;
+}
+.sp-edit-defaults:hover { background: rgba(var(--blue-rgb), .18); border-color: rgba(var(--blue-rgb), .65); }
+.sp-edit-defaults:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .sp-help-row kbd {
   background: var(--surface2); border: 1px solid var(--border); border-radius: 5px;
   padding: 1px 5px; font-size: 10px; font-weight: 800; color: var(--text);

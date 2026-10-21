@@ -138,10 +138,19 @@ document and none of the cross-page machinery below runs.
   by "← Back to decks". `#settings/<panel>` (alias-resolved
 panel key: study/scratch/appearance/subjects/accessibility/ai/library/
 navigation/data/help) scrolls that panel into view and pulses a highlight
-ring (`.settings-flash`) — the scratchpad's ⚙ head button opens
-`settings/#settings/scratch` in a NEW tab as the canonical feature→its-
-setting cross-link, and every panel header carries a 🔗 copy-its-link
-button; and bootstrap's init() resolves the hash's FIRST path
+ring (`.settings-flash`). Settings cross-links app-wide follow one
+pattern — surface the panel's real controls in place, and put a footer
+button that opens the full Settings page in a NEW tab (deep-linked to
+the panel) so the current page/session is never navigated away: the
+scratchpad's ⋯ popover ends in "⚙ Edit Defaults"
+(`settings/#settings/scratch`), the decks page's "📚 Manage Subjects" /
+"✏️ Edit Subject" actions open the actual subjects editor in a modal
+(`openSettingsPanelModal()` over `scBuildSubjectsCard()` — the decks
+route loads dashboard-settings.js for exactly this) whose footer offers
+"Open full Settings" (`settings/#settings/subjects`), and the AI
+Capture tab's "Go to Settings" opens `settings/#settings/ai` in a tab
+while its dialog stays put. Every panel header also carries a 🔗
+copy-its-link button; and bootstrap's init() resolves the hash's FIRST path
   segment into the view (`#community/x` boots the landing page into the
   Community view), so payloads survive a cold load.
 - **Page memory**: SPA-only state that must survive "leave and come back"
@@ -151,7 +160,12 @@ button; and bootstrap's init() resolves the hash's FIRST path
   flashcard queue.
 - Chrome: collapsible nav drawer (`#logo-icon` ↔ `#sidebar`, Esc/outside
   click close), command palette (Ctrl/Cmd+K — desktop pointers only, see
-  §3.7), modal host (`#modal-backdrop`), guided tour overlay
+  §3.7), modal host (`#modal-backdrop` — `openModal()` STACKS: a dialog
+  launched from inside a dialog pushes the current one down instead of
+  replacing it, `closeModal()` pops one level back, `closeModal(true)`
+  drains every level — use that before navigating so no stale parent
+  resurfaces over the new view; `opts.onClose` fires as its level closes),
+  guided tour overlay
   (`#tutorial-overlay`, sandboxed — §3.6).
 - Keyboard: Alt+Shift+1…9 jump to nav tabs; study/quiz hotkeys per mode.
 

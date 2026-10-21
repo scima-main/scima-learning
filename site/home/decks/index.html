@@ -28,6 +28,13 @@
     `dragData` binding the drag-and-drop reorganization shares with it;
     dashboard-library.js is NOT needed — sourceTypeIcon() lives in
     dashboard-core.js and the citation pickers/viewer in dashboard-decks.js.
+    dashboard-settings.js IS loaded (after onboarding, mirroring the
+    settings route): the "📚 Manage Subjects" / "✏️ Edit Subject" actions
+    open the Settings page's subjects editor in a modal instead of
+    redirecting — scBuildSubjectsCard()/openSettingsPanelModal() live there.
+    Its renderSettings() never runs on this page (no #view-settings
+    container), so the module only contributes those panel builders.
+
     fflate and the parser bundles stay out (no zip export or file import
     here); pdf.min.js is still lazy-loaded on demand via assetUrl().
   -->
@@ -111,6 +118,7 @@
   <script src="../app/dashboard-decks.js"></script>
   <script src="../app/dashboard-analytics.js"></script>
   <script src="../app/dashboard-onboarding.js"></script>
+  <script src="../app/dashboard-settings.js"></script>
   <script src="../app/dashboard-bootstrap.js"></script>
 </body>
 </html>

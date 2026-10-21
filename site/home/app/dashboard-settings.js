@@ -34,6 +34,295 @@
    feature) to be loaded before dashboard-core.js; see dashboard.html's
    script order. */
 
+// ── Settings deep links + reusable panels (module level) ────────────────────
+// These live OUTSIDE renderSettings on purpose: the site build splits views
+// across route pages, and the decks page now loads this module so its
+// "📚 Manage Subjects" / "✏️ Edit Subject" actions can open the subjects
+// editor in a modal (openSettingsPanelModal) instead of redirecting the whole
+// page to Settings. gotoSettingsPanel likewise must exist before any view
+// renders — other modules feature-detect it with typeof guards.
+
+const PANEL_ALIASES = {
+  study:'study', scheduling:'study', srs:'study',
+  scratch:'scratch', scratchpad:'scratch',
+  appearance:'appearance', themes:'appearance', theme:'appearance',
+  subjects:'subjects',
+  accessibility:'accessibility', a11y:'accessibility', notifications:'accessibility',
+  ai:'ai', integrations:'ai', llm:'ai',
+  library:'library', reading:'library',
+  navigation:'navigation', nav:'navigation',
+  data:'data', backup:'data',
+  help:'help',
+};
+
+/** Canonical panel key for a #settings/<key> payload (alias-resolved). */
+function scSettingsPanelKey(key) {
+  return PANEL_ALIASES[String(key == null ? '' : key).toLowerCase()] || key;
+}
+
+function panelHeader(label, key, color) {
+  return el('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px'},
+    el('div',{style:`font-weight:800;${color ? `color:${color};` : ''}`}, label),
+    el('button',{class:'btn btn-ghost btn-sm', title:'Copy link to this section',
+      'aria-label':`Copy a link that opens Settings at ${label}`,
+      style:'padding:3px 8px;font-size:11px;opacity:0.8',
+      onclick:async e=>{ e.stopPropagation();
+        const url = location.origin + location.pathname.replace(/index\.html$/, '') + '#settings/' + key;
+        const ok = (typeof copyTextToClipboard === 'function') && await copyTextToClipboard(url);
+        showToast(ok ? 'Section link copied ✓' : url, ok ? 2500 : 6000);
+      }},'🔗'));
+}
+
+/** Jump to one Settings panel. The Settings page and single-document builds
+ *  (extension) switch in-page — mirror the hash, navigate, and let
+ *  scSettingsApplyHash scroll + flash the panel. Any other route page in the
+ *  site build hands the deep-link URL to gotoViewPage so the jump lands on
+ *  settings/#settings/<panel> instead of the top of Settings. */
+function gotoSettingsPanel(key) {
+  const canon = scSettingsPanelKey(key);
+  if (typeof scReplaceHash === 'function') scReplaceHash('settings/' + canon);
+  window._scSettingsLastHash = null;          // this jump must flash
+  if (!isExtension && typeof PAGE_VIEWS !== 'undefined' && !PAGE_VIEWS.includes('settings')
+      && typeof gotoViewPage === 'function') {
+    gotoViewPage('settings', settingsPanelUrl(canon));
+    return;
+  }
+  if (typeof navigate === 'function') navigate('settings');
+  else renderView('settings');
+}
+
+/** The 📘 Subjects panel — extracted verbatim from renderSettings so it can
+ *  render in TWO places: the Settings view (default onChange = re-render
+ *  Settings + sidebar, exactly the old behaviour) and the decks page's
+ *  "Manage Subjects" modal (embedded:true — no panel header / tutorial ids;
+ *  caller passes an onChange that refreshes the card in place via
+ *  card._scRefresh and the view behind the modal). */
+function scBuildSubjectsCard(opts = {}) {
+  const embedded = !!opts.embedded;
+  const onChange = typeof opts.onChange === 'function' ? opts.onChange
+    : () => { renderView('settings'); renderSidebar(); };
+  // ── Subjects ──────────────────────────────────────────────────────────────
+  // Subjects group decks and folders. They used to be a fixed built-in list that
+  // only the (unported) Mark Tracker could extend, so this card is the
+  // dashboard's own editor over the same config.customSubjects store — a subject
+  // added here shows up in every deck/folder picker immediately. Hidden subjects
+  // are kept (their decks keep their tag) and can be restored.
+  const subjectsCard = el('div', { class:'card', style:'padding:20px' });
+  if (!embedded) subjectsCard.id = 'tutorial-target-subjects-card';
+  if (!embedded) subjectsCard.appendChild(panelHeader('📘 Subjects','subjects'));
+  subjectsCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:14px' },
+    'Subjects group your decks and folders. Pick one when you create a deck — it drives the deck\u2019s colour tag, its breadcrumb, its XP multiplier and the Analytics breakdown. Deleting one \u2014 built-ins included \u2014 offers to move its decks elsewhere first, and leaves a \u21a9 Restore row here in case you change your mind.'));
+
+  const subjectList = el('div', { style:'display:flex;flex-direction:column;gap:4px' });
+  subjectsCard.appendChild(subjectList);
+
+  /** The Add/Edit dialog. `key` null = create; otherwise edit that subject. */
+  function openSubjectModal(key) {
+    const existing = key ? getAllSubjects()[key] : null;
+    const isBuiltin = !!key && !!SUBJECTS[key];
+    let color = existing?.defaultColor || MISC_SUBJECT.defaultColor;
+
+    openModal(existing ? `Edit ${existing.name}` : 'Add Subject', body => {
+      const nameField  = createField('Subject Name', 'text', 'e.g. Miscellaneous');
+      const shortField = createField('Short Name', 'text', 'Shown on tags — e.g. Misc');
+      const boardField = createField('Exam Board', 'text', 'AQA, OCR, Edexcel… or N/A');
+      const marksField = createField('Total Exam Marks', 'number', '100');
+      nameField.querySelector('input').id = 'tutorial-target-subject-name-input';
+      if (existing) {
+        nameField.querySelector('input').value  = existing.name || '';
+        shortField.querySelector('input').value = existing.short || '';
+        boardField.querySelector('input').value = existing.board || '';
+        marksField.querySelector('input').value = String(existing.examMarks || MISC_SUBJECT.examMarks);
+      } else {
+        boardField.querySelector('input').value = 'N/A';
+        marksField.querySelector('input').value = String(MISC_SUBJECT.examMarks);
+      }
+
+      const swatch = mkColorSwatch(color, hex => { color = hex; });
+      const colorRow = el('div', { style:'display:flex;align-items:center;gap:10px;padding:10px 0' },
+        el('div', { style:'flex:1' },
+          el('div', { style:'font-size:12px;font-weight:600;margin-bottom:2px' }, 'Colour'),
+          el('div', { class:'u-muted-11' }, 'Used for the subject\u2019s tag and accent')),
+        swatch);
+
+      const errEl = el('div', { style:'font-size:12px;color:#ef4444;margin-top:8px;min-height:16px' });
+      const submit = btn(existing ? 'Save Subject' : 'Add Subject', 'primary', { full:true, onclick: () => {
+        const draft = {
+          name:  nameField.querySelector('input').value,
+          short: shortField.querySelector('input').value,
+          board: boardField.querySelector('input').value,
+          examMarks: marksField.querySelector('input').value,
+          defaultColor: color,
+        };
+        const res = existing ? updateSubject(key, draft) : addSubject(draft);
+        if (!res.ok) { errEl.textContent = res.error; return; }
+        closeModal(); onChange();
+        showToast(existing ? `Subject updated \u2713` : `Subject "${draft.name.trim()}" added \u2713`);
+      }});
+      submit.id = 'tutorial-target-subject-submit';
+
+      body.append(
+        nameField, shortField, boardField, marksField, colorRow,
+        isBuiltin ? el('div', { class:'u-muted-11', style:'margin-bottom:8px' },
+          'This is a built-in subject — editing it saves your own overrides on top of it.') : null,
+        errEl, submit);
+    });
+  }
+
+  /** Delete confirmation. Built-ins get deleted exactly like user subjects —
+   *  the only difference deleteSubject() makes is where the tombstone lands —
+   *  so the dialog's job is the part that ISN'T reversible-by-default: what
+   *  happens to the decks and folders currently tagged with it. */
+  function openDeleteSubjectModal(key) {
+    const subject = getAllSubjects()[key];
+    if (!subject) return;
+    const decks   = state.decks.filter(d => (d.subject || DEFAULT_SUBJECT_KEY) === key);
+    const folders = state.folders.filter(f => (f.subjectKey || DEFAULT_SUBJECT_KEY) === key);
+    const affected = decks.length + folders.length;
+    const isCatchAll = key === DEFAULT_SUBJECT_KEY;
+
+    openModal(`Delete ${subject.name}?`, body => {
+      body.appendChild(el('div', { style:'font-size:13px;line-height:1.6;margin-bottom:14px' },
+        affected
+          ? el('span', {}, `${nOf(decks.length, 'deck')}${folders.length ? ` and ${nOf(folders.length, 'folder')}` : ''} are filed under this subject. Move them somewhere else first, or delete it anyway and let them fall back to the untagged bucket.`)
+          : el('span', {}, 'Nothing is filed under this subject, so deleting it changes nothing but the pickers.')));
+      if (isCatchAll) {
+        body.appendChild(el('div', { style:'font-size:12px;line-height:1.6;color:var(--muted);margin-bottom:14px;padding:10px 12px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid var(--border)' },
+          'This is the catch-all that untagged decks fall back to. Deleting it is allowed and it stays deleted \u2014 but anything left untagged will show as a plain grey \u201cMiscellaneous\u201d until you file it under a real subject.'));
+      }
+
+      const others = Object.entries(getAllSubjects()).filter(([k]) => k !== key);
+      let reassignTo = others.length ? others[0][0] : null;
+      let doReassign = affected > 0 && others.length > 0;
+
+      const sel = el('select', { class:'u-input', onchange: e => { reassignTo = e.target.value; } });
+      others.forEach(([k, sub]) => {
+        const o = el('option', { value:k, class:'u-bg' }, sub.name);
+        if (k === DEFAULT_SUBJECT_KEY) o.selected = true;
+        sel.appendChild(o);
+      });
+      if (others.some(([k]) => k === DEFAULT_SUBJECT_KEY)) reassignTo = DEFAULT_SUBJECT_KEY;
+
+      const moveRow = el('div', { style:'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px' },
+        (() => {
+          const knob = el('div', { class:'toggle-knob' });
+          const sw = el('button', { type:'button', role:'switch',
+            class:`toggle${doReassign ? ' on' : ''}`,
+            'aria-checked':String(!!doReassign),
+            'aria-label':'Move its decks & folders to', onclick: () => {
+            doReassign = !doReassign;
+            sw.classList.toggle('on', doReassign);
+            sw.setAttribute('aria-checked', String(!!doReassign));
+          }}, knob);
+          return el('div', { style:'display:flex;align-items:center;gap:10px' }, sw,
+            el('div', { style:'font-size:12px;font-weight:600' }, 'Move its decks & folders to'));
+        })(),
+        sel);
+      if (!others.length || !affected) moveRow.style.display = 'none';
+
+      const errEl = el('div', { style:'font-size:12px;color:#ef4444;margin-top:10px;min-height:16px' });
+      const confirmBtn = btn('Delete subject', 'danger', { full:true, onclick: () => {
+        const r = deleteSubject(key, { reassignTo: doReassign ? reassignTo : null });
+        if (!r.ok) { errEl.textContent = r.error; return; }
+        closeModal(); onChange();
+        showToast(`Deleted \u201c${subject.name}\u201d${r.reassignTo ? ` \u2014 moved to ${getSubjectSafe(r.reassignTo).name}` : ''}`, 5000,
+          { label:'Undo', onClick: () => { restoreSubject(key); onChange(); } });
+      }});
+
+      body.append(moveRow, errEl, confirmBtn,
+        el('div', { class:'u-muted-11', style:'margin-top:10px' },
+          'Built-in subjects can be deleted too. Deleting leaves a row here with \u21a9 Restore, in case you change your mind.'));
+    });
+  }
+
+  function renderSubjectEditor() {
+    subjectList.innerHTML = '';
+    const all = getAllSubjects();
+    const deletedKeys = new Set(Object.entries(
+      state.trackerState?.config?.customSubjects || {}).filter(([, s]) => s?._removed).map(([k]) => k));
+    const rows = [...Object.entries(all), ...[...deletedKeys].filter(k => !all[k]).map(k => {
+      const rec = state.trackerState.config.customSubjects[k];
+      return [k, { ...MISC_SUBJECT, ...rec, name: rec?.name || k }];
+    })];
+
+    if (!rows.length) {
+      subjectList.appendChild(el('div', { class:'u-muted-12', style:'padding:10px 0' },
+        'No subjects yet \u2014 add one below so your decks have somewhere to live.'));
+    }
+
+    rows.forEach(([key, s]) => {
+      const isDeleted = deletedKeys.has(key);
+      const deckCount  = state.decks.filter(d => (d.subject || DEFAULT_SUBJECT_KEY) === key).length;
+      const folderCount = state.folders.filter(f => f.subjectKey === key).length;
+      const row = el('div', { class:'subject-edit-row', style:`display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,${isDeleted?'0.02':'0.04'});border:1px solid var(--border);opacity:${isDeleted?0.55:1}` });
+      row.append(
+        el('span', { style:`width:14px;height:14px;border-radius:4px;flex-shrink:0;background:${s.defaultColor || '#888'}` }),
+        el('div', { style:'flex:1;min-width:0' },
+          el('div', { style:`font-size:13px;font-weight:600;color:${isDeleted?'var(--muted)':'var(--text)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap` },
+            s.name || key,
+            SUBJECTS[key] ? el('span', { class:'u-muted-11', style:'margin-left:6px;font-weight:500' }, 'built-in') : null),
+          el('div', { class:'u-muted-11', style:'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' },
+            `${s.short || '\u2014'} \u00b7 ${s.board || 'N/A'} \u00b7 ${nOf(deckCount, 'deck')}${folderCount ? ` \u00b7 ${nOf(folderCount, 'folder')}` : ''}${isDeleted ? ' \u00b7 deleted' : ''}`)),
+        isDeleted
+          ? el('button', { class:'btn btn-ghost btn-sm', title:'Bring this subject back', style:'padding:2px 10px;font-size:12px', onclick: () => { const r = restoreSubject(key); if (!r.ok) { showToast(r.error); return; } onChange(); } }, '\u21a9 Restore')
+          : el('button', { class:'btn btn-ghost btn-sm', title:'Edit subject','aria-label':`Edit subject ${s.name}`, style:'padding:2px 8px;font-size:12px', onclick: () => openSubjectModal(key) }, '\u270e'),
+        isDeleted ? null : el('button', { class:'btn btn-ghost btn-sm', title:`Delete ${s.name}`, style:'padding:2px 8px;font-size:12px', onclick: () => openDeleteSubjectModal(key) }, '\ud83d\uddd1')
+      );
+      subjectList.appendChild(row);
+    });
+  }
+  renderSubjectEditor();
+
+  const addSubjectBtn = btn('+ Add Subject', 'primary', { onclick: () => openSubjectModal(null) });
+  if (!embedded) addSubjectBtn.id = 'tutorial-target-add-subject';
+  subjectsCard.appendChild(el('div', { style:'display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center' },
+    addSubjectBtn,
+    el('span', { class:'u-muted-11' }, 'Defaults come from shared.js\u2019s SUBJECTS; anything you add or change is stored with your own data.')));
+  subjectsCard._scRefresh = renderSubjectEditor;
+  return subjectsCard;
+}
+
+// ── Settings-panel modals ───────────────────────────────────────────────────
+// App-wide pattern for "places that redirect to Settings": instead of
+// navigating away (and landing on the full default Settings page, losing the
+// current context), a cross-link opens the target panel INSIDE a modal — the
+// real, live controls — with a footer button that opens the full Settings
+// page in a new tab for everything else. Panels without a modal builder fall
+// back to the new-tab deep link directly. The scratchpad uses the same
+// pattern with its ⋯ popover as the "modal" (see dashboard-scratchpad.js).
+const SETTINGS_PANEL_MODALS = {
+  subjects: {
+    title: '📘 Manage Subjects',
+    cta: 'Open full Settings',
+    hint: 'The same editor Settings shows — changes save as you go.',
+    build: opts => scBuildSubjectsCard(opts),
+  },
+};
+function openSettingsPanelModal(key) {
+  const canon = scSettingsPanelKey(key);
+  const spec = SETTINGS_PANEL_MODALS[canon];
+  if (!spec) { openSettingsInNewTab(canon); return; }
+  openModal(spec.title, body => {
+    let card = null;
+    const refreshHost = () => {
+      try { renderSidebar(); } catch (e) {}
+      try {
+        if (typeof state !== 'undefined' && state.view && state.view !== 'settings') renderView(state.view);
+      } catch (e) {}
+    };
+    card = spec.build({
+      embedded: true,
+      onChange: () => { if (card && typeof card._scRefresh === 'function') card._scRefresh(); refreshHost(); },
+    });
+    body.appendChild(card);
+    body.appendChild(el('div', { class: 'settings-modal-foot',
+      style: 'display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)' },
+      el('span', { class: 'u-muted-11', style: 'flex:1' }, spec.hint),
+      btn(spec.cta, 'ghost', { title: 'Open the full Settings page in a new tab',
+        onclick: () => openSettingsInNewTab(canon) })));
+  });
+}
+
 function renderSettings(c) {
   function makeToggle(label,desc,key){
     const knob=el('div',{class:'toggle-knob'});
@@ -63,18 +352,6 @@ function renderSettings(c) {
 
   /** Panel header row with a 🔗 button that copies a deep link straight to
    *  this section (#settings/<key> — see scSettingsApplyHash below). */
-  function panelHeader(label, key, color) {
-    return el('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px'},
-      el('div',{style:`font-weight:800;${color ? `color:${color};` : ''}`}, label),
-      el('button',{class:'btn btn-ghost btn-sm', title:'Copy link to this section',
-        'aria-label':`Copy a link that opens Settings at ${label}`,
-        style:'padding:3px 8px;font-size:11px;opacity:0.8',
-        onclick:async e=>{ e.stopPropagation();
-          const url = location.origin + location.pathname.replace(/index\.html$/, '') + '#settings/' + key;
-          const ok = (typeof copyTextToClipboard === 'function') && await copyTextToClipboard(url);
-          showToast(ok ? 'Section link copied ✓' : url, ok ? 2500 : 6000);
-        }},'🔗'));
-  }
 
   const grid=el('div',{class:'grid-2'});
   const helpCard=el('div',{class:'card',style:'padding:20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap'},
@@ -857,186 +1134,11 @@ function renderSettings(c) {
   appearCard.appendChild(schedSection);
 
   // ── Subjects ──────────────────────────────────────────────────────────────
-  // Subjects group decks and folders. They used to be a fixed built-in list that
-  // only the (unported) Mark Tracker could extend, so this card is the
-  // dashboard's own editor over the same config.customSubjects store — a subject
-  // added here shows up in every deck/folder picker immediately. Hidden subjects
-  // are kept (their decks keep their tag) and can be restored.
-  const subjectsCard = el('div', { class:'card', style:'padding:20px' });
-  subjectsCard.id = 'tutorial-target-subjects-card';
-  subjectsCard.appendChild(panelHeader('📘 Subjects','subjects'));
-  subjectsCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:14px' },
-    'Subjects group your decks and folders. Pick one when you create a deck — it drives the deck\u2019s colour tag, its breadcrumb, its XP multiplier and the Analytics breakdown. Deleting one \u2014 built-ins included \u2014 offers to move its decks elsewhere first, and leaves a \u21a9 Restore row here in case you change your mind.'));
-
-  const subjectList = el('div', { style:'display:flex;flex-direction:column;gap:4px' });
-  subjectsCard.appendChild(subjectList);
-
-  /** The Add/Edit dialog. `key` null = create; otherwise edit that subject. */
-  function openSubjectModal(key) {
-    const existing = key ? getAllSubjects()[key] : null;
-    const isBuiltin = !!key && !!SUBJECTS[key];
-    let color = existing?.defaultColor || MISC_SUBJECT.defaultColor;
-
-    openModal(existing ? `Edit ${existing.name}` : 'Add Subject', body => {
-      const nameField  = createField('Subject Name', 'text', 'e.g. Miscellaneous');
-      const shortField = createField('Short Name', 'text', 'Shown on tags — e.g. Misc');
-      const boardField = createField('Exam Board', 'text', 'AQA, OCR, Edexcel… or N/A');
-      const marksField = createField('Total Exam Marks', 'number', '100');
-      nameField.querySelector('input').id = 'tutorial-target-subject-name-input';
-      if (existing) {
-        nameField.querySelector('input').value  = existing.name || '';
-        shortField.querySelector('input').value = existing.short || '';
-        boardField.querySelector('input').value = existing.board || '';
-        marksField.querySelector('input').value = String(existing.examMarks || MISC_SUBJECT.examMarks);
-      } else {
-        boardField.querySelector('input').value = 'N/A';
-        marksField.querySelector('input').value = String(MISC_SUBJECT.examMarks);
-      }
-
-      const swatch = mkColorSwatch(color, hex => { color = hex; });
-      const colorRow = el('div', { style:'display:flex;align-items:center;gap:10px;padding:10px 0' },
-        el('div', { style:'flex:1' },
-          el('div', { style:'font-size:12px;font-weight:600;margin-bottom:2px' }, 'Colour'),
-          el('div', { class:'u-muted-11' }, 'Used for the subject\u2019s tag and accent')),
-        swatch);
-
-      const errEl = el('div', { style:'font-size:12px;color:#ef4444;margin-top:8px;min-height:16px' });
-      const submit = btn(existing ? 'Save Subject' : 'Add Subject', 'primary', { full:true, onclick: () => {
-        const draft = {
-          name:  nameField.querySelector('input').value,
-          short: shortField.querySelector('input').value,
-          board: boardField.querySelector('input').value,
-          examMarks: marksField.querySelector('input').value,
-          defaultColor: color,
-        };
-        const res = existing ? updateSubject(key, draft) : addSubject(draft);
-        if (!res.ok) { errEl.textContent = res.error; return; }
-        closeModal();
-        renderView('settings');
-        renderSidebar();
-        showToast(existing ? `Subject updated \u2713` : `Subject "${draft.name.trim()}" added \u2713`);
-      }});
-      submit.id = 'tutorial-target-subject-submit';
-
-      body.append(
-        nameField, shortField, boardField, marksField, colorRow,
-        isBuiltin ? el('div', { class:'u-muted-11', style:'margin-bottom:8px' },
-          'This is a built-in subject — editing it saves your own overrides on top of it.') : null,
-        errEl, submit);
-    });
-  }
-
-  /** Delete confirmation. Built-ins get deleted exactly like user subjects —
-   *  the only difference deleteSubject() makes is where the tombstone lands —
-   *  so the dialog's job is the part that ISN'T reversible-by-default: what
-   *  happens to the decks and folders currently tagged with it. */
-  function openDeleteSubjectModal(key) {
-    const subject = getAllSubjects()[key];
-    if (!subject) return;
-    const decks   = state.decks.filter(d => (d.subject || DEFAULT_SUBJECT_KEY) === key);
-    const folders = state.folders.filter(f => (f.subjectKey || DEFAULT_SUBJECT_KEY) === key);
-    const affected = decks.length + folders.length;
-    const isCatchAll = key === DEFAULT_SUBJECT_KEY;
-
-    openModal(`Delete ${subject.name}?`, body => {
-      body.appendChild(el('div', { style:'font-size:13px;line-height:1.6;margin-bottom:14px' },
-        affected
-          ? el('span', {}, `${nOf(decks.length, 'deck')}${folders.length ? ` and ${nOf(folders.length, 'folder')}` : ''} are filed under this subject. Move them somewhere else first, or delete it anyway and let them fall back to the untagged bucket.`)
-          : el('span', {}, 'Nothing is filed under this subject, so deleting it changes nothing but the pickers.')));
-      if (isCatchAll) {
-        body.appendChild(el('div', { style:'font-size:12px;line-height:1.6;color:var(--muted);margin-bottom:14px;padding:10px 12px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid var(--border)' },
-          'This is the catch-all that untagged decks fall back to. Deleting it is allowed and it stays deleted \u2014 but anything left untagged will show as a plain grey \u201cMiscellaneous\u201d until you file it under a real subject.'));
-      }
-
-      const others = Object.entries(getAllSubjects()).filter(([k]) => k !== key);
-      let reassignTo = others.length ? others[0][0] : null;
-      let doReassign = affected > 0 && others.length > 0;
-
-      const sel = el('select', { class:'u-input', onchange: e => { reassignTo = e.target.value; } });
-      others.forEach(([k, sub]) => {
-        const o = el('option', { value:k, class:'u-bg' }, sub.name);
-        if (k === DEFAULT_SUBJECT_KEY) o.selected = true;
-        sel.appendChild(o);
-      });
-      if (others.some(([k]) => k === DEFAULT_SUBJECT_KEY)) reassignTo = DEFAULT_SUBJECT_KEY;
-
-      const moveRow = el('div', { style:'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px' },
-        (() => {
-          const knob = el('div', { class:'toggle-knob' });
-          const sw = el('button', { type:'button', role:'switch',
-            class:`toggle${doReassign ? ' on' : ''}`,
-            'aria-checked':String(!!doReassign),
-            'aria-label':'Move its decks & folders to', onclick: () => {
-            doReassign = !doReassign;
-            sw.classList.toggle('on', doReassign);
-            sw.setAttribute('aria-checked', String(!!doReassign));
-          }}, knob);
-          return el('div', { style:'display:flex;align-items:center;gap:10px' }, sw,
-            el('div', { style:'font-size:12px;font-weight:600' }, 'Move its decks & folders to'));
-        })(),
-        sel);
-      if (!others.length || !affected) moveRow.style.display = 'none';
-
-      const errEl = el('div', { style:'font-size:12px;color:#ef4444;margin-top:10px;min-height:16px' });
-      const confirmBtn = btn('Delete subject', 'danger', { full:true, onclick: () => {
-        const r = deleteSubject(key, { reassignTo: doReassign ? reassignTo : null });
-        if (!r.ok) { errEl.textContent = r.error; return; }
-        closeModal();
-        renderView('settings'); renderSidebar();
-        showToast(`Deleted \u201c${subject.name}\u201d${r.reassignTo ? ` \u2014 moved to ${getSubjectSafe(r.reassignTo).name}` : ''}`, 5000,
-          { label:'Undo', onClick: () => { restoreSubject(key); renderView('settings'); renderSidebar(); } });
-      }});
-
-      body.append(moveRow, errEl, confirmBtn,
-        el('div', { class:'u-muted-11', style:'margin-top:10px' },
-          'Built-in subjects can be deleted too. Deleting leaves a row here with \u21a9 Restore, in case you change your mind.'));
-    });
-  }
-
-  function renderSubjectEditor() {
-    subjectList.innerHTML = '';
-    const all = getAllSubjects();
-    const deletedKeys = new Set(Object.entries(
-      state.trackerState?.config?.customSubjects || {}).filter(([, s]) => s?._removed).map(([k]) => k));
-    const rows = [...Object.entries(all), ...[...deletedKeys].filter(k => !all[k]).map(k => {
-      const rec = state.trackerState.config.customSubjects[k];
-      return [k, { ...MISC_SUBJECT, ...rec, name: rec?.name || k }];
-    })];
-
-    if (!rows.length) {
-      subjectList.appendChild(el('div', { class:'u-muted-12', style:'padding:10px 0' },
-        'No subjects yet \u2014 add one below so your decks have somewhere to live.'));
-    }
-
-    rows.forEach(([key, s]) => {
-      const isDeleted = deletedKeys.has(key);
-      const deckCount  = state.decks.filter(d => (d.subject || DEFAULT_SUBJECT_KEY) === key).length;
-      const folderCount = state.folders.filter(f => f.subjectKey === key).length;
-      const row = el('div', { class:'subject-edit-row', style:`display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,${isDeleted?'0.02':'0.04'});border:1px solid var(--border);opacity:${isDeleted?0.55:1}` });
-      row.append(
-        el('span', { style:`width:14px;height:14px;border-radius:4px;flex-shrink:0;background:${s.defaultColor || '#888'}` }),
-        el('div', { style:'flex:1;min-width:0' },
-          el('div', { style:`font-size:13px;font-weight:600;color:${isDeleted?'var(--muted)':'var(--text)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap` },
-            s.name || key,
-            SUBJECTS[key] ? el('span', { class:'u-muted-11', style:'margin-left:6px;font-weight:500' }, 'built-in') : null),
-          el('div', { class:'u-muted-11', style:'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' },
-            `${s.short || '\u2014'} \u00b7 ${s.board || 'N/A'} \u00b7 ${nOf(deckCount, 'deck')}${folderCount ? ` \u00b7 ${nOf(folderCount, 'folder')}` : ''}${isDeleted ? ' \u00b7 deleted' : ''}`)),
-        isDeleted
-          ? el('button', { class:'btn btn-ghost btn-sm', title:'Bring this subject back', style:'padding:2px 10px;font-size:12px', onclick: () => { const r = restoreSubject(key); if (!r.ok) { showToast(r.error); return; } renderView('settings'); renderSidebar(); } }, '\u21a9 Restore')
-          : el('button', { class:'btn btn-ghost btn-sm', title:'Edit subject','aria-label':`Edit subject ${s.name}`, style:'padding:2px 8px;font-size:12px', onclick: () => openSubjectModal(key) }, '\u270e'),
-        isDeleted ? null : el('button', { class:'btn btn-ghost btn-sm', title:`Delete ${s.name}`, style:'padding:2px 8px;font-size:12px', onclick: () => openDeleteSubjectModal(key) }, '\ud83d\uddd1')
-      );
-      subjectList.appendChild(row);
-    });
-  }
-  renderSubjectEditor();
-
-  const addSubjectBtn = btn('+ Add Subject', 'primary', { onclick: () => openSubjectModal(null) });
-  addSubjectBtn.id = 'tutorial-target-add-subject';
-  subjectsCard.appendChild(el('div', { style:'display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center' },
-    addSubjectBtn,
-    el('span', { class:'u-muted-11' }, 'Defaults come from shared.js\u2019s SUBJECTS; anything you add or change is stored with your own data.')));
-
+  // Built at the module top (scBuildSubjectsCard) so the decks page can embed
+  // the very same editor in its "Manage Subjects" modal — see
+  // openSettingsPanelModal below. Here the default onChange (full Settings
+  // re-render + sidebar) keeps the refresh behaviour exactly as before.
+  const subjectsCard = scBuildSubjectsCard();
 
   // ── Navigation ────────────────────────────────────────────────────────────
   // Reorder sidebar tabs (drag not available here — use up/down arrows) and
@@ -1231,7 +1333,8 @@ function renderSettings(c) {
   );
 
   // -- URL deep links: #settings/<panel> ------------------------------------
-  // Share/target links for individual panels: the scratchpad's ⚙ button, the
+  // Share/target links for individual panels: the scratchpad ⋯ popover's
+  // "Edit Defaults" footer button, the
   // 🔗 header buttons and hand-typed URLs all land here. The payload is an
   // alias-resolved panel key; the applier scrolls the panel into view inside
   // #main and pulses it (.settings-flash) so "change my scratchpad defaults"
@@ -1241,18 +1344,6 @@ function renderSettings(c) {
    [aiCard,'ai'],[libraryCard,'library'],[navCard,'navigation'],[dataCard,'data']]
     .forEach(([cardEl, key]) => cardEl.setAttribute('data-settings-panel', key));
 
-  const PANEL_ALIASES = {
-    study:'study', scheduling:'study', srs:'study',
-    scratch:'scratch', scratchpad:'scratch',
-    appearance:'appearance', themes:'appearance', theme:'appearance',
-    subjects:'subjects',
-    accessibility:'accessibility', a11y:'accessibility', notifications:'accessibility',
-    ai:'ai', integrations:'ai', llm:'ai',
-    library:'library', reading:'library',
-    navigation:'navigation', nav:'navigation',
-    data:'data', backup:'data',
-    help:'help',
-  };
   function scSettingsFlash(panel) {
     panel.classList.add('settings-flash');
     setTimeout(() => panel.classList.remove('settings-flash'), 2600);
@@ -1273,15 +1364,6 @@ function renderSettings(c) {
       scSettingsFlash(panel);
     }, 80);
     return key;
-  }
-  /** In-page counterpart for single-document builds (extension) and any
-   *  in-app jump: mirror the hash, navigate, flash. */
-  function gotoSettingsPanel(key) {
-    const canon = PANEL_ALIASES[String(key).toLowerCase()] || key;
-    if (typeof scReplaceHash === 'function') scReplaceHash('settings/' + canon);
-    window._scSettingsLastHash = null;          // this jump must flash
-    if (typeof navigate === 'function') navigate('settings');
-    else renderView('settings');
   }
   // Same-document hash moves (clicking a #settings/<key> link while the app
   // is open, back/forward onto a payload): switch into Settings if needed,

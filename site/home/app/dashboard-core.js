@@ -2186,6 +2186,31 @@ function urlForView(viewId) {
   return route ? `${ROOT_REL}${route}/#${viewId}` : `${ROOT_REL}#${viewId}`;
 }
 
+// Deep-link URL for one Settings panel — the #settings/<key> payload is
+// resolved by dashboard-settings.js's scSettingsApplyHash (scroll + flash),
+// with aliases (#settings/scratchpad → the scratch panel, etc).
+function settingsPanelUrl(panelKey) {
+  const route = VIEW_ROUTES.settings || 'settings';
+  return `${ROOT_REL}${route}/#settings/${panelKey}`;
+}
+// The app-wide way to "leave" for Settings without actually leaving: the
+// full Settings page opens in a NEW TAB, deep-linked to the panel in
+// question, so the current page — a study session, the decks browser, a
+// half-filled modal — stays exactly as it was. Callers pair this with an
+// in-app modal/popover that handles the common edits on the spot (see
+// openSettingsPanelModal in dashboard-settings.js and the scratchpad's
+// ⋯ popover footer). Single-document builds (extension) can't spawn a
+// meaningful tab of the same document — drain any modals and jump in-page.
+function openSettingsInNewTab(panelKey) {
+  if (typeof isExtension !== 'undefined' && isExtension) {
+    try { closeModal(true); } catch (e) {}
+    if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel(panelKey);
+    else navigate('settings');
+    return;
+  }
+  window.open(settingsPanelUrl(panelKey), '_blank');
+}
+
 function writeNavHandoff(viewId) {
   if (isExtension) return;
   try {
@@ -2208,7 +2233,7 @@ function readNavHandoff() {
   } catch (e) { console.warn('[SCIMA] nav handoff read failed:', e); return null; }
 }
 
-function gotoViewPage(viewId) {
+function gotoViewPage(viewId, urlOverride) {
   // The guided tour piggybacks its step number on the next real save (see
   // _advance() in dashboard-onboarding.js — deliberately not scheduleSave'd),
   // so sync the live step and force-write before swapping pages, or a tour
@@ -2225,7 +2250,10 @@ function gotoViewPage(viewId) {
   }
   flushSave(touring);
   writeNavHandoff(viewId);
-  location.href = urlForView(viewId);
+  // urlOverride lets a cross-page jump carry a deep-link payload the plain
+  // #<viewId> form can't express — gotoSettingsPanel('subjects') from the
+  // decks page lands on settings/#settings/subjects, not the page top.
+  location.href = urlOverride || urlForView(viewId);
 }
 
 // Multi-page fallback for openDeckDetail(). On any route that loads
@@ -2555,16 +2583,53 @@ function renderSidebar() {
 }
 
 let _modalReturnFocus = null;
-function openModal(title, bodyFn) {
-  document.getElementById('modal-title').textContent = title;
+// ── Modal stack ────────────────────────────────────────────────────────────
+// openModal() called while a modal is already showing pushes the current
+// level (title, body DOM, focus, onClose) onto a stack instead of wiping it;
+// closeModal() pops one level back. Dialogs launched FROM a dialog — the
+// subject editor inside the decks page's "Manage Subjects" settings modal,
+// the citation picker inside the card editor, a confirmDestructive from any
+// modal — now return to their parent instead of destroying it. closeModal(true)
+// drains every level: use it before navigating away so no stale parent
+// resurfaces over the new view. opts.onClose fires once when its own level
+// closes (popped or drained) — the settings-panel modal uses it to refresh
+// the host view behind it.
+const _modalStack = [];
+let _modalOnClose = null;
+function openModal(title, bodyFn, opts = {}) {
+  const backdrop = document.getElementById('modal-backdrop');
   const body = document.getElementById('modal-body');
-  body.innerHTML = '';
+  if (!backdrop.classList.contains('hidden')) {
+    _modalStack.push({
+      title: document.getElementById('modal-title').textContent,
+      nodes: [...body.childNodes],
+      focus: document.activeElement,
+      onClose: _modalOnClose,
+    });
+    body.replaceChildren();
+  } else {
+    _modalReturnFocus = document.activeElement;
+    body.replaceChildren();   // fresh open: drop the previous dialog's remnants
+  }
+  _modalOnClose = typeof opts.onClose === 'function' ? opts.onClose : null;
+  document.getElementById('modal-title').textContent = title;
   bodyFn(body);
-  document.getElementById('modal-backdrop').classList.remove('hidden');
-  _modalReturnFocus = document.activeElement;
+  backdrop.classList.remove('hidden');
   document.getElementById('modal-box').focus();
 }
-function closeModal() {
+function closeModal(all = false) {
+  const fire = fn => { if (typeof fn === 'function') { try { fn(); } catch (e) {} } };
+  fire(_modalOnClose);
+  let prev = _modalStack.pop();
+  while (all && prev) { fire(prev.onClose); prev = _modalStack.pop(); }
+  _modalOnClose = prev ? prev.onClose : null;
+  if (prev) {
+    document.getElementById('modal-title').textContent = prev.title;
+    document.getElementById('modal-body').replaceChildren(...prev.nodes);
+    if (prev.focus && prev.focus.isConnected) prev.focus.focus();
+    else document.getElementById('modal-box').focus();
+    return;
+  }
   document.getElementById('modal-backdrop').classList.add('hidden');
   _modalReturnFocus?.focus?.();
   _modalReturnFocus = null;
