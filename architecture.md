@@ -297,6 +297,15 @@ button; and bootstrap's init() resolves the hash's FIRST path
   punctuation to match); the modal previews the exact field edits before
   applying, and Apply leaves a 7 s Undo toast holding a snapshot of every
   touched field or name.
+- **Unified decks browser**: subjects are folders as far as the browser is
+  concerned — the root lists them as folder-style rows (▶ study / ⬇ export
+  subject / ✏️ edit-subject row actions, drop targets for the subject top
+  level), and subject and folder containers render through ONE view with
+  ONE action-bar layout (▶ Study · + New Deck · + New Folder · ⬇ Export ·
+  Aa Case… · then folder-only 📂 Move / 📚 Move-to-subject / ✏ Rename /
+  × Delete, or ✏️ Edit Subject). Child folder rows carry the same six
+  actions at both levels; `exportSubject()` ships a subject as a stamped
+  `collection` envelope.
 - **Card/deck/folder surgery**: duplicate-card action, move-decks-between-
   subjects (deck selection bar), move-folder-between-subjects (📚 row action,
   folder toolbar, subtree-aware: subfolders and contained decks are retagged

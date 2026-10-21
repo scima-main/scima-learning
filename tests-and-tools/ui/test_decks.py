@@ -168,9 +168,11 @@ def _folder_state():
 
 
 def _import_file_via_modal(page, path):
-    page.click("#view-decks button:has-text('+ New Folder')") \
-        if page.locator("#view-decks button", has_text="+ New Folder").count() \
-        else page.get_by_role("button", name="+ New Folder").click()
+    # folder creation lives in the container bar — enter a subject first
+    if page.locator(".subject-tile").count():
+        page.locator(".subject-tile").first.click()
+        page.wait_for_selector(".ui-action-bar", timeout=8000)
+    page.get_by_role("button", name="+ New Folder").first.click()
     pages.expect_modal(page)
     page.locator("#modal-body button", has_text="⬆ Import Folder").click()
     page.locator("#modal-body input[type=file][accept='.json']") \
@@ -235,7 +237,10 @@ def test_legacy_duplicate_root_file_imports_single_folder(page, site_base,
     }
     path = tmp_path / "legacy-folder.json"
     path.write_text(_json.dumps(legacy))
-    seeded("preset:empty")
+    # an anchor deck so the root lists a subject to import into
+    anchor = seedlib.make_deck("Anchor", [seedlib.make_card("q", "a")],
+                               deck_id="d_anchor")
+    seeded(mf_state=seedlib.make_mf_state(decks=[anchor]))
     pages.goto_app(page, site_base, "/decks/")
     _import_file_via_modal(page, str(path))
     st = page.evaluate("() => ({folders: state.folders, decks: state.decks})")
@@ -245,7 +250,7 @@ def test_legacy_duplicate_root_file_imports_single_folder(page, site_base,
     assert len(child) == 1
     root_id = legacy_folders[0]["id"]
     assert child[0]["parentId"] == root_id          # nesting survived
-    deck = st["decks"][0]
+    deck = next(d for d in st["decks"] if d["name"] == "LD")
     assert deck["folderId"] == root_id              # decks in the real folder
 
 
@@ -324,3 +329,42 @@ def test_create_multi_answer_guards(page, site_base, seeded):
     page.get_by_role("button", name="Multi-answer", exact=True).click()
     page.locator("#modal-body button", has_text="Create multi-answer").click()
     expect(page.locator("#toast")).to_contain_text("Switch to Basic first")
+
+
+# ── Unified decks browser: subjects behave as folders ───────────────────────
+
+def test_subject_and_folder_bars_share_one_layout(page, site_base, seeded):
+    """The container action bar is identical for subjects and folders up to
+    the folder-only management actions — same labels, same order."""
+    seeded("preset:demo")
+    pages.goto_app(page, site_base, "/decks/")
+    page.locator(".subject-tile", has_text="Miscellaneous").click()
+    page.wait_for_selector(".ui-action-bar", timeout=8000)
+    subject_bar = page.locator(".ui-action-bar .ui-action-group").first
+    subject_labels = subject_bar.locator("button").all_inner_texts()
+    page.locator(".folder-item", has_text="Languages").click()
+    page.wait_for_timeout(300)
+    folder_bar = page.locator(".ui-action-bar .ui-action-group").first
+    folder_labels = folder_bar.locator("button").all_inner_texts()
+    assert subject_labels == ["▶ Study", "+ New Deck", "+ New Folder",
+                              "⬇ Export", "Aa Case…", "✏️ Edit Subject"], subject_labels
+    assert folder_labels[:5] == subject_labels[:5], folder_labels
+    assert folder_labels[5:] == ["📂 Move to Folder…", "📚 Move to Subject…",
+                                 "✏ Rename", "× Delete"], folder_labels
+
+
+def test_subject_rows_are_folder_rows_with_export(page, site_base, seeded):
+    """Root lists subjects as folder-style rows: open on click, ▶ ⬇ ️
+    actions, and a drop target for drag-and-drop into the subject top."""
+    seeded("preset:demo")
+    pages.goto_app(page, site_base, "/decks/")
+    row = page.locator(".subject-tile", has_text="Miscellaneous")
+    expect(row).to_have_class(re.compile(r"folder-item"))
+    assert row.locator("button[title='Study this subject now']").count() == 1
+    assert row.locator("button[title='Export subject as JSON']").count() == 1
+    assert row.locator("button[title='Edit subject (Settings)']").count() == 1
+    assert row.get_attribute("data-drop-folder") is not None
+    with page.expect_download(timeout=10000) as dl:
+        row.locator("button[title='Export subject as JSON']").click()
+    name = dl.value.suggested_filename
+    assert name.startswith("SCIMA-subject-") and name.endswith(".json"), name

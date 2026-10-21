@@ -112,6 +112,9 @@ Key fixtures: `app` (booted `/` on empty), `demo_app` (booted `/` on demo),
   `#page-tabs .tab-btn[data-view]`, `#modal-backdrop`/`#modal-box`/
   `#modal-title`, `#cmd-backdrop`/`#cmd-input` (Ctrl/Cmd+K),
   `#tutorial-overlay`, `#tutorial-target-new-deck`,
+  `.subject-tile` (subject ROW in the decks root — folder-item anatomy),
+  `.ui-action-bar .ui-action-group` (container action bar, same layout for
+  subjects and folders), `#study-opts-btn` / `#study-opts-panel`,
   `#packs-grid .card` / `#pack-detail-contents` (pack list & detail modal),
   `#screen-search` / `#screen-deck` (community screens),
   `.touch-only` (touch-only reorder buttons; hidden on desktop pointers),

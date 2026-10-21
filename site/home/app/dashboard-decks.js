@@ -277,11 +277,17 @@ function renderDecks(c) {
   _deckDetailCtx = null;         // and no card selection → shortcuts inert
   scDeeksApplyHash();
   const nav = state.deckNav;
-  if (nav.view === 'folder' && nav.folderId) renderFolderView(c, nav.folderId);
-  else if (nav.view === 'subject' && nav.subjectKey) renderSubjectView(c, nav.subjectKey);
+  if (nav.view === 'folder' && nav.folderId) renderContainerView(c, nav.subjectKey, nav.folderId);
+  else if (nav.view === 'subject' && nav.subjectKey) renderContainerView(c, nav.subjectKey, null);
   else renderDecksHome(c);
 }
 
+// ── Unified decks browser ──────────────────────────────────────────────────
+// Subjects ARE folders as far as the browser is concerned: the root lists
+// them as folder-style rows, and subject/folder containers render through
+// ONE view with ONE action-bar layout (▶ Study · + New Deck · + New Folder ·
+// ⬇ Export · Aa Case… · move/rename/delete where they apply), so every level
+// of the tree offers the same buttons in the same order.
 function renderDecksHome(c) {
   const topBar = el('div',{class:'ui-action-bar',style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:24px'},
     el('div',{},
@@ -289,14 +295,16 @@ function renderDecksHome(c) {
       el('div',{class:'section-sub',style:'margin-bottom:0'},`${state.decks.length} deck${state.decks.length!==1?'s':''} · ${state.folders.length} folder${state.folders.length!==1?'s':''}`)
     ),
     el('div',{class:'ui-action-group',style:'display:flex;gap:8px'},
-      btn('+ New Folder','ghost',{onclick:()=>openCreateFolderModal(null,null)}),
-      (()=>{ const b=btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal()}); b.id='tutorial-target-new-deck'; return b; })()
-    )
+      (()=>{ const b=btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal()}); b.id='tutorial-target-new-deck'; return b; })(),
+      btn('+ New Folder','ghost',{title:'Create a folder — pick its subject',
+        onclick:()=>openCreateFolderModal(null,null)}),
+      btn('📚 Manage Subjects','ghost',{title:'Add, rename or delete subjects in Settings',
+        onclick:()=>{ if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('subjects'); else navigate('settings'); }}))
   );
 
   const subjects = new Set([
     ...state.decks.map(d => d.subject||DEFAULT_SUBJECT_KEY),
-    ...state.folders.filter(f=>!f.parentId).map(f=>f.subjectKey),
+    ...state.folders.filter(f=>!f.parentId).map(f=>f.subjectKey||DEFAULT_SUBJECT_KEY),
   ]);
 
   if (!subjects.size) {
@@ -308,183 +316,163 @@ function renderDecksHome(c) {
     return;
   }
 
-  const grid = el('div',{class:'grid-3'});
+  // Subjects render as folder-style rows (treat subjects as folders): same
+  // row anatomy, same leading actions (▶ ⬇), plus Edit-subject.
+  c.append(topBar, el('div',{class:'u-section-label'},'Subjects'));
+  const subjectList = el('div',{class:'card',style:'margin-bottom:16px;overflow:hidden'});
   for (const sk of subjects) {
     const s = getSubjectSafe(sk);
-    const subjectDecks = state.decks.filter(d=>(d.subject||DEFAULT_SUBJECT_KEY)===sk);
-    const subjectFolders = state.folders.filter(f=>f.subjectKey===sk&&!f.parentId);
-    const due = getDueCards(subjectDecks.flatMap(d=>d.cards)).length;
-    grid.appendChild(el('div',{class:'card subject-tile',role:'button',tabindex:'0',
-      'aria-label':`Open subject ${s.name}`,onclick:()=>{ state.deckNav={view:'subject',subjectKey:sk}; renderView('decks'); },
+    const subjDecks = state.decks.filter(d=>(d.subject||DEFAULT_SUBJECT_KEY)===sk);
+    const subjFolders = state.folders.filter(f=>(f.subjectKey||DEFAULT_SUBJECT_KEY)===sk&&!f.parentId);
+    const due = getDueCards(subjDecks.flatMap(d=>d.cards)).length;
+    const row = el('div',{class:'folder-item subject-tile',role:'button',tabindex:'0',
+      'aria-label':`Open subject ${s.name}`,
+      onclick:()=>{ state.deckNav={view:'subject',subjectKey:sk}; renderView('decks'); },
       onkeydown:clickKeys(()=>{ state.deckNav={view:'subject',subjectKey:sk}; renderView('decks'); })},
-      el('div',{class:'subject-tile-accent',style:`background:${s.defaultColor}`}),
-      el('div',{class:'subject-tile-name',style:`color:${s.defaultColor}`},s.name),
-      el('div',{class:'subject-tile-meta'},s.board),
-      el('div',{class:'subject-tile-counts'},
-        mkTag(nOf(subjectDecks.length,'deck'),s.defaultColor),
-        subjectFolders.length ? mkTag(nOf(subjectFolders.length,'folder'),'#A78BFA') : null,
-        due>0 ? mkTag(`${due} due`,'var(--pink)') : null
-      )
-    ));
+      el('span',{style:`width:22px;height:22px;border-radius:6px;flex-shrink:0;background:${s.defaultColor||'#888'}`}),
+      el('div',{style:'flex:1;min-width:0'},
+        el('div',{class:'folder-name subject-tile-name',style:`color:${s.defaultColor||'var(--text)'}`},s.name),
+        el('div',{class:'folder-meta'},`${nOf(subjDecks.length,'deck')}${subjFolders.length?` · ${nOf(subjFolders.length,'top-level folder')}`:''}${due>0?` · ${due} due`:''}`)
+      ),
+      el('div',{class:'folder-actions'},
+        btn('▶','ghost',{small:true,title:'Study this subject now','aria-label':`Study subject ${s.name} now`,onclick:e=>{e.stopPropagation();state.studyScope=[{type:'subject',id:sk}];navigate('study');}}),
+        btn('⬇','ghost',{small:true,title:'Export subject as JSON','aria-label':`Export subject ${s.name} as JSON`,onclick:e=>{e.stopPropagation();exportSubject(sk);}}),
+        btn('✏️','ghost',{small:true,title:'Edit subject (Settings)','aria-label':`Edit subject ${s.name}`,onclick:e=>{e.stopPropagation(); if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('subjects'); else navigate('settings');}})
+      ),
+      el('span',{style:'color:var(--muted);font-size:16px;margin-left:4px'},'›')
+    );
+    makeDropTarget(row, null, sk);   // drop decks/folders here = subject top level
+    subjectList.appendChild(row);
   }
-  c.append(topBar,grid);
+  c.appendChild(subjectList);
 }
 
-function renderSubjectView(c, subjectKey) {
+/** One container view for BOTH subjects (folderId null) and folders. */
+function renderContainerView(c, subjectKey, folderId) {
+  const folder = folderId ? state.folders.find(f=>f.id===folderId) : null;
+  if (folderId && !folder) { state.deckNav={view:'subjects'}; renderView('decks'); return; }
   const s = getSubjectSafe(subjectKey);
-  const topFolders = state.folders.filter(f=>f.subjectKey===subjectKey&&!f.parentId);
-  const topDecks = state.decks.filter(d=>(d.subject||DEFAULT_SUBJECT_KEY)===subjectKey&&!d.folderId);
-  const allDecks = state.decks.filter(d=>(d.subject||DEFAULT_SUBJECT_KEY)===subjectKey);
 
+  // ── breadcrumb: Decks › Subject › folder chain (all drop targets) ──
+  const chain = [];
+  let cur = folder;
+  while (cur) { chain.unshift(cur); cur = cur.parentId ? state.folders.find(f=>f.id===cur.parentId) : null; }
+  const subjectCrumb = el('span',{class:'breadcrumb-part',onclick:()=>{ state.deckNav={view:'subject',subjectKey}; renderView('decks'); }},s.name);
+  makeDropTarget(subjectCrumb, null, subjectKey);
   const breadcrumb = el('div',{class:'breadcrumb'},
     el('span',{class:'breadcrumb-part',onclick:()=>{ state.deckNav={view:'subjects'}; renderView('decks'); }},'📚 Decks'),
     el('span',{class:'breadcrumb-sep'},'›'),
-    el('span',{class:'breadcrumb-part active',style:`color:${s.defaultColor}`},s.name)
-  );
-  const topBar = el('div',{class:'ui-action-bar',style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px'},
+    subjectCrumb);
+  chain.forEach((f,i)=>{
+    breadcrumb.append(el('span',{class:'breadcrumb-sep'},'›'));
+    const isLast = i===chain.length-1;
+    const crumbEl=el('span',{class:`breadcrumb-part${isLast?' active':''}`,onclick:isLast?null:()=>{ state.deckNav={view:'folder',subjectKey:f.subjectKey,folderId:f.id}; renderView('decks'); }},f.name);
+    if (!isLast) makeDropTarget(crumbEl, f.id, f.subjectKey);
+    breadcrumb.appendChild(crumbEl);
+  });
+  if (folder) subjectCrumb.classList.remove('active');
+
+  const childFolders = state.folders.filter(f => folder
+    ? f.parentId===folderId
+    : (f.subjectKey||DEFAULT_SUBJECT_KEY)===subjectKey && !f.parentId);
+  const childDecks = state.decks.filter(d => folder
+    ? d.folderId===folderId
+    : (d.subject||DEFAULT_SUBJECT_KEY)===subjectKey && !d.folderId);
+  const allDecks = folder
+    ? state.decks.filter(d=>folderSubtreeIds(folderId).includes(d.folderId))
+    : state.decks.filter(d=>(d.subject||DEFAULT_SUBJECT_KEY)===subjectKey);
+
+  // ── one action bar for both container kinds, same order ──
+  const bar = el('div',{class:'ui-action-bar',style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px'},
     el('div',{},
-      el('div',{style:`font-weight:900;font-size:20px;color:${s.defaultColor}`},s.name),
-      el('div',{class:'u-muted-12'},`${nOf(allDecks.length,'deck')} total`)
+      el('div',{style:`font-weight:900;font-size:20px;${folder?'':'color:'+(s.defaultColor||'var(--text)')+';'}`}, folder ? `📁 ${folder.name}` : s.name),
+      el('div',{class:'u-muted-12'},`${nOf(allDecks.length,'deck')}${childFolders.length?` · ${nOf(childFolders.length,'folder')}`:''}`)
     ),
-    el('div',{class:'ui-action-group',style:'display:flex;gap:8px'},
-      btn('+ New Folder','ghost',{onclick:()=>openCreateFolderModal(subjectKey,null)}),
-      btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal(subjectKey)}),
-      btn('▶ Study All','ghost',{onclick:()=>{ state.studyScope=[{type:'subject',id:subjectKey}]; navigate('study'); }}),
-      btn('Aa Case…','ghost',{title:'Standardize letter case / endings across this subject',
-        onclick:()=>openCaseStandardizeModal(`the subject "${s.name}"`, {
-          cards: allDecks.flatMap(d=>d.cards),
-          decks: allDecks,
-          folders: state.folders.filter(f=>(f.subjectKey||DEFAULT_SUBJECT_KEY)===subjectKey)})})
+    el('div',{class:'ui-action-group',style:'display:flex;gap:8px;flex-wrap:wrap'},
+      btn('▶ Study','ghost',{title:folder?'Study this folder now':'Study this subject now',
+        onclick:()=>{ state.studyScope= folder ? [{type:'folder',id:folderId}] : [{type:'subject',id:subjectKey}]; navigate('study'); }}),
+      btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal(subjectKey, folderId||null)}),
+      btn('+ New Folder','ghost',{title:folder?'Create a subfolder here':'Create a folder in this subject',
+        onclick:()=>openCreateFolderModal(subjectKey, folderId||null)}),
+      btn('⬇ Export','ghost',{title:folder?'Export folder as JSON':'Export subject as JSON',
+        onclick:()=>{ folder ? exportFolder(folderId) : exportSubject(subjectKey); }}),
+      btn('Aa Case…','ghost',{title:'Standardize letter case / endings across this '+(folder?'folder (subfolders included)':'subject'),
+        onclick:()=>{ const sub=new Set(folder?folderSubtreeIds(folderId):[]);
+          const decks = folder ? state.decks.filter(d=>sub.has(d.folderId)) : allDecks;
+          const folders = folder ? state.folders.filter(f=>sub.has(f.id)) : state.folders.filter(f=>(f.subjectKey||DEFAULT_SUBJECT_KEY)===subjectKey);
+          openCaseStandardizeModal(folder ? `the folder "${folder.name}" (incl. subfolders)` : `the subject "${s.name}"`,
+            { cards: decks.flatMap(d=>d.cards), decks, folders }); }}),
+      folder ? btn('📂 Move to Folder…','ghost',{onclick:()=>openMoveFolderModal(folderId)}) : null,
+      folder ? btn('📚 Move to Subject…','ghost',{onclick:()=>openMoveFolderSubjectModal(folderId)}) : null,
+      folder ? btn('✏ Rename','ghost',{title:`Rename folder ${folder.name}`,onclick:()=>openRenameFolderModal(folderId)})
+             : btn('✏️ Edit Subject','ghost',{title:'Edit this subject in Settings',onclick:()=>{ if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('subjects'); else navigate('settings'); }}),
+      folder ? btn('× Delete','danger',{title:`Delete folder ${folder.name}`,onclick:()=>deleteFolder(folderId)}) : null
     )
   );
-  c.append(breadcrumb,topBar);
+  c.append(breadcrumb, bar);
 
-  if (topFolders.length) {
-    c.appendChild(el('div',{class:'u-section-label'},'Folders'));
+  if (childFolders.length) {
+    c.appendChild(el('div',{class:'u-section-label'}, folder?'Subfolders':'Folders'));
     const folderList = el('div',{class:'card',style:'margin-bottom:16px;overflow:hidden'});
-    topFolders.forEach(folder => {
-      const fd = state.decks.filter(d=>d.folderId===folder.id);
-      const sf = state.folders.filter(f=>f.parentId===folder.id);
+    childFolders.forEach(f => {
+      const fd = state.decks.filter(d=>d.folderId===f.id);
+      const sf = state.folders.filter(x=>x.parentId===f.id);
       const due = getDueCards(fd.flatMap(d=>d.cards)).length;
-      const folderEl=el('div',{class:'folder-item',role:'button',tabindex:'0','aria-label':`Open folder ${folder.name}`,onclick:()=>{ state.deckNav={view:'folder',subjectKey,folderId:folder.id}; renderView('decks'); },
-        onkeydown:clickKeys(()=>{ state.deckNav={view:'folder',subjectKey,folderId:folder.id}; renderView('decks'); })},
-        mkIcon(folder.emoji||'📁',folder.image,'22px','4px'),
+      const folderEl=el('div',{class:'folder-item',role:'button',tabindex:'0','aria-label':`Open folder ${f.name}`,
+        onclick:()=>{ state.deckNav={view:'folder',subjectKey,folderId:f.id}; renderView('decks'); },
+        onkeydown:clickKeys(()=>{ state.deckNav={view:'folder',subjectKey,folderId:f.id}; renderView('decks'); })},
+        mkIcon(f.emoji||'📁',f.image,'22px','4px'),
         el('div',{style:'flex:1;min-width:0'},
-          el('div',{class:'folder-name'},folder.name),
+          el('div',{class:'folder-name'},f.name),
           el('div',{class:'folder-meta'},`${fd.length} deck${fd.length!==1?'s':''}${sf.length?` · ${sf.length} subfolder${sf.length!==1?'s':''}`:''} ${due>0?`· ${due} due`:''}`)
         ),
         el('div',{class:'folder-actions'},
-          btn('▶','ghost',{small:true,title:'Study this folder now','aria-label':`Study folder ${folder.name} now`,onclick:e=>{e.stopPropagation();state.studyScope=[{type:'folder',id:folder.id}];navigate('study');}}),
-          btn('⬇','ghost',{small:true,title:'Export folder as JSON','aria-label':`Export folder ${folder.name} as JSON`,onclick:e=>{e.stopPropagation();exportFolder(folder.id);}}),
-          btn('📂','ghost',{small:true,title:'Move to Folder…','aria-label':`Move folder ${folder.name} into another folder`,onclick:e=>{e.stopPropagation();openMoveFolderModal(folder.id);}}),
-          btn('📚','ghost',{small:true,title:'Move to Subject…','aria-label':`Move folder ${folder.name} to another subject`,onclick:e=>{e.stopPropagation();openMoveFolderSubjectModal(folder.id);}}),
-          btn('✏','ghost',{small:true,title:'Rename folder','aria-label':`Rename folder ${folder.name}`,onclick:e=>{e.stopPropagation();openRenameFolderModal(folder.id);}}),
-          btn('×','danger',{small:true,title:'Delete folder','aria-label':`Delete folder ${folder.name}`,onclick:e=>{e.stopPropagation();deleteFolder(folder.id);}})
+          btn('▶','ghost',{small:true,title:'Study this folder now','aria-label':`Study folder ${f.name} now`,onclick:e=>{e.stopPropagation();state.studyScope=[{type:'folder',id:f.id}];navigate('study');}}),
+          btn('⬇','ghost',{small:true,title:'Export folder as JSON','aria-label':`Export folder ${f.name} as JSON`,onclick:e=>{e.stopPropagation();exportFolder(f.id);}}),
+          btn('📂','ghost',{small:true,title:'Move to Folder…','aria-label':`Move folder ${f.name} into another folder`,onclick:e=>{e.stopPropagation();openMoveFolderModal(f.id);}}),
+          btn('📚','ghost',{small:true,title:'Move to Subject…','aria-label':`Move folder ${f.name} to another subject`,onclick:e=>{e.stopPropagation();openMoveFolderSubjectModal(f.id);}}),
+          btn('✏','ghost',{small:true,title:'Rename folder','aria-label':`Rename folder ${f.name}`,onclick:e=>{e.stopPropagation();openRenameFolderModal(f.id);}}),
+          btn('×','danger',{small:true,title:'Delete folder','aria-label':`Delete folder ${f.name}`,onclick:e=>{e.stopPropagation();deleteFolder(f.id);}})
         ),
         el('span',{style:'color:var(--muted);font-size:16px;margin-left:4px'},'›')
       );
-      makeDraggable(folderEl, 'folder', folder.id);
-      makeDropTarget(folderEl, folder.id, subjectKey);
+      makeDraggable(folderEl, 'folder', f.id);
+      makeDropTarget(folderEl, f.id, f.subjectKey);
       folderList.appendChild(folderEl);
     });
     c.appendChild(folderList);
   }
 
-  if (topDecks.length) {
+  if (childDecks.length) {
     c.appendChild(el('div',{class:'u-section-label'},'Decks'));
-    renderSelectableDeckGrid(c, topDecks);
+    renderSelectableDeckGrid(c, childDecks);
   }
 
-  if (!topFolders.length && !topDecks.length)
-    c.appendChild(el('div',{class:'empty-state'},el('div',{class:'empty-icon'},'📂'),el('div',{class:'empty-title'},'No content yet'),el('div',{class:'empty-sub'},'Create a folder or deck for this subject'),
+  if (!childFolders.length && !childDecks.length)
+    c.appendChild(el('div',{class:'empty-state'},el('div',{class:'empty-icon'},'📂'),
+      el('div',{class:'empty-title'}, folder?'Empty folder':'No content yet'),
+      el('div',{class:'empty-sub'}, folder?'Add decks or subfolders here':'Create a folder or deck for this subject'),
       el('div',{style:'display:flex;gap:8px;justify-content:center;margin-top:4px'},
-        btn('+ New Folder','ghost',{onclick:()=>openCreateFolderModal(subjectKey,null)}),
-        btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal(subjectKey)})
+        btn('+ New Folder','ghost',{onclick:()=>openCreateFolderModal(subjectKey, folderId||null)}),
+        btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal(subjectKey, folderId||null)})
       )
     ));
 }
 
-function renderFolderView(c, folderId) {
-  const folder = state.folders.find(f=>f.id===folderId);
-  if (!folder) { state.deckNav={view:'subjects'}; renderView('decks'); return; }
-  const s = getSubjectSafe(folder.subjectKey);
-
-  const chain = [];
-  let cur = folder;
-  while (cur) { chain.unshift(cur); cur = state.folders.find(f=>f.id===cur.parentId); }
-
-  const subjectCrumb = el('span',{class:'breadcrumb-part',onclick:()=>{ state.deckNav={view:'subject',subjectKey:folder.subjectKey}; renderView('decks'); }},s.name);
-  makeDropTarget(subjectCrumb, null, folder.subjectKey); // drop here = move to the subject's top level
-  const breadcrumb = el('div',{class:'breadcrumb'},
-    el('span',{class:'breadcrumb-part',onclick:()=>{ state.deckNav={view:'subjects'}; renderView('decks'); }},'📚 Decks'),
-    el('span',{class:'breadcrumb-sep'},'›'),
-    subjectCrumb
-  );
-  chain.forEach((f,i) => {
-    breadcrumb.append(el('span',{class:'breadcrumb-sep'},'›'));
-    const isLast = i===chain.length-1;
-    const crumbEl=el('span',{class:`breadcrumb-part${isLast?' active':''}`,onclick:isLast?null:()=>{ state.deckNav={view:'folder',subjectKey:f.subjectKey,folderId:f.id}; renderView('decks'); }},f.name);
-    if (!isLast) makeDropTarget(crumbEl, f.id, f.subjectKey); // drop here = move into this ancestor folder
-    breadcrumb.appendChild(crumbEl);
-  });
-
-  const subFolders = state.folders.filter(f=>f.parentId===folderId);
-  const folderDecks = state.decks.filter(d=>d.folderId===folderId);
-  const topBar = el('div',{class:'ui-action-bar',style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px'},
-    el('div',{},el('div',{style:'font-size:22px;font-weight:900'},`📁 ${folder.name}`),el('div',{class:'u-muted-12'},`${nOf(folderDecks.length,'deck')}`)),
-    el('div',{class:'ui-action-group',style:'display:flex;gap:8px'},
-      btn('+ Subfolder','ghost',{onclick:()=>openCreateFolderModal(folder.subjectKey,folderId)}),
-      btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal(folder.subjectKey,folderId)}),
-      btn('▶ Study Folder','ghost',{onclick:()=>{ state.studyScope=[{type:'folder',id:folderId}]; navigate('study'); }}),
-      btn('📂 Move to Folder…','ghost',{title:'Move this folder into another folder (or a subject\'s top level)',onclick:()=>openMoveFolderModal(folderId)}),
-      btn('📚 Move to Subject…','ghost',{onclick:()=>openMoveFolderSubjectModal(folderId)}),
-      btn('⬇️ Export Folder','ghost',{onclick:()=>exportFolder(folderId)}),
-      btn('Aa Case…','ghost',{title:'Standardize letter case / endings across this folder (subfolders included)',
-        onclick:()=>{ const sub=new Set(folderSubtreeIds(folderId));
-          openCaseStandardizeModal(`the folder "${folder.name}" (incl. subfolders)`, {
-            cards: cardsInFolderSubtree(folderId),
-            decks: state.decks.filter(d=>sub.has(d.folderId)),
-            folders: state.folders.filter(f=>sub.has(f.id))}); }})
-    )
-  );
-  c.append(breadcrumb,topBar);
-
-  if (subFolders.length) {
-    c.appendChild(el('div',{class:'u-section-label'},'Subfolders'));
-    const subList = el('div',{class:'card',style:'margin-bottom:16px;overflow:hidden'});
-    subFolders.forEach(sf => {
-      const sfd = state.decks.filter(d=>d.folderId===sf.id);
-      const sfEl=el('div',{class:'folder-item',role:'button',tabindex:'0','aria-label':`Open subfolder ${sf.name}`,onclick:()=>{ state.deckNav={view:'folder',subjectKey:sf.subjectKey,folderId:sf.id}; renderView('decks'); },
-        onkeydown:clickKeys(()=>{ state.deckNav={view:'folder',subjectKey:sf.subjectKey,folderId:sf.id}; renderView('decks'); })},
-        mkIcon(sf.emoji||'📁',sf.image,'22px','4px'),
-        el('div',{style:'flex:1'},el('div',{class:'folder-name'},sf.name),el('div',{class:'folder-meta'},`${sfd.length} deck${sfd.length!==1?'s':''}`)),
-        el('div',{class:'folder-actions'},
-          btn('📂','ghost',{small:true,title:'Move to Folder…','aria-label':`Move subfolder ${sf.name} into another folder`,onclick:e=>{e.stopPropagation();openMoveFolderModal(sf.id);}}),
-          btn('📚','ghost',{small:true,title:'Move to Subject…','aria-label':`Move subfolder ${sf.name} to another subject`,onclick:e=>{e.stopPropagation();openMoveFolderSubjectModal(sf.id);}}),
-          btn('✏','ghost',{small:true,title:'Rename subfolder','aria-label':`Rename subfolder ${sf.name}`,onclick:e=>{e.stopPropagation();openRenameFolderModal(sf.id);}}),
-          btn('×','danger',{small:true,title:'Delete subfolder','aria-label':`Delete subfolder ${sf.name}`,onclick:e=>{e.stopPropagation();deleteFolder(sf.id);}})
-        ),
-        el('span',{style:'color:var(--muted);font-size:16px;margin-left:4px'},'›')
-      );
-      makeDraggable(sfEl, 'folder', sf.id);
-      makeDropTarget(sfEl, sf.id, sf.subjectKey);
-      subList.appendChild(sfEl);
-    });
-    c.appendChild(subList);
-  }
-
-  if (folderDecks.length) {
-    c.appendChild(el('div',{class:'u-section-label'},'Decks'));
-    renderSelectableDeckGrid(c, folderDecks);
-  }
-
-  if (!subFolders.length && !folderDecks.length)
-    c.appendChild(el('div',{class:'empty-state'},el('div',{class:'empty-icon'},'📂'),el('div',{class:'empty-title'},'Empty folder'),el('div',{class:'empty-sub'},'Add decks or subfolders here'),
-      el('div',{style:'display:flex;gap:8px;justify-content:center;margin-top:4px'},
-        btn('+ Subfolder','ghost',{onclick:()=>openCreateFolderModal(folder.subjectKey,folderId)}),
-        btn('+ New Deck','primary',{onclick:()=>openCreateDeckModal(folder.subjectKey,folderId)})
-      )
-    ));
+/** Export every deck + folder of a subject as one collection envelope. */
+function exportSubject(subjectKey) {
+  const subjects = typeof getAllSubjects === 'function' ? getAllSubjects() : {};
+  const name = (subjects[subjectKey] && subjects[subjectKey].name) || subjectKey;
+  const folders = state.folders.filter(f=>(f.subjectKey||DEFAULT_SUBJECT_KEY)===subjectKey);
+  const decks = state.decks.filter(d=>(d.subject||DEFAULT_SUBJECT_KEY)===subjectKey);
+  if (!decks.length && !folders.length) { showToast('Nothing to export in this subject'); return; }
+  const citedSourceIds=new Set(decks.flatMap(d=>d.cards).map(c=>c.citation?.sourceId).filter(Boolean));
+  const citedSources=(state.sources||[]).filter(s=>citedSourceIds.has(s.id));
+  const a=document.createElement('a');
+  a.href='data:application/json,'+encodeURIComponent(JSON.stringify(scimaStamp({version:2,exportedAt:new Date().toISOString(),decks:decks.map(d=>scimaDeckToShare(_resolveDeckCitations(d))),folders,citedSources},'share','collection'),null,2));
+  a.download=`SCIMA-subject-${name.replace(/[^a-z0-9]/gi,'-').toLowerCase()}-${today()}.json`;
+  a.click();
+  showToast(`Subject "${name}" exported — ${nOf(decks.length,'deck')} ✓`);
 }
 
 // ── Case standardization (batch text cleanup) ────────────────────────────
@@ -792,8 +780,8 @@ function renderDeckCard(deck, grid) {
       btn('▶ Study Now','primary',{full:true,title:'Study this deck now',onclick:e=>{e.stopPropagation();state.studyScope=[{type:'deck',id:deck.id}];navigate('study');}}),
       el('div',{style:'display:flex;gap:6px'},
         btn('Manage Cards','ghost',{full:true,onclick:()=>openDeckDetail(deck.id)}),
-        btn('🖨️','ghost',{small:true,title:'Export double-sided PDF',onclick:e=>{e.stopPropagation();exportDeckPDF(deck.id);}}),
         btn('⬇️','ghost',{small:true,title:'Export deck as JSON',onclick:e=>{e.stopPropagation();exportSingleDeck(deck.id);}}),
+        btn('🖨️','ghost',{small:true,title:'Export double-sided PDF',onclick:e=>{e.stopPropagation();exportDeckPDF(deck.id);}}),
         btn('Aa','ghost',{small:true,title:'Standardize letter case / endings for this deck',onclick:e=>{e.stopPropagation();openCaseStandardizeModal(`the deck "${deck.name}"`,{cards:deck.cards,decks:[deck],folders:[]});}})
       )
     )

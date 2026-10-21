@@ -115,6 +115,10 @@ body::after {
 #page-tabs:empty ~ .view { padding-top: 14px; }
 #page-tabs ~ .view > :first-child { margin-top: 8px; margin-left: 28px; }
 #page-tabs ~ .view > .section-sub { margin-left: 28px; }
+/* A breadcrumb directly followed by an action bar (the decks browser's
+   subject/folder containers) needs the same gutter indent — otherwise the
+   bar's title lands under the floating ⓘ mark. */
+#page-tabs ~ .view > .breadcrumb + .ui-action-bar { margin-left: 28px; }
 #page-tabs .tab-bar { width: auto; margin-bottom: 0; }
 .page-tab-icon { font-size: 13px; line-height: 1; }
 
@@ -309,6 +313,7 @@ body.nav-open #sidebar-version {
   /* narrower gutter: indent the header past the button column (14+36+8) */
   #page-tabs ~ .view > :first-child { margin-left: 44px; }
   #page-tabs ~ .view > .section-sub { margin-left: 44px; }
+  #page-tabs ~ .view > .breadcrumb + .ui-action-bar { margin-left: 44px; }
   #page-tabs:not(:empty) ~ .view { padding-top: 16px; }
 }
 
