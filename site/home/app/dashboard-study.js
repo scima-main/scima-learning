@@ -78,14 +78,37 @@ function sessionTimeUp() {
 }
 
 // ── Exam mode (free navigation, grade & reveal at the end) ─────────────────
-/** Stores a typed/boxed answer without grading it. */
-function saveExamAnswer(card, answers) {
+/** Writes (or clears) the per-card answer cache. An all-blank entry is
+ *  removed so "saved k/N" and the grading pass keep treating it as
+ *  unanswered. */
+function writeExamCache(card, answers) {
   const sess = studySession;
   sess.recorded = sess.recorded || {};
-  sess.recorded[card.id] = { answers: (answers || []).map(a => (a || '').trim()),
-                             ms: Date.now() - (sess._cardStart || Date.now()) };
+  const clean = (answers || []).map(a => (a || '').trim());
+  if (clean.some(a => a)) {
+    sess.recorded[card.id] = { answers: clean,
+                               ms: Date.now() - (sess._cardStart || Date.now()) };
+  } else {
+    delete sess.recorded[card.id];
+  }
+}
+/** Stores a typed/boxed answer without grading it. */
+function saveExamAnswer(card, answers) {
+  writeExamCache(card, answers);
   showToast('Answer saved — 🏁 Finish & reveal grades everything', 2000);
-  sess._examNavRefresh?.();
+  studySession._examNavRefresh?.();
+}
+/** Caches whatever is in the live inputs of the CURRENT card — called on
+ *  every question change and before grading, so half-typed answers survive
+ *  navigation even without pressing 💾 (and each card's boxes are then
+ *  re-seeded from its own cache on render, or cleared if it has none). */
+function cacheExamAnswer() {
+  const sess = studySession;
+  if (!sess || !sess.exam || !sess.active) return;
+  const card = sess.queue[sess.idx];
+  if (!card) return;
+  const vals = sess._examIsMulti ? (sess.quizAnswers || []) : [(sess.quizAnswer || '')];
+  writeExamCache(card, vals);
 }
 /** Grades every recorded answer at reveal time, reusing the same matchers
  *  the live Check buttons use (quizMatch / greedy multi pairing / per-gap). */
@@ -123,6 +146,7 @@ function examGradeAll(sess) {
 function examFinish() {
   const sess = studySession;
   if (!sess || !sess.active) return;
+  cacheExamAnswer();                 // don't drop what's typed on screen
   clearNextTimer(); clearQuizTimer(); clearSessionClock();
   const results = examGradeAll(sess);
   sess.examResults = results;
@@ -839,6 +863,7 @@ function renderStudySession(c) {
     refreshNav();
     sess._examNavRefresh = refreshNav;
     const go = d => {
+      cacheExamAnswer();          // keep this card's typing before leaving it
       sess.idx = Math.max(0, Math.min(sess.queue.length - 1, sess.idx + d));
       clearQuizTimer(); clearNextTimer();
       renderStudySession(document.getElementById('view-study'));
@@ -1166,8 +1191,9 @@ function renderGapCard(card, citBadge) {
 
   if (sess.exam) { sess._examMeta = sess._examMeta || {};
     sess._examMeta[card.id] = { expected: answersToCheck, gaps: true, required: answersToCheck.length };
+    sess._examIsMulti = true;
     const rec = (sess.recorded || {})[card.id];
-    if (rec) sess.quizAnswers = [...rec.answers];
+    sess.quizAnswers = rec ? [...rec.answers] : [];
   }
   const inputAreas=[];
   for(let i=0;i<answersToCheck.length;i++){
@@ -1688,8 +1714,13 @@ function renderQuizCard(card, citBadge, scrollArea) {
 
   if (sess.exam) { sess._examMeta = sess._examMeta || {};
     sess._examMeta[card.id] = { expected: expectedAnswers, isMulti, required: requiredAnswers };
+    sess._examIsMulti = isMulti;
+    // Per-card input state: restore this card's cached answers, or CLEAR the
+    // session-level fields so the previous question's typing never bleeds
+    // into this one's boxes.
     const rec = (sess.recorded || {})[card.id];
-    if (rec) { sess.quizAnswers = [...rec.answers]; sess.quizAnswer = rec.answers[0] || ''; }
+    sess.quizAnswer = rec ? (rec.answers[0] || '') : '';
+    sess.quizAnswers = rec ? [...rec.answers] : [];
   }
   const inputWrap=el('div',{});
   if(isMarkscheme) inputWrap.appendChild(el('div',{style:'font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px'},`Write your answer — cover ${requiredAnswers} key point${requiredAnswers===1?'':'s'} for full marks.`));

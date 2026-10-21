@@ -305,3 +305,42 @@ def test_global_time_limit_ends_session(page, site_base, seeded):
     page.wait_for_function("() => !studySession || !studySession.active",
                            timeout=8000)
     expect(page.locator("#view-study")).to_contain_text("Session Complete!")
+
+
+def test_exam_inputs_clear_on_new_card_and_restore_cached(page, site_base,
+                                                          seeded):
+    """Navigation must never bleed one question's typing into the next, and
+    each card's own cached/saved answers come back when you return."""
+    seeded(mf_state=_multi_state())
+    pages.goto_app(page, site_base, "/study/")
+    _set_qp(page, types=["multi"], exam=True, multiRequired=2, shuffle=False)
+    page.evaluate("() => renderView('study')")
+    page.locator("#view-study .card", has_text="Written Quiz") \
+        .get_by_role("button", name="Start").click()
+    page.wait_for_selector(".quiz-input-area")
+    vals = lambda: page.evaluate(
+        "() => [...document.querySelectorAll('.quiz-input-area')]"
+        ".map(i => i.value)")
+    # type on Q1 WITHOUT saving, move on: Q2's boxes are clear
+    page.locator(".quiz-input-area").first.fill("alpha")
+    page.locator(".quiz-input-area").nth(1).fill("beta")
+    page.get_by_role("button", name="Next →").click()
+    page.wait_for_timeout(200)
+    assert vals() == ["", ""], vals()
+    # …and coming back restores the auto-cached typing
+    page.get_by_role("button", name="← Prev").click()
+    page.wait_for_timeout(200)
+    assert vals() == ["alpha", "beta"], vals()
+    # explicit save, wander two cards, return: still restored, and only the
+    # answered card counts as recorded
+    page.get_by_role("button", name="💾 Save answer").click()
+    page.get_by_role("button", name="Next →").click()
+    page.get_by_role("button", name="Next →").click()
+    page.wait_for_timeout(200)
+    assert vals() == ["", ""]
+    page.get_by_role("button", name="← Prev").click()
+    page.get_by_role("button", name="← Prev").click()
+    page.wait_for_timeout(200)
+    assert vals() == ["alpha", "beta"]
+    assert page.evaluate("() => Object.keys(studySession.recorded)") == \
+        [page.evaluate("() => studySession.queue[0].id")]
