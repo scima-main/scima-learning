@@ -303,9 +303,12 @@ button; and bootstrap's init() resolves the hash's FIRST path
   level), and subject and folder containers render through ONE view: the
   container name sits on its own line and the actions form ONE merged
   segmented bar (the analytics/quests `.tab-bar` anatomy) with the same
-  labels in the same order at every level (▶ Study · + New Deck ·
-  + New Folder · ⬇ Export · Aa Case… · then folder-only 📂 Move /
-  📚 Move-to-subject / ✏ Rename / × Delete, or ✏️ Edit Subject). Child
+  labels in the same order at every level — and one ordering rule set:
+  use → edit → export → move → rename/delete → create, the two most
+  important actions at the ENDS, highlighted primary LAST, never mid-bar
+  (▶ Study · Aa Case… · ⬇ Export · then folder-only 📂 Move /
+  📚 Move-to-subject / ✏ Rename / × Delete, or ✏️ Edit Subject ·
+  + New Folder · + New Deck). Child
   folder rows carry the same six actions at both levels; `exportSubject()`
   ships a subject as a stamped `collection` envelope.
 - **Destructive-action gate**: every delete (deck, folder, card, library

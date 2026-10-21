@@ -387,11 +387,15 @@ def test_subject_and_folder_bars_share_one_layout(page, site_base, seeded):
     page.wait_for_timeout(300)
     folder_bar = page.locator(".container-actions").first
     folder_labels = folder_bar.locator("button").all_inner_texts()
-    assert subject_labels == ["▶ Study", "+ New Deck", "+ New Folder",
-                              "⬇ Export", "Aa Case…", "✏️ Edit Subject"], subject_labels
-    assert folder_labels[:5] == subject_labels[:5], folder_labels
-    assert folder_labels[5:] == ["📂 Move to Folder…", "📚 Move to Subject…",
-                                 "✏ Rename", "× Delete"], folder_labels
+    assert subject_labels == ["▶ Study", "Aa Case…", "⬇ Export",
+                              "✏️ Edit Subject", "+ New Folder", "+ New Deck"], subject_labels
+    assert folder_labels == ["▶ Study", "Aa Case…", "⬇ Export",
+                             "📂 Move to Folder…", "📚 Move to Subject…",
+                             "✏ Rename", "× Delete",
+                             "+ New Folder", "+ New Deck"], folder_labels
+    # shared edges: ▶ Study opens the bar, + New Deck (primary) closes it
+    assert folder_labels[:3] == subject_labels[:3]
+    assert folder_labels[-2:] == subject_labels[-2:]
 
 
 def test_subject_rows_are_folder_rows_with_export(page, site_base, seeded):
@@ -409,3 +413,41 @@ def test_subject_rows_are_folder_rows_with_export(page, site_base, seeded):
         row.locator("button[title='Export subject as JSON']").click()
     name = dl.value.suggested_filename
     assert name.startswith("SCIMA-subject-") and name.endswith(".json"), name
+
+
+def test_action_orders_primary_at_the_ends(page, site_base, seeded):
+    """Bars order use → edit → export → move → create, and the highlighted
+    primary always sits at an END of the bar — never in the middle."""
+    seeded("preset:demo")
+    pages.goto_app(page, site_base, "/decks/")
+    # root bar: manage → creations, primary closes the bar
+    root = [t.strip() for t in page.locator(".container-actions button").all_inner_texts()]
+    assert root == ["📚 Manage Subjects", "+ New Folder", "+ New Deck"], root
+    assert "primary" in page.locator(".container-actions button").nth(2).get_attribute("class")
+    # deck card secondary row (inside a subject): use → edit → exports
+    page.locator(".subject-tile", has_text="Miscellaneous").click()
+    page.wait_for_timeout(300)
+    page.locator(".folder-item", has_text="Languages").click()
+    page.wait_for_timeout(400)
+    card = page.locator(".deck-card").first
+    labels = [t.strip() for t in card.locator("button").all_inner_texts()]
+    # …▶ Study Now (primary, full width) then use → edit → exports
+    assert labels[-4:] == ["Manage Cards", "Aa", "⬇️", "🖨️"], labels
+    # deck-grid selection bar: use → move → utilities → primary LAST
+    card.locator(".deck-name").click()          # click the tile itself to select
+    page.wait_for_timeout(300)
+    sel = page.locator(".selection-bar")
+    labels = [b.inner_text().strip() for b in sel.locator("button").all()]
+    assert labels == ["▶ Study Selected", "Move to Subject…",
+                      "Select All", "Clear", "Move to Folder…"], labels
+    assert "primary" in sel.locator("button").nth(len(labels) - 1).get_attribute("class")
+    # card-grid selection bar inside deck detail: primary LAST here too
+    card.locator("button", has_text="Manage Cards").click()
+    page.wait_for_timeout(600)
+    page.locator(".card.card-selectable").first.click()
+    page.wait_for_timeout(300)
+    sel2 = page.locator(".selection-bar")
+    labels2 = [b.inner_text().strip() for b in sel2.locator("button").all()]
+    assert labels2 == ["▶ Study Selected", "Aa Case…",
+                       "Select All", "Clear", "Move to Deck…"], labels2
+    assert "primary" in sel2.locator("button").nth(len(labels2) - 1).get_attribute("class")

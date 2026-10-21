@@ -304,9 +304,9 @@ function renderDecksHome(c) {
     el('div',{class:'section-title'},'Decks'),
     el('div',{class:'section-sub',style:'margin-bottom:10px'},`${state.decks.length} deck${state.decks.length!==1?'s':''} · ${state.folders.length} folder${state.folders.length!==1?'s':''}`),
     el('div',{class:'tab-bar container-actions'},
-      (()=>{ const b=actionTab('+ New Deck',{variant:'primary',onclick:()=>openCreateDeckModal()}); b.id='tutorial-target-new-deck'; return b; })(),
+      actionTab('📚 Manage Subjects',{title:'Add, rename or delete subjects in Settings',onclick:()=>{ if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('subjects'); else navigate('settings'); }}),
       actionTab('+ New Folder',{title:'Create a folder — pick its subject',onclick:()=>openCreateFolderModal(null,null)}),
-      actionTab('📚 Manage Subjects',{title:'Add, rename or delete subjects in Settings',onclick:()=>{ if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('subjects'); else navigate('settings'); }}))
+      (()=>{ const b=actionTab('+ New Deck',{variant:'primary',onclick:()=>openCreateDeckModal()}); b.id='tutorial-target-new-deck'; return b; })())
   );
 
   const subjects = new Set([
@@ -397,22 +397,22 @@ function renderContainerView(c, subjectKey, folderId) {
     el('div',{class:'tab-bar container-actions'},
       actionTab('▶ Study',{title:folder?'Study this folder now':'Study this subject now',
         onclick:()=>{ state.studyScope= folder ? [{type:'folder',id:folderId}] : [{type:'subject',id:subjectKey}]; navigate('study'); }}),
-      actionTab('+ New Deck',{variant:'primary',onclick:()=>openCreateDeckModal(subjectKey, folderId||null)}),
-      actionTab('+ New Folder',{title:folder?'Create a subfolder here':'Create a folder in this subject',
-        onclick:()=>openCreateFolderModal(subjectKey, folderId||null)}),
-      actionTab('⬇ Export',{title:folder?'Export folder as JSON':'Export subject as JSON',
-        onclick:()=>{ folder ? exportFolder(folderId) : exportSubject(subjectKey); }}),
       actionTab('Aa Case…',{title:'Standardize letter case / endings across this '+(folder?'folder (subfolders included)':'subject'),
         onclick:()=>{ const sub=new Set(folder?folderSubtreeIds(folderId):[]);
           const decks = folder ? state.decks.filter(d=>sub.has(d.folderId)) : allDecks;
           const folders = folder ? state.folders.filter(f=>sub.has(f.id)) : state.folders.filter(f=>(f.subjectKey||DEFAULT_SUBJECT_KEY)===subjectKey);
           openCaseStandardizeModal(folder ? `the folder "${folder.name}" (incl. subfolders)` : `the subject "${s.name}"`,
             { cards: decks.flatMap(d=>d.cards), decks, folders }); }}),
+      actionTab('⬇ Export',{title:folder?'Export folder as JSON':'Export subject as JSON',
+        onclick:()=>{ folder ? exportFolder(folderId) : exportSubject(subjectKey); }}),
       folder ? actionTab('📂 Move to Folder…',{onclick:()=>openMoveFolderModal(folderId)}) : null,
       folder ? actionTab('📚 Move to Subject…',{onclick:()=>openMoveFolderSubjectModal(folderId)}) : null,
       folder ? actionTab('✏ Rename',{title:`Rename folder ${folder.name}`,onclick:()=>openRenameFolderModal(folderId)})
              : actionTab('✏️ Edit Subject',{title:'Edit this subject in Settings',onclick:()=>{ if (typeof gotoSettingsPanel === 'function') gotoSettingsPanel('subjects'); else navigate('settings'); }}),
-      folder ? actionTab('× Delete',{variant:'danger',title:`Delete folder ${folder.name}`,aria:`Delete folder ${folder.name}`,onclick:()=>deleteFolder(folderId)}) : null
+      folder ? actionTab('× Delete',{variant:'danger',title:`Delete folder ${folder.name}`,aria:`Delete folder ${folder.name}`,onclick:()=>deleteFolder(folderId)}) : null,
+      actionTab('+ New Folder',{title:folder?'Create a subfolder here':'Create a folder in this subject',
+        onclick:()=>openCreateFolderModal(subjectKey, folderId||null)}),
+      actionTab('+ New Deck',{variant:'primary',onclick:()=>openCreateDeckModal(subjectKey, folderId||null)})
     )
   );
   c.append(breadcrumb, bar);
@@ -786,9 +786,9 @@ function renderDeckCard(deck, grid) {
       btn('▶ Study Now','primary',{full:true,title:'Study this deck now',onclick:e=>{e.stopPropagation();state.studyScope=[{type:'deck',id:deck.id}];navigate('study');}}),
       el('div',{style:'display:flex;gap:6px'},
         btn('Manage Cards','ghost',{full:true,onclick:()=>openDeckDetail(deck.id)}),
+        btn('Aa','ghost',{small:true,title:'Standardize letter case / endings for this deck',onclick:e=>{e.stopPropagation();openCaseStandardizeModal(`the deck "${deck.name}"`,{cards:deck.cards,decks:[deck],folders:[]});}}),
         btn('⬇️','ghost',{small:true,title:'Export deck as JSON',onclick:e=>{e.stopPropagation();exportSingleDeck(deck.id);}}),
-        btn('🖨️','ghost',{small:true,title:'Export double-sided PDF',onclick:e=>{e.stopPropagation();exportDeckPDF(deck.id);}}),
-        btn('Aa','ghost',{small:true,title:'Standardize letter case / endings for this deck',onclick:e=>{e.stopPropagation();openCaseStandardizeModal(`the deck "${deck.name}"`,{cards:deck.cards,decks:[deck],folders:[]});}})
+        btn('🖨️','ghost',{small:true,title:'Export double-sided PDF',onclick:e=>{e.stopPropagation();exportDeckPDF(deck.id);}})
       )
     )
   );
@@ -853,14 +853,14 @@ function renderSelectableDeckGrid(container, decks) {
     selectionBar.append(
       el('span',{},`${selected.size} deck${selected.size>1?'s':''} selected`),
       el('span',{style:'margin-left:auto;display:flex;gap:8px'},
-        btn('Select All','ghost',{small:true,onclick:()=>{ ids.forEach(id=>selected.add(id)); anchorId=ids[ids.length-1]||anchorId; syncVisuals(); }}),
-        btn('Clear','ghost',{small:true,onclick:()=>{ selected.clear(); anchorId=null; syncVisuals(); }}),
         btn('▶ Study Selected','ghost',{small:true,onclick:()=>{
           state.studyScope=[...selected].map(id=>({type:'deck',id}));
           navigate('study');
         }}),
-        btn('Move to Folder…','primary',{small:true,onclick:()=>openMoveDecksModal([...selected])}),
-        btn('Move to Subject…','ghost',{small:true,onclick:()=>openMoveSubjectsModal([...selected])})
+        btn('Move to Subject…','ghost',{small:true,onclick:()=>openMoveSubjectsModal([...selected])}),
+        btn('Select All','ghost',{small:true,onclick:()=>{ ids.forEach(id=>selected.add(id)); anchorId=ids[ids.length-1]||anchorId; syncVisuals(); }}),
+        btn('Clear','ghost',{small:true,onclick:()=>{ selected.clear(); anchorId=null; syncVisuals(); }}),
+        btn('Move to Folder…','primary',{small:true,onclick:()=>openMoveDecksModal([...selected])})
       )
     );
   }
@@ -2711,17 +2711,17 @@ function openDeckDetail(deckId) {
     selectionBar.append(
       el('span',{},`${selected.size} card${selected.size>1?'s':''} selected`),
       el('span',{style:'margin-left:auto;display:flex;gap:8px'},
-        btn('Select All','ghost',{small:true,onclick:()=>{ cardElById.forEach((_,id)=>selected.add(id)); anchorId=[...cardElById.keys()].pop()||anchorId; syncSelectionVisuals(); }}),
-        btn('Clear','ghost',{small:true,onclick:()=>{ selected.clear(); anchorId=null; syncSelectionVisuals(); }}),
         btn('▶ Study Selected','ghost',{small:true,onclick:()=>{
           state.studyScope=[{type:'deck',id:deckId}];
           state.studyRefine.mode='cards';
           state.studyRefine.cardIds=[...selected];
           navigate('study');
         }}),
-        btn('Move to Deck…','primary',{small:true,title:'Combined destination modal · Ctrl+Alt+K = new deck · Ctrl+Alt+M = existing deck',onclick:()=>openMoveCardsModal(deckId,[...selected])}),
         btn('Aa Case…','ghost',{small:true,title:'Standardize letter case / endings on the selected cards',onclick:()=>{ const deck=state.decks.find(d=>d.id===deckId);
-          openCaseStandardizeModal(`${selected.size} selected card${selected.size!==1?'s':''}`, {cards:deck.cards.filter(c=>selected.has(c.id)),decks:[deck],folders:[]}); }})
+          openCaseStandardizeModal(`${selected.size} selected card${selected.size!==1?'s':''}`, {cards:deck.cards.filter(c=>selected.has(c.id)),decks:[deck],folders:[]}); }}),
+        btn('Select All','ghost',{small:true,onclick:()=>{ cardElById.forEach((_,id)=>selected.add(id)); anchorId=[...cardElById.keys()].pop()||anchorId; syncSelectionVisuals(); }}),
+        btn('Clear','ghost',{small:true,onclick:()=>{ selected.clear(); anchorId=null; syncSelectionVisuals(); }}),
+        btn('Move to Deck…','primary',{small:true,title:'Combined destination modal · Ctrl+Alt+K = new deck · Ctrl+Alt+M = existing deck',onclick:()=>openMoveCardsModal(deckId,[...selected])})
       )
     );
   }
