@@ -201,6 +201,9 @@
 <symbol id="i-folder-open" viewBox="0 0 24 24">
 <path d="M3.6 18.6V6.6a2 2 0 0 1 2-2h3.2a2 2 0 0 1 1.6.8l1.2 1.6h5.4a2 2 0 0 1 2 2v1.6"/><path d="m3.6 18.6 2.5-7.4a1.6 1.6 0 0 1 1.5-1.1h12.7a1.2 1.2 0 0 1 1.1 1.7l-2.4 6.4a2 2 0 0 1-1.9 1.3H5.2a1.6 1.6 0 0 1-1.6-.9Z"/>
 </symbol>
+<symbol id="i-folder-plus" viewBox="0 0 24 24">
+<path d="M3.6 6.6a2 2 0 0 1 2-2h3.2a2 2 0 0 1 1.6.8l1.2 1.6h6.8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2Z"/><path d="M12 10.2v5.2M9.4 12.8h5.2"/>
+</symbol>
 <symbol id="i-gamepad" viewBox="0 0 24 24">
 <path d="M7.6 7.8h8.8a5.4 5.4 0 0 1 5.3 4.4l.6 3.7a3 3 0 0 1-5.5 1.9l-1.2-1.6H8.4l-1.2 1.6a3 3 0 0 1-5.5-1.9l.6-3.7a5.4 5.4 0 0 1 5.3-4.4Z"/><path d="M6.6 11.6v3M5.1 13.1h3"/><circle cx="16.1" cy="12.4" r=".9" fill="currentColor" stroke="none"/><circle cx="18.1" cy="14.6" r=".9" fill="currentColor" stroke="none"/>
 </symbol>
