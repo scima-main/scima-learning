@@ -2358,12 +2358,54 @@ function openCreateDeckModal(subjectKey, folderId) {
       rebuildPreview();
     });
 
-    // File drop zone (accepts .txt, .md, .pdf)
-    const txtFileInput = el('input',{type:'file',accept:'.txt,.md,.pdf',style:'display:none'});
+    // ── Spreadsheet panel: toggle + column mapping + header row ──
+    const sheetWrap = el('div',{class:'field',style:'margin-bottom:10px;display:none'});
+    const sheetChk = el('input',{type:'checkbox',style:'width:15px;height:15px;accent-color:var(--blue);cursor:pointer;flex-shrink:0'});
+    const sheetSummary = el('span',{style:'font-size:12px;font-weight:700'},scLbl('table','Spreadsheet columns'));
+    sheetWrap.appendChild(el('label',{style:'display:flex;align-items:center;gap:8px;cursor:pointer'},sheetChk,sheetSummary));
+    const sheetMapRow = el('div',{style:'display:flex;gap:8px;flex-wrap:wrap;margin-top:6px'});
+    const sheetSelStyle = 'flex:1;min-width:90px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text);font-size:12px;font-family:inherit;outline:none';
+    const mkSheetSel = (labelText, allowNone) => {
+      const wrap = el('label',{style:'flex:1;min-width:96px;display:flex;flex-direction:column;gap:3px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em'},labelText);
+      const sel = el('select',{style:sheetSelStyle});
+      wrap.appendChild(sel); sheetMapRow.appendChild(wrap);
+      return sel;
+    };
+    const sheetFrontSel = mkSheetSel('Front');
+    const sheetBackSel = mkSheetSel('Back');
+    const sheetHintSel = mkSheetSel('Hint (optional)');
+    sheetWrap.appendChild(sheetMapRow);
+    const sheetHeaderChk = el('input',{type:'checkbox',style:'width:15px;height:15px;accent-color:var(--blue);cursor:pointer;flex-shrink:0'});
+    sheetWrap.appendChild(el('label',{style:'display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--muted);cursor:pointer'},
+      sheetHeaderChk, el('span',{},'First row is a header — skip it')));
+    let _sheetCols = 0;
+    function fillSheetSelects(cols, keep) {
+      if (_sheetCols === cols && keep) return;
+      _sheetCols = cols;
+      const opts = (withNone) => {
+        const out = [];
+        for (let i = 0; i < cols; i++) out.push([String(i), 'Column ' + (i + 1)]);
+        if (withNone) out.push(['-1', '(unused)']);
+        return out;
+      };
+      const refill = (sel, list, want) => {
+        sel.innerHTML = '';
+        list.forEach(([v, t]) => sel.appendChild(el('option', { value: v }, t)));
+        sel.value = list.some(([v]) => v === want) ? want : (list[0] ? list[0][0] : '-1');
+      };
+      refill(sheetFrontSel, opts(false), '0');
+      refill(sheetBackSel, opts(false), cols > 1 ? '1' : '0');
+      refill(sheetHintSel, opts(true), '-1');
+    }
+    [sheetFrontSel, sheetBackSel, sheetHintSel, sheetHeaderChk].forEach(n => n.addEventListener('change', rebuildPreview));
+    sheetChk.addEventListener('change', rebuildPreview);
+
+    // File drop zone (accepts .txt, .md, .pdf, .csv, .tsv)
+    const txtFileInput = el('input',{type:'file',accept:'.txt,.md,.pdf,.csv,.tsv',style:'display:none'});
     const txtDropZone = el('label',{style:'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;border:2px dashed rgba(255,255,255,0.15);border-radius:10px;cursor:pointer;text-align:center;margin-bottom:10px'},
       el('div',{style:'font-size:26px'},scIcon('file-text')),
       el('div',{style:'font-size:13px;font-weight:700'},'Click to choose file'),
-      el('div',{class:'u-muted-11'},'.txt · .md · .pdf')
+      el('div',{class:'u-muted-11'},'.txt · .md · .pdf · .csv · .tsv')
     );
     txtDropZone.appendChild(txtFileInput);
 
@@ -2403,6 +2445,72 @@ function openCreateDeckModal(subjectKey, folderId) {
       return null;
     }
 
+    // ── Spreadsheet pasting (Quizlet-style importer) ──────────────────
+    // Copy/paste from LibreOffice/Excel/Sheets arrives as a quoted-CSV-ish
+    // grid (tabs from the clipboard, commas from .csv). splitSheetRows()
+    // parses it properly (quoted fields, doubled quotes, newlines inside
+    // quotes); detectSpreadsheet() picks the delimiter whose column count
+    // is consistent across the rows; guessSheetHeader() spots a title row
+    // (familiar names, or a text row sitting atop numeric/URL columns).
+    function splitSheetRows(text, delim) {
+      const rows = []; let row = []; let field = ''; let inQ = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (inQ) {
+          if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+          else field += ch;
+        } else if (ch === '"') inQ = true;
+        else if (ch === delim) { row.push(field); field = ''; }
+        else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+        else if (ch === '\r') { /* line ending */ }
+        else field += ch;
+      }
+      row.push(field); rows.push(row);
+      return rows.filter(r => r.some(c => c.trim() !== ''));
+    }
+    function detectSpreadsheet(text) {
+      if (!text || !text.trim()) return null;
+      for (const delim of ['\t', ',', ';', '|']) {
+        const rows = splitSheetRows(text, delim);
+        if (rows.length < 2) continue;
+        const freq = {};
+        rows.forEach(r => { freq[r.length] = (freq[r.length] || 0) + 1; });
+        const cols = Object.keys(freq).map(Number).filter(c => c >= 2)
+          .sort((a, b) => (freq[b] - freq[a]) || (b - a))[0];
+        if (!cols) continue;
+        const good = rows.filter(r => r.length === cols);
+        if (good.length / rows.length < 0.8) continue;
+        // Prose guard for the weak delimiters: real CSV cells don't usually
+        // carry a leading space, but "sentence, clause" splits do — don't
+        // hijack plain-text imports that merely contain uniform commas.
+        if (delim !== '\t') {
+          let spaced = 0, total = 0;
+          good.forEach(r => r.slice(1).forEach(c => { total++; if (/^\s+\S/.test(c)) spaced++; }));
+          if (total && spaced / total > 0.3) continue;
+        }
+        const delimName = delim === '\t' ? 'tab' : delim === ',' ? 'comma' : delim === ';' ? 'semicolon' : 'pipe';
+        return { delim, delimName, rows: good, cols };
+      }
+      return null;
+    }
+    function guessSheetHeader(rows) {
+      if (!rows || rows.length < 2) return false;
+      const familiar = /^(front|term|question|prompt|word|name|back|definition|answer|meaning|explanation|hint|description|side\s*[ab12])$/i;
+      const head = rows[0];
+      if (head.some(c => familiar.test((c || '').trim()))) return true;
+      const classOf = v => { const t = (v || '').trim(); if (!t) return 'empty';
+        if (/^-?\d+([.,]\d+)*%?$/.test(t)) return 'num';
+        if (/^(https?:\/\/|www\.|\w+:\/\/)/i.test(t)) return 'url';
+        return 'text'; };
+      return head.some((h, ci) => {
+        if (classOf(h) !== 'text') return false;
+        const rest = rows.slice(1).map(r => classOf(r[ci]));
+        if (!rest.length) return false;
+        const strong = rest.filter(c => c === 'num' || c === 'url').length;
+        return strong / rest.length >= 0.6;
+      });
+    }
+
     function parseTextToCards(text) {
       const re = getDelimiterRegex();
       if (!re) return [];
@@ -2421,14 +2529,39 @@ function openCreateDeckModal(subjectKey, folderId) {
         .filter(Boolean);
     }
 
+    let _sheetRaw = null;
     function rebuildPreview() {
       const raw = rawText || pasteArea.value;
-      parsedTextCards = parseTextToCards(raw);
+      const sheet = detectSpreadsheet(raw);
+      if (raw !== _sheetRaw) {           // fresh content: re-run auto-detection
+        _sheetRaw = raw;
+        sheetChk.checked = !!sheet;
+        if (sheet) {
+          fillSheetSelects(sheet.cols, false);
+          sheetHeaderChk.checked = guessSheetHeader(sheet.rows);
+        }
+      }
+      const useSheet = sheet && sheetChk.checked;
+      sheetWrap.style.display = sheet ? '' : 'none';
+      delimWrap.style.display = useSheet ? 'none' : '';
+      if (sheet) {
+        fillSheetSelects(sheet.cols, true);
+        sheetSummary.replaceChildren(scLbl('table', `Spreadsheet columns — ${sheet.delimName}, ${sheet.cols} columns`));
+      }
+      if (useSheet) {
+        const f = Number(sheetFrontSel.value), b = Number(sheetBackSel.value), h = Number(sheetHintSel.value);
+        const body = sheetHeaderChk.checked ? sheet.rows.slice(1) : sheet.rows;
+        parsedTextCards = body
+          .map(r => ({ front: (r[f] || '').trim(), back: (r[b] || '').trim(), hint: h >= 0 ? (r[h] || '').trim() : '' }))
+          .filter(c => c.front && c.back);
+      } else {
+        parsedTextCards = parseTextToCards(raw);
+      }
       previewList.innerHTML = '';
       if (!parsedTextCards.length) {
         previewWrap.style.display = 'none';
         txtImportBtn.style.display = 'none';
-        txtStatus.textContent = raw.trim() ? '⚠️ No cards matched — check your delimiter' : '';
+        txtStatus.textContent = raw.trim() ? (useSheet ? '⚠️ No usable rows — check the column mapping' : '⚠️ No cards matched — check your delimiter') : '';
         return;
       }
       previewWrap.style.display = '';
@@ -2438,7 +2571,7 @@ function openCreateDeckModal(subjectKey, folderId) {
         previewList.appendChild(el('div',{style:'display:flex;gap:6px;font-size:12px;background:rgba(255,255,255,0.04);border-radius:6px;padding:5px 8px;align-items:flex-start'},
           el('span',{style:'flex:1;color:var(--text)'},c.front),
           el('span',{style:'color:var(--muted);padding:0 4px'},'→'),
-          el('span',{style:'flex:1;color:var(--muted)'},c.back)
+          el('span',{style:'flex:1;color:var(--muted)'},c.back + (c.hint ? `  (hint: ${c.hint})` : ''))
         ));
       });
       previewCount.textContent = parsedTextCards.length > 6 ? `…and ${parsedTextCards.length - 6} more (${parsedTextCards.length} total)` : `${parsedTextCards.length} card${parsedTextCards.length!==1?'s':''}`;
@@ -2554,7 +2687,7 @@ function openCreateDeckModal(subjectKey, folderId) {
         id: uid('d'), name, emoji: 'file-text', image: null,
         subject: finalSubject, folderId: fId, color: 'var(--blue)',
         cards: parsedTextCards.map(c => ({
-          id: uid('c'), front: c.front, back: c.back, hint: '', tags: [],
+          id: uid('c'), front: c.front, back: c.back, hint: c.hint || '', tags: [],
           type: 'basic', ease: 2.5, interval: 0, reps: 0, lapses: 0,
           due: Date.now(), state: 'new', created: Date.now(), source: null,
         }))
@@ -2564,7 +2697,7 @@ function openCreateDeckModal(subjectKey, folderId) {
       showToast(`"${name}" imported — ${nOf(parsedTextCards.length,'card')} 📄`);
     });
 
-    textPane.append(txtDeckNameField, delimWrap, txtDropZone, pasteLabel, pasteArea, txtStatus, previewWrap, txtImportBtn);
+    textPane.append(txtDeckNameField, sheetWrap, delimWrap, txtDropZone, pasteLabel, pasteArea, txtStatus, previewWrap, txtImportBtn);
 
     // --- AI Capture pane (built lazily on first tab visit) ---
     const aiPane = el('div',{style:'display:none'});

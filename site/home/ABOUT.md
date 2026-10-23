@@ -2,14 +2,11 @@
 
 #### VERSION 2026.10.24-ALPHA
 
-- deck explorer refined: filter box (Esc clears, then closes), footer chips
-  for the current selection, radio-style picking in single-deck mode,
-  focus returns to whatever opened it
-- library folders restyled into the same explorer visual language —
-  breadcrumb trail, folder rows with hover actions, icon buttons; the
-  folder model itself is unchanged
-- community deck cards: download stat renders its sprite icon properly
-  (a markup string could show as literal text)
+- Create Deck → Import Text now understands spreadsheets: paste a copy (or drop a .csv/.tsv) and the grid is auto-detected
+
+- deck explorer refined: filter box, footer chips etc.
+- library folders restyled into the same explorer visual language
+- bug fixes
 
 #### VERSION 2026.10.23-ALPHA
 
