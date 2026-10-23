@@ -933,7 +933,7 @@ function parseManualAIReply(raw) {
 
 // Image/Emoji helpers
 function readImageFile(file){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(e){res(e.target.result);};r.onerror=function(){rej(new Error('fail'));};r.readAsDataURL(file);});}
-function mkIcon(emoji,image,size,radius){size=size||'28px';radius=radius||'6px';if(image)return el('img',{src:image,style:'width:'+size+';height:'+size+';object-fit:cover;border-radius:'+radius+';flex-shrink:0'});if(scIsIconName(emoji))return scIcon(emoji,{cls:'mk-icon'});return el('span',{style:'font-size:'+size+';line-height:1;flex-shrink:0'},emoji||'\u{1F4C1}');}
+function mkIcon(emoji,image,size,radius){size=size||'28px';radius=radius||'6px';if(image)return el('img',{src:image,style:'width:'+size+';height:'+size+';object-fit:cover;border-radius:'+radius+';flex-shrink:0'});if(!emoji||scIsIconName(emoji))return scIcon(emoji||'folder',{cls:'mk-icon'});return el('span',{style:'font-size:'+size+';line-height:1;flex-shrink:0'},emoji);}
 // Source-type icon (📗 epub / 📱 mobi / 📄 pdf / 📝 text) — used by the
 // citation pickers (dashboard-decks.js openCitationPicker, dashboard-capture.js
 // Quick Add) AND by the Library list/reader (dashboard-library.js). Lives in
@@ -950,7 +950,7 @@ function sourceTypeIcon(src) {
 function mkIconPicker(curEmoji,curImg,onEmoji,onImg){
   var wrap=el('div',{style:'display:flex;align-items:center;gap:10px;margin-bottom:8px'});
   var prev=el('div',{style:'width:52px;height:52px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;overflow:hidden'});
-  var _e=curEmoji||'\u{1F4D6}',_i=curImg||null;
+  var _e=curEmoji||'book-open',_i=curImg||null;
   function up(){prev.innerHTML='';if(_i)prev.appendChild(el('img',{src:_i,style:'width:100%;height:100%;object-fit:cover'}));else prev.appendChild(scAuto(_e));}
   up();
   var ei=el('input',{type:'text',value:_e,style:'width:60px;text-align:center;font-size:22px;padding:6px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text);font-family:inherit'});
@@ -1639,20 +1639,41 @@ function openDeckExplorerOverlay(opts = {}) {
   const selection = new Map(); // scopeKey -> scope object (single mode: at most one deck entry)
   if (!single) (opts.initialSelection || []).forEach(s => selection.set(scopeKey(s), s));
   let nav = { view:'subjects', subjectKey:null, folderId:null };
+  let query = '';                       // explorer filter (header search box)
+  const _returnFocus = document.activeElement;
 
-  const overlay = el('div',{id:opts.overlayId||(single?'deck-picker-overlay':'study-scope-overlay'),style:'position:fixed;inset:0;z-index:1000;background:var(--bg);display:flex;flex-direction:column;animation:fadeIn 0.2s ease;'});
+  const overlay = el('div',{id:opts.overlayId||(single?'deck-picker-overlay':'study-scope-overlay'),style:'position:fixed;inset:0;z-index:1090;background:var(--bg);display:flex;flex-direction:column;animation:fadeIn 0.2s ease;'});
   const header = el('div',{style:'display:flex;align-items:center;gap:12px;padding:16px 24px;border-bottom:1px solid var(--border);flex-shrink:0'},
     scLbl('folder-open', opts.title || (single?'Choose a Deck':'Choose Study Scope')),
     el('div',{style:'margin-left:auto;font-size:11px;color:var(--muted)'}, opts.hint || (single?'Click to browse · select exactly one deck':'Click to browse · check a box to select')),
     el('button',{'aria-label':'Close',style:'background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:0 4px',onclick:()=>closeOverlay()},scIcon('close'))
   );
+  const searchRow = el('div',{style:'padding:12px 24px 0;flex-shrink:0'},
+    el('div',{class:'explorer-search'},
+      scIcon('search'),
+      el('input',{type:'search',placeholder:single?'Filter decks…':'Filter decks and folders…','aria-label':'Filter decks and folders',
+        oninput:e=>{ query=e.target.value.trim().toLowerCase(); renderBody(); },
+        onkeydown:e=>{ if(e.key==='Escape'&&e.target.value){ e.stopPropagation(); query=''; e.target.value=''; renderBody(); } }})));
   const recentsRow = el('div',{style: single ? 'display:none' : 'display:flex;gap:8px;flex-wrap:wrap;padding:14px 24px 0;flex-shrink:0'});
   const bodyWrap = el('div',{style:'flex:1;overflow-y:auto;padding:16px 24px 24px'});
   const footer = el('div',{style:'display:flex;align-items:center;gap:12px;padding:14px 24px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0'});
-  overlay.append(header, recentsRow, bodyWrap, footer);
+  overlay.append(header, searchRow, recentsRow, bodyWrap, footer);
   document.body.appendChild(overlay);
+  // Esc closes (a non-empty search box consumes the first Esc to clear);
+  // focus returns to whatever opened the explorer.
+  overlay.setAttribute('tabindex','-1');
+  overlay.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (query) { query = ''; const si = searchRow.querySelector('input'); if (si) si.value = ''; renderBody(); return; }
+    e.stopPropagation();
+    closeOverlay();
+  });
+  overlay.focus({ preventScroll: true });
 
-  function closeOverlay(){ overlay.remove(); }
+  function closeOverlay(){
+    overlay.remove();
+    if (_returnFocus && _returnFocus.isConnected) _returnFocus.focus({ preventScroll: true });
+  }
 
   function isChecked(scope){ return selection.has(scopeKey(scope)); }
   function toggle(scope){
@@ -1670,7 +1691,7 @@ function openDeckExplorerOverlay(opts = {}) {
     refreshAll();
   }
   function checkbox(scope){
-    return el('div',{class:'scope-checkbox'+(isChecked(scope)?' checked':''),title:single?'Select this deck':'Select',onclick:e=>{ e.stopPropagation(); toggle(scope); }});
+    return el('div',{class:'scope-checkbox'+(single?' scope-radio':'')+(isChecked(scope)?' checked':''),role:'checkbox','aria-checked':isChecked(scope)?'true':'false',title:single?'Select this deck':'Select',onclick:e=>{ e.stopPropagation(); toggle(scope); }});
   }
 
   function renderRecents(){
@@ -1683,6 +1704,13 @@ function openDeckExplorerOverlay(opts = {}) {
       const active = r.scopes.length===selection.size && r.scopes.every(s=>isChecked(s));
       recentsRow.appendChild(mkScopePill(r.icon, r.label, active, ()=>{ selection.clear(); r.scopes.forEach(s=>selection.set(scopeKey(s),s)); refreshAll(); }, { pinned:r.pinned, onToggle:()=>{ toggleRecentPin(r.key); renderRecents(); } }));
     });
+  }
+
+  function folderPathLabel(f){
+    const parts=[]; let cur=state.folders.find(x=>x.id===f.parentId);
+    while(cur){ parts.unshift(cur.name); cur=state.folders.find(x=>x.id===cur.parentId); }
+    parts.unshift((getSubjectSafe(f.subjectKey).short||getSubjectSafe(f.subjectKey).name));
+    return parts.join(' › ');
   }
 
   function renderBreadcrumb(){
@@ -1716,7 +1744,7 @@ function openDeckExplorerOverlay(opts = {}) {
           single?null:checkbox({type:'folder',id:f.id}),
           mkIcon(f.emoji||'folder',f.image,'22px','4px'),
           el('div',{style:'flex:1;min-width:0'},el('div',{class:'folder-name'},f.name),el('div',{class:'folder-meta'},`${fd.length} deck${fd.length!==1?'s':''}${sf.length?` · ${sf.length} subfolder${sf.length!==1?'s':''}`:''}${due>0?` · ${due} due`:''}`)),
-          el('span',{style:'color:var(--muted);font-size:16px;margin-left:4px'},'›')
+          el('span',{style:'color:var(--muted);margin-left:4px;display:inline-flex'},scIcon('chevron-right'))
         );
         row.addEventListener('click',e=>{ if(e.target.closest('.scope-checkbox')) return; nav={view:'folder',subjectKey:f.subjectKey,folderId:f.id}; renderBody(); });
         list.appendChild(row);
@@ -1742,9 +1770,50 @@ function openDeckExplorerOverlay(opts = {}) {
     if(!folders.length && !decks.length) bodyWrap.appendChild(el('div',{class:'empty-state'},el('div',{class:'empty-icon'},scIcon('folder-open')),el('div',{class:'empty-title'},'Empty')));
   }
 
+  function renderSearchResults(){
+    const folders = state.folders.filter(f => (f.name||'').toLowerCase().includes(query));
+    const decks = state.decks.filter(d => (d.name||'').toLowerCase().includes(query));
+    if (!folders.length && !decks.length) {
+      bodyWrap.appendChild(el('div',{class:'empty-state'},
+        el('div',{class:'empty-icon'},scIcon('search')),
+        el('div',{class:'empty-title'},'No matches'),
+        el('div',{class:'empty-sub'},`Nothing named “${query}” — clear the filter to keep browsing.`)));
+      return;
+    }
+    if (folders.length) {
+      bodyWrap.appendChild(el('div',{class:'u-section-label'},`Folders (${folders.length})`));
+      const list = el('div',{class:'card',style:'margin-bottom:16px;overflow:hidden'});
+      folders.forEach(f => {
+        const row = el('div',{class:'folder-item'+(!single&&isChecked({type:'folder',id:f.id})?' explorer-selected':'')},
+          single?null:checkbox({type:'folder',id:f.id}),
+          mkIcon(f.emoji||'folder',f.image,'22px','4px'),
+          el('div',{style:'flex:1;min-width:0'},el('div',{class:'folder-name'},f.name),el('div',{class:'folder-meta'}, folderPathLabel(f))),
+          el('span',{style:'color:var(--muted);margin-left:4px;display:inline-flex'},scIcon('chevron-right')));
+        row.addEventListener('click',e=>{ if(e.target.closest('.scope-checkbox')) return; nav={view:'folder',subjectKey:f.subjectKey,folderId:f.id}; query=''; const si=searchRow.querySelector('input'); if(si) si.value=''; renderBody(); });
+        list.appendChild(row);
+      });
+      bodyWrap.appendChild(list);
+    }
+    if (decks.length) {
+      bodyWrap.appendChild(el('div',{class:'u-section-label'},`Decks (${decks.length})`));
+      const grid = el('div',{class:'grid-3'});
+      decks.forEach(d => {
+        const due = getDueCards(d.cards).length;
+        const tile = el('div',{class:'card'+(isChecked({type:'deck',id:d.id})?' explorer-selected':''),style:'padding:16px;cursor:pointer'},
+          el('div',{style:'display:flex;align-items:center;gap:10px'},
+            checkbox({type:'deck',id:d.id}), mkIcon(d.emoji,d.image,'26px','6px'),
+            el('div',{style:'flex:1;min-width:0'},el('div',{style:'font-weight:800;font-size:13px'},d.name),el('div',{class:'u-muted-11'},`${nOf(d.cards.length,'card')}${due>0?` · ${due} due`:''}`))));
+        tile.addEventListener('click',e=>{ if(e.target.closest('.scope-checkbox')) return; toggle({type:'deck',id:d.id}); });
+        grid.appendChild(tile);
+      });
+      bodyWrap.appendChild(grid);
+    }
+  }
+
   function renderBody(){
     bodyWrap.innerHTML='';
     bodyWrap.appendChild(renderBreadcrumb());
+    if (query) { renderSearchResults(); return; }
 
     if(nav.view==='subjects'){
       if(!single){
@@ -1820,9 +1889,20 @@ function openDeckExplorerOverlay(opts = {}) {
     }
     const scopes=[...selection.values()];
     const cardCount = getScopeSetCards(scopes.length?scopes:[{type:'all',id:null}]).length;
+    const chips = el('div',{class:'explorer-chips'},
+      ...scopes.map(sc => {
+        const info = scopeLabel(sc);
+        return el('span',{class:'explorer-chip'},
+          scAuto(info.icon),
+          el('span',{style:'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'},info.label),
+          el('button',{'aria-label':`Remove ${info.label} from selection`,title:'Remove from selection',
+            onclick:()=>{ selection.delete(scopeKey(sc)); refreshAll(); }},scIcon('close')));
+      }));
     footer.append(
-      el('div',{style:'font-size:12px;font-weight:700;color:var(--muted)'}, scopes.length ? `${scopes.length} selected · ${nOf(cardCount,'card')}` : `Nothing selected — defaults to All Decks (${nOf(cardCount,'card')})`),
-      el('div',{style:'margin-left:auto;display:flex;gap:8px'},
+      el('div',{style:'flex:1;min-width:0;display:flex;flex-direction:column;gap:6px'},
+        scopes.length ? chips : null,
+        el('div',{style:'font-size:12px;font-weight:700;color:var(--muted)'}, scopes.length ? `${scopes.length} selected · ${nOf(cardCount,'card')}` : `Nothing selected — defaults to All Decks (${nOf(cardCount,'card')})`)),
+      el('div',{style:'display:flex;gap:8px'},
         ...extraFooterButtons(),
         btn('Clear','ghost',{small:true,onclick:()=>{ selection.clear(); refreshAll(); }}),
         btn('Cancel','ghost',{onclick:closeOverlay}),

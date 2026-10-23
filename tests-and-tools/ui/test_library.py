@@ -17,7 +17,7 @@ def test_empty_state(page, base_url, seeded):
     goto_library(page, base_url, seeded, "preset:empty")
     expect(page.locator("#view-library .empty-state")).to_contain_text(
         "No source texts yet")
-    expect(page.get_by_role("button", name="+ Add Source")).to_be_visible()
+    expect(page.get_by_role("button", name="Add Source")).to_be_visible()
 
 
 def test_seeded_source_row(page, base_url, seeded):
@@ -31,7 +31,7 @@ def test_seeded_source_row(page, base_url, seeded):
 def test_add_plain_text_source(page, base_url, seeded):
     """+ Add Source → paste text → row appears and persists to mf_state."""
     goto_library(page, base_url, seeded, "preset:empty")
-    page.get_by_role("button", name="+ Add Source").click()
+    page.get_by_role("button", name="Add Source").click()
     pages.expect_modal(page, "Add Source Text")
 
     modal = pages.modal(page)
@@ -39,7 +39,7 @@ def test_add_plain_text_source(page, base_url, seeded):
         "Test Notes — Playwright")
     modal.locator("textarea[placeholder='Paste the full text here…']").fill(
         "Mitochondria is the powerhouse of the cell.")
-    modal.get_by_role("button", name="Add Source", exact=True).click()
+    modal.get_by_role("button", name="Add Source").click()
 
     expect(page.locator("#view-library .source-name",
                         has_text="Test Notes — Playwright")).to_be_visible(timeout=8000)
@@ -72,3 +72,31 @@ def test_delete_source_asks_and_undoes_with_citations(page, site_base, seeded):
     page.locator("#toast button", has_text="Undo").click()
     page.wait_for_timeout(300)
     assert page.evaluate("() => state.sources.length") == 1
+
+
+def test_library_folders_explorer_style(page, site_base, seeded):
+    """Folders keep their existing model but render in the explorer visual
+    language: .folder-item rows, .breadcrumb trail, icon action buttons."""
+    seeded("preset:demo")
+    pages.goto_app(page, site_base, "/library/")
+    page.get_by_role("button", name="New Folder").click()
+    pages.expect_modal(page, "New Library Folder")
+    pages.modal(page).locator("input").fill("Course Readers")
+    pages.modal(page).get_by_role("button", name="Create Folder").click()
+    row = page.locator("#view-library .folder-item", has_text="Course Readers")
+    expect(row).to_be_visible()
+    expect(row.locator(".folder-meta")).to_contain_text("0 sources")
+
+    row.click()
+    bc = page.locator("#view-library .breadcrumb")
+    expect(bc).to_contain_text("Library")
+    expect(bc).to_contain_text("Course Readers")
+
+    page.locator("#view-library .breadcrumb-part").first.click()
+    row = page.locator("#view-library .folder-item", has_text="Course Readers")
+    row.locator("button[aria-label='Rename folder Course Readers']").click()
+    pages.expect_modal(page, "Rename Folder")
+    pages.modal(page).locator("input").fill("Readers II")
+    pages.modal(page).get_by_role("button", name="Save").click()
+    expect(page.locator("#view-library .folder-item",
+                        has_text="Readers II")).to_be_visible()

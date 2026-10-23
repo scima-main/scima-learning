@@ -1109,7 +1109,7 @@ function makeDeckCard(deck) {
       el(
         'span',
         {},
-        `${scIconSvg('download')} ${deck.downloads ?? 0}`
+        scLbl('download', String(deck.downloads ?? 0))
       )
     ),
 

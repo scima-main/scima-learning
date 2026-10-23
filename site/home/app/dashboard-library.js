@@ -388,23 +388,23 @@ function renderLibrary(c) {
   const visibleSources=state.sources.filter(s=>(s.libraryFolderId||null)===currentFolderId);
   const childFolders=state.libraryFolders.filter(f=>(f.parentId||null)===currentFolderId);
 
-  const breadcrumb=el('div',{style:'display:flex;align-items:center;gap:6px;margin-bottom:12px;font-size:12px;flex-wrap:wrap'});
+  const breadcrumb=el('div',{class:'breadcrumb',style:'margin-bottom:12px'});
   const crumbs=[];
   let cur=currentFolder;
   while(cur){crumbs.unshift(cur);cur=state.libraryFolders.find(f=>f.id===cur.parentId);}
-  breadcrumb.appendChild(el('span',{style:`cursor:pointer;color:${currentFolderId?'var(--muted)':'var(--text)'};font-weight:${currentFolderId?400:700}`,onclick:()=>{state._libraryFolderNav=null;renderView('library');}},'\u{1F4D6} Library'));
+  breadcrumb.appendChild(el('span',{class:`breadcrumb-part${currentFolderId?'':' active'}`,onclick:()=>{state._libraryFolderNav=null;renderView('library');}},scLbl('book-open','Library')));
   crumbs.forEach((f,i)=>{
-    breadcrumb.appendChild(el('span',{style:'color:var(--muted)'},'>'));
+    breadcrumb.appendChild(el('span',{class:'breadcrumb-sep'},'›'));
     const isLast=i===crumbs.length-1;
-    breadcrumb.appendChild(el('span',{style:`cursor:pointer;color:${isLast?'var(--text)':'var(--muted)'};font-weight:${isLast?700:400}`,onclick:()=>{state._libraryFolderNav=f.id;renderView('library');}},`\u{1F4C1} ${f.name}`));
+    breadcrumb.appendChild(el('span',{class:`breadcrumb-part${isLast?' active':''}`,onclick:()=>{state._libraryFolderNav=f.id;renderView('library');}},scLbl('folder',f.name)));
   });
 
   const topBar=el('div',{style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:12px'},
-    el('div',{},el('div',{class:'section-title'},'\u{1F4D6} Library'),el('div',{class:'section-sub',style:'margin-bottom:0'},'Attach source texts to cards for citation context')),
+    el('div',{},el('div',{class:'section-title'},scLbl('book-open','Library')),el('div',{class:'section-sub',style:'margin-bottom:0'},'Attach source texts to cards for citation context')),
     el('div',{style:'display:flex;gap:8px'},
-      btn('\u{1F4C1} New Folder','ghost',{onclick:()=>openLibraryFolderModal(currentFolderId)}),
+      btn([scIcon('folder-plus'),' New Folder'],'ghost',{onclick:()=>openLibraryFolderModal(currentFolderId)}),
       btn([scIcon('upload'),' Import'],'ghost',{onclick:()=>openImportSourceModal(currentFolderId)}),
-      btn('+ Add Source','primary',{onclick:()=>openAddSourceModal(currentFolderId)})
+      btn([scIcon('plus'),' Add Source'],'primary',{onclick:()=>openAddSourceModal(currentFolderId)})
     )
   );
   c.append(topBar);
@@ -412,48 +412,60 @@ function renderLibrary(c) {
 
   if(!state.sources.length&&!state.libraryFolders.length){
     c.appendChild(el('div',{class:'empty-state',style:'padding-top:60px'},
-      el('div',{class:'empty-icon'},'\u{1F4DA}'),el('div',{class:'empty-title'},'No source texts yet'),
+      el('div',{class:'empty-icon'},scIcon('books')),el('div',{class:'empty-title'},'No source texts yet'),
       el('div',{class:'empty-sub'},'Add books, articles, or notes to cite in your flashcards.'),
       btn('Add First Source','primary',{onclick:()=>openAddSourceModal(null)})
     ));
     return;
   }
   const list=el('div',{});
-  childFolders.forEach(folder=>{
-    const folderSources=state.sources.filter(s=>{
-      const ids=[folder.id,...getLibraryDescendantFolderIds(folder.id)];
-      return ids.includes(s.libraryFolderId||'');
-    });
-    list.appendChild(el('div',{class:'card source-item',style:'margin-bottom:10px;cursor:pointer',role:'button',tabindex:'0','aria-label':`Open folder ${folder.name}`,onclick:()=>{state._libraryFolderNav=folder.id;renderView('library');},onkeydown:clickKeys(()=>{state._libraryFolderNav=folder.id;renderView('library');})},
-      el('div',{class:'source-icon',style:'font-size:20px'},'\u{1F4C1}'),
-      el('div',{style:'flex:1;min-width:0'},
-        el('div',{class:'source-name'},folder.name),
-        el('div',{class:'source-meta'},`${folderSources.length} source${folderSources.length!==1?'s':''}`)
-      ),
-      el('div',{class:'source-actions'},
-        btn('Rename','ghost',{small:true,onclick:e=>{e.stopPropagation();openLibraryFolderModal(folder.parentId||null,folder.id);}}),
-        btn('Delete','danger',{small:true,onclick:e=>{
+  if(childFolders.length){
+    list.appendChild(el('div',{class:'u-section-label'},'Folders'));
+    const folderList=el('div',{class:'card',style:'margin-bottom:16px;overflow:hidden'});
+    childFolders.forEach(folder=>{
+      const folderSources=state.sources.filter(sr=>{
+        const ids=[folder.id,...getLibraryDescendantFolderIds(folder.id)];
+        return ids.includes(sr.libraryFolderId||'');
+      });
+      const subCount=state.libraryFolders.filter(f=>(f.parentId||null)===folder.id).length;
+      const openFolder=()=>{state._libraryFolderNav=folder.id;renderView('library');};
+      const renameBtn=btn(scIcon('pencil'),'ghost',{small:true,
+        title:`Rename folder ${folder.name}`,'aria-label':`Rename folder ${folder.name}`,
+        onclick:e=>{e.stopPropagation();openLibraryFolderModal(folder.parentId||null,folder.id);}});
+      const deleteBtn=btn(scIcon('trash'),'danger',{small:true,
+        title:`Delete folder ${folder.name}`,'aria-label':`Delete folder ${folder.name}`,
+        onclick:e=>{
           e.stopPropagation();
           const idx = state.libraryFolders.findIndex(f=>f.id===folder.id);
           if (idx < 0) return;
           confirmDestructive('Delete library folder?',
             `Are you sure you want to delete "${folder.name}"? Sources inside will move to the library root.`,
             'Delete', () => {
-              const moved = state.sources.filter(s=>s.libraryFolderId===folder.id).map(s=>s.id);
-              moved.forEach(id=>{ const src=state.sources.find(s=>s.id===id); if(src) src.libraryFolderId=null; });
+              const moved = state.sources.filter(sr=>sr.libraryFolderId===folder.id).map(sr=>sr.id);
+              moved.forEach(id=>{ const src=state.sources.find(sr=>sr.id===id); if(src) src.libraryFolderId=null; });
               state.libraryFolders.splice(idx,1);
               scheduleSave();renderView('library');
-              undoToast(`Deleted "${folder.name}" 🗑️`, () => {
+              undoToast(`Deleted "${folder.name}"`, () => {
                 state.libraryFolders.splice(Math.min(idx,state.libraryFolders.length),0,folder);
-                moved.forEach(id=>{ const src=state.sources.find(s=>s.id===id); if(src) src.libraryFolderId=folder.id; });
+                moved.forEach(id=>{ const src=state.sources.find(sr=>sr.id===id); if(src) src.libraryFolderId=folder.id; });
                 scheduleSave();renderView('library');
-                showToast('Folder restored ↩');
+                showToast('Folder restored');
               });
             });
-        }})
-      )
-    ));
-  });
+        }});
+      const row=el('div',{class:'folder-item',role:'button',tabindex:'0',
+        'aria-label':`Open folder ${folder.name}`,onclick:openFolder,onkeydown:clickKeys(openFolder)},
+        mkIcon('folder',null,'22px','4px'),
+        el('div',{style:'flex:1;min-width:0'},
+          el('div',{class:'folder-name'},folder.name),
+          el('div',{class:'folder-meta'},`${folderSources.length} source${folderSources.length!==1?'s':''}${subCount?` · ${subCount} subfolder${subCount!==1?'s':''}`:''}`)),
+        el('div',{class:'folder-actions'},renameBtn,deleteBtn),
+        el('span',{style:'color:var(--muted);margin-left:4px;display:inline-flex'},scIcon('chevron-right')));
+      folderList.appendChild(row);
+    });
+    list.appendChild(folderList);
+  }
+  if(visibleSources.length) list.appendChild(el('div',{class:'u-section-label'},'Sources'));
   const SOURCE_PAGE = 20;
   let srcPage = 0;
 
@@ -486,7 +498,7 @@ function renderLibrary(c) {
           btn('Chapters','ghost',{small:true,onclick:e=>{e.stopPropagation();openChaptersModal(src.id);}}),
           btn('Subject','ghost',{small:true,title:'Set or clear the subject for this source',onclick:e=>{e.stopPropagation();openSourceSubjectModal(src.id);}}),
           btn([scIcon('download'),' Export'],'ghost',{small:true,title:'Export source file + bookmarks',onclick:e=>{e.stopPropagation();exportSourceWithBookmarks(src.id);}}),
-          btn('Move','ghost',{small:true,onclick:e=>{e.stopPropagation();openMoveSourceModal(src.id);}}),
+          btn([scIcon('folder-open'),' Move'],'ghost',{small:true,title:`Move "${src.name}" to another folder`,onclick:e=>{e.stopPropagation();openMoveSourceModal(src.id);}}),
           btn('Delete','danger',{small:true,onclick:e=>{
             e.stopPropagation();
             const idx = state.sources.findIndex(x=>x.id===src.id);
@@ -536,8 +548,8 @@ function renderLibrary(c) {
   renderSourceBatch();
   if(!childFolders.length&&!visibleSources.length){
     list.appendChild(el('div',{class:'empty-state',style:'padding:40px 0'},
-      el('div',{class:'empty-icon'},'\u{1F4C2}'),el('div',{class:'empty-title'},'Empty folder'),el('div',{class:'empty-sub'},'Add sources or subfolders here'),
-      btn('+ Add Source','primary',{onclick:()=>openAddSourceModal(currentFolderId)})
+      el('div',{class:'empty-icon'},scIcon('folder-open')),el('div',{class:'empty-title'},'Empty folder'),el('div',{class:'empty-sub'},'Add sources or subfolders here'),
+      btn([scIcon('plus'),' Add Source'],'primary',{onclick:()=>openAddSourceModal(currentFolderId)})
     ));
   }
   c.append(list);
@@ -556,7 +568,7 @@ function openLibraryFolderModal(parentId,editId){
       const name=nameField.querySelector('input').value.trim();if(!name)return;
       if(existing){existing.name=name;}
       else{if(!state.libraryFolders)state.libraryFolders=[];state.libraryFolders.push({id:uid('lf'),name,parentId:parentId||null});}
-      scheduleSave();closeModal();renderView('library');showToast(existing?'Folder renamed \u{1F4C1}':'Library folder created \u{1F4C1}');
+      scheduleSave();closeModal();renderView('library');showToast(existing?'Folder renamed':'Library folder created');
     }}));
   });
 }
@@ -564,9 +576,9 @@ function openMoveSourceModal(sourceId){
   const src=state.sources.find(s=>s.id===sourceId);if(!src)return;
   openModal('Move: '+src.name,body=>{
     const sel=el('select',{style:'width:100%;padding:9px 12px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text);font-size:13px;font-family:inherit;outline:none;margin-bottom:16px'});
-    sel.appendChild(el('option',{value:'',class:'u-bg'},'\u{1F4DA} Library root'));
-    (state.libraryFolders||[]).forEach(f=>{const o=el('option',{value:f.id,class:'u-bg'},'\u{1F4C1} '+f.name);if(f.id===src.libraryFolderId)o.selected=true;sel.appendChild(o);});
-    body.append(sel,btn('Move','primary',{full:true,onclick:()=>{src.libraryFolderId=sel.value||null;scheduleSave();closeModal();renderView('library');showToast('Source moved \u{1F4C1}');}}));
+    sel.appendChild(el('option',{value:'',class:'u-bg'},'Library root'));
+    (state.libraryFolders||[]).forEach(f=>{const o=el('option',{value:f.id,class:'u-bg'},f.name);if(f.id===src.libraryFolderId)o.selected=true;sel.appendChild(o);});
+    body.append(sel,btn('Move','primary',{full:true,onclick:()=>{src.libraryFolderId=sel.value||null;scheduleSave();closeModal();renderView('library');showToast('Source moved');}}));
   });
 }
 /**

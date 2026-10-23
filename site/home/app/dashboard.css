@@ -433,6 +433,31 @@ body.nav-open #sidebar-version {
 .tour-arrow { width: 22px; height: 22px; stroke-width: 2.4; color: var(--blue); }
 .sp-mini-btn .sc-icon, .sp-ctx-item .sc-icon { width: 14px; height: 14px; }
 
+/* ── Deck explorer overlay refinements ─────────────────────────────── */
+.explorer-search { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+  color: var(--muted); transition: border-color 0.15s; }
+.explorer-search:focus-within { border-color: rgba(var(--blue-rgb),0.5); color: var(--blue); }
+.explorer-search .sc-icon { width: 15px; height: 15px; }
+.explorer-search input { flex: 1; min-width: 0; background: none; border: none; outline: none;
+  color: var(--text); font-family: inherit; font-size: 13px; }
+.explorer-search input::placeholder { color: var(--muted); }
+/* single-deck mode picks exactly one: checkboxes read as radios */
+.scope-checkbox.scope-radio { border-radius: 50%; }
+.scope-checkbox.scope-radio.checked::after { content: ''; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--on-gradient); inset: 0; margin: auto; }
+/* footer selection chips (multi mode) */
+.explorer-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.explorer-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 220px;
+  padding: 3px 4px 3px 9px; border-radius: 99px; font-size: 11px; font-weight: 700;
+  background: rgba(var(--blue-rgb),0.14); color: var(--blue);
+  border: 1px solid rgba(var(--blue-rgb),0.35); }
+.explorer-chip .sc-icon { width: 13px; height: 13px; }
+.explorer-chip button { display: inline-flex; border: none; background: none; cursor: pointer;
+  color: inherit; padding: 2px; border-radius: 50%; opacity: 0.7; }
+.explorer-chip button:hover { opacity: 1; background: rgba(var(--blue-rgb),0.2); }
+.explorer-chip button .sc-icon { width: 11px; height: 11px; }
+
 /* Modal — solid background, no blur for performance */
 #modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.88);
   display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 16px; }

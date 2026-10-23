@@ -31,15 +31,23 @@ def test_offline_state_without_backend(page, base_url, seeded):
         "Server temporarily offline at /api/v1", timeout=15000)
 
 
-def test_online_with_mocked_api(page, base_url, seeded, api_mock):
+def test_online_with_mocked_api(page, site_base, seeded, api_mock):
+    # site_base: the sprite-icon deck stats landed after the last deploy
+    # bundle was minified — this asserts the source-tree behaviour.
     recorded = api_mock(sample_online_handlers())
-    open_community(page, base_url, seeded)
+    open_community(page, site_base, seeded)
 
     expect(page.locator("#view-community")).to_contain_text(
         "Server online at /api/v1", timeout=15000)
     expect(page.locator("#view-community")).to_contain_text(
         "GCSE Chemistry — Atomic Structure", timeout=10000)
     expect(page.locator("#view-community")).to_contain_text("French Verbs A-Level")
+
+    # deck-card stats render sprite icons, never literal markup: a markup
+    # string passed to el() as a child would show "<svg …>" as plain text
+    expect(page.locator("#view-community")).not_to_contain_text("<svg")
+    expect(page.locator("#popular-section .deck-meta use").first).to_have_attribute(
+        "href", "#i-download")
 
     # the UI really called the documented endpoints
     paths = [r["path"] for r in recorded]
