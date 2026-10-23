@@ -1,4 +1,9 @@
-# CHANGELOG (last updated 21th October 2026, UTC)
+# CHANGELOG (last updated 23th October 2026, UTC)
+
+#### VERSION 2026.10.23-ALPHA
+
+- a full, consistent SVG icon system for the whole app
+- icons scale with text and follow theme colours
 
 #### VERSION 2026.10.22-ALPHA
 

@@ -47,7 +47,7 @@ def test_deck_views_and_flows_fully_labelled(page, site_base, seeded):
     # selection bar + modal stay clean too
     page.locator("#card-grid .card-selectable").first.click(position={"x": 40, "y": 20})
     assert content.poorly_named_controls(page) == []
-    page.get_by_role("button", name="← Back").click()          # → folder view
+    page.get_by_role("button", name="Back").click()          # → folder view
     page.locator(".breadcrumb").get_by_text("Decks").click()   # → subjects
     page.click("#tutorial-target-new-deck")
     pages.expect_modal(page, "Create New Deck")

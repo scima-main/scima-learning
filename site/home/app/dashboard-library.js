@@ -312,7 +312,7 @@ function openSourceSubjectModal(sourceId) {
 
     const wrap = el('div', { class: 'field' }, el('label', {}, 'Subject'));
     const sel = el('select', { class: 'u-input' });
-    sel.appendChild(el('option', { value: '', class: 'u-bg' }, '🔎 Auto-detect from citations'));
+    sel.appendChild(el('option', { value: '', class: 'u-bg' }, 'Auto-detect from citations'));
     Object.entries(getAllSubjects()).forEach(([key, s]) => {
       sel.appendChild(el('option', { value: key, class: 'u-bg' }, s.name));
     });
@@ -403,7 +403,7 @@ function renderLibrary(c) {
     el('div',{},el('div',{class:'section-title'},'\u{1F4D6} Library'),el('div',{class:'section-sub',style:'margin-bottom:0'},'Attach source texts to cards for citation context')),
     el('div',{style:'display:flex;gap:8px'},
       btn('\u{1F4C1} New Folder','ghost',{onclick:()=>openLibraryFolderModal(currentFolderId)}),
-      btn('⬆ Import','ghost',{onclick:()=>openImportSourceModal(currentFolderId)}),
+      btn([scIcon('upload'),' Import'],'ghost',{onclick:()=>openImportSourceModal(currentFolderId)}),
       btn('+ Add Source','primary',{onclick:()=>openAddSourceModal(currentFolderId)})
     )
   );
@@ -470,10 +470,10 @@ function renderLibrary(c) {
           }, (effSubj.inferred ? '~ ' : '') + (getSubjectSafe(effSubj.key).short || getSubjectSafe(effSubj.key).name))
         : null;
       const readingTimeLabel = src.timeSpentSec >= 60
-        ? el('span',{style:'font-size:10px;color:var(--muted);margin-left:6px'},`⏱ ${fmtReadingTime(src.timeSpentSec)}`)
+        ? el('span',{style:'font-size:10px;color:var(--muted);margin-left:6px;display:inline-flex;align-items:center;gap:3px'},scIcon('stopwatch'),fmtReadingTime(src.timeSpentSec))
         : null;
       list.appendChild(el('div',{class:'card source-item',style:'margin-bottom:10px'},
-        el('div',{class:'source-icon'},sourceTypeIcon(src)),
+        el('div',{class:'source-icon'},scIcon(sourceTypeIcon(src))),
         el('div',{style:'flex:1;min-width:0'},
           el('div',{class:'source-name',style:'display:flex;align-items:center;flex-wrap:wrap;gap:2px'},src.name, subjBadge),
           el('div',{class:'source-meta',style:'display:flex;align-items:center;flex-wrap:wrap'},
@@ -485,7 +485,7 @@ function renderLibrary(c) {
           btn('Read','ghost',{small:true,onclick:e=>{e.stopPropagation();openLibraryReader(src.id);}}),
           btn('Chapters','ghost',{small:true,onclick:e=>{e.stopPropagation();openChaptersModal(src.id);}}),
           btn('Subject','ghost',{small:true,title:'Set or clear the subject for this source',onclick:e=>{e.stopPropagation();openSourceSubjectModal(src.id);}}),
-          btn('⬇ Export','ghost',{small:true,title:'Export source file + bookmarks',onclick:e=>{e.stopPropagation();exportSourceWithBookmarks(src.id);}}),
+          btn([scIcon('download'),' Export'],'ghost',{small:true,title:'Export source file + bookmarks',onclick:e=>{e.stopPropagation();exportSourceWithBookmarks(src.id);}}),
           btn('Move','ghost',{small:true,onclick:e=>{e.stopPropagation();openMoveSourceModal(src.id);}}),
           btn('Delete','danger',{small:true,onclick:e=>{
             e.stopPropagation();
@@ -578,7 +578,7 @@ function openMoveSourceModal(sourceId){
  * the same name and apply the modifications to it.
  */
 function openImportSourceModal(defaultFolderId) {
-  openModal('⬆ Import Source + Bookmarks', body => {
+  openModal(scLbl('upload',' Import Source + Bookmarks'), body => {
     // ── State ─────────────────────────────────────────────────────────────
     let _sourceFile = null;   // File object for the content file
     let _modsData   = null;   // Parsed modifications JSON object
@@ -638,7 +638,7 @@ function openImportSourceModal(defaultFolderId) {
           setErr('Could not read zip: ' + (err?.message || String(err)));
         }
       }}),
-      el('div',{style:'font-size:36px'},'🗜'),
+      el('div',{style:'font-size:34px'},scIcon('compress')),
       zipZoneNameEl,
       el('div',{class:'u-muted-11'},'*-scima-export.zip')
     );
@@ -647,8 +647,8 @@ function openImportSourceModal(defaultFolderId) {
     const manualSection = el('div',{style:'display:none'});
     const manualToggle = el('button',{
       style:'background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0;margin-bottom:8px;text-decoration:underline;font-family:inherit',
-      onclick:()=>{ const open = manualSection.style.display!=='none'; manualSection.style.display=open?'none':'block'; manualToggle.textContent=open?'▶ Or import individual files manually':'▼ Or import individual files manually'; }
-    },'▶ Or import individual files manually');
+      onclick:()=>{ const open = manualSection.style.display!=='none'; manualSection.style.display=open?'none':'block'; manualToggle.replaceChildren(scIcon(open?'chevron-right':'chevron-down'),' Or import individual files manually'); }
+    },[scIcon('chevron-right'),' Or import individual files manually']);
 
     const srcZoneNameEl = el('div',{class:'pdf-zone-name',style:'font-size:13px;font-weight:700'},'Source file');
     const srcZone = el('label',{class:'pdf-zone'},
@@ -656,7 +656,7 @@ function openImportSourceModal(defaultFolderId) {
         const file = e.target.files?.[0]; if(!file) return;
         _sourceFile = file; srcZoneNameEl.textContent = file.name; updatePreview();
       }}),
-      el('div',{style:'font-size:24px'},'📄'), srcZoneNameEl,
+      el('div',{style:'font-size:22px'},scIcon('file-text')), srcZoneNameEl,
       el('div',{class:'u-muted-11'},'.txt .pdf .epub .mobi')
     );
     const modZoneNameEl = el('div',{class:'pdf-zone-name',style:'font-size:13px;font-weight:700'},'modifications.json');
@@ -665,7 +665,7 @@ function openImportSourceModal(defaultFolderId) {
         const file = e.target.files?.[0]; if(!file) return;
         try { const p=JSON.parse(await file.text()); if(!p.scima_source_export){setErr('Not a modifications file');return;} _modsData=p; modZoneNameEl.textContent=file.name; updatePreview(); } catch(err){setErr('Bad modifications file');}
       }}),
-      el('div',{style:'font-size:24px'},'🔖'), modZoneNameEl,
+      el('div',{style:'font-size:22px'},scIcon('bookmark')), modZoneNameEl,
       el('div',{class:'u-muted-11'},'modifications.json')
     );
     const imgZoneNameEl = el('div',{class:'pdf-zone-name',style:'font-size:13px;font-weight:700'},'images.json (optional)');
@@ -674,7 +674,7 @@ function openImportSourceModal(defaultFolderId) {
         const file = e.target.files?.[0]; if(!file) return;
         try { const p=JSON.parse(await file.text()); if(!p.scima_html_export){setErr('Not an images file');return;} _htmlData=p; imgZoneNameEl.textContent=file.name; updatePreview(); } catch(err){setErr('Bad images file');}
       }}),
-      el('div',{style:'font-size:24px'},'🖼'), imgZoneNameEl,
+      el('div',{style:'font-size:22px'},scIcon('image')), imgZoneNameEl,
       el('div',{class:'u-muted-11'},'images.json')
     );
     manualSection.append(
@@ -691,20 +691,20 @@ function openImportSourceModal(defaultFolderId) {
         if(!nameField.querySelector('input').value.trim()) nameField.querySelector('input').value = _modsData.sourceName || '';
         const bmCount = (_modsData.bookmarks||[]).length;
         const chCount = (_modsData.chapters||[]).length;
-        if(bmCount)  lines.push(`🔖 ${bmCount} bookmark${bmCount!==1?'s':''} will be restored`);
-        if(chCount)  lines.push(`📑 ${chCount} chapter${chCount!==1?'s':''} will be restored`);
-        if(_modsData.autoBookmark) lines.push('📍 Reading position will be restored');
-        if(_htmlData) lines.push(`🖼 ${(_htmlData.htmlChapters||[]).length} HTML chapter(s) with images will be restored`);
+        if(bmCount)  lines.push(['bookmark', `${bmCount} bookmark${bmCount!==1?'s':''} will be restored`]);
+        if(chCount)  lines.push(['tabs', `${chCount} chapter${chCount!==1?'s':''} will be restored`]);
+        if(_modsData.autoBookmark) lines.push(['map-pin', 'Reading position will be restored']);
+        if(_htmlData) lines.push(['image', `${(_htmlData.htmlChapters||[]).length} HTML chapter(s) with images will be restored`]);
         if(!_sourceFile && _modsData.sourceName) {
           const byHash = _modsData.contentHash ? state.sources.find(s=>s.contentHash===_modsData.contentHash) : null;
           const existing = byHash || state.sources.find(s=>s.name===_modsData.sourceName);
-          if(existing) lines.push(`✅ Matched existing source "${escHtml(existing.name)}"${byHash?' (by content hash)':' (by name)'}`);
-          else lines.push('⚠ No matching source found — also provide the source file');
+          if(existing) lines.push(['check-circle', `Matched existing source "${existing.name}"${byHash?' (by content hash)':' (by name)'}`]);
+          else lines.push(['alert', 'No matching source found — also provide the source file']);
         }
       }
-      if(_sourceFile) lines.push(`📄 ${escHtml(_sourceFile.name)}`);
-      if(_sourceFile && !_modsData) lines.push('ℹ No modifications file — source will be imported without bookmarks');
-      if(lines.length) { previewEl.innerHTML = lines.map(l=>`<div>${l}</div>`).join(''); previewEl.style.display = ''; }
+      if(_sourceFile) lines.push(['file-text', _sourceFile.name]);
+      if(_sourceFile && !_modsData) lines.push(['info', 'No modifications file — source will be imported without bookmarks']);
+      if(lines.length) { previewEl.innerHTML=''; lines.forEach(([ic,tx])=>previewEl.appendChild(el('div',{},scLbl(ic,tx)))); previewEl.style.display = ''; }
     }
 
     // ── Import button ──────────────────────────────────────────────────────
@@ -861,7 +861,7 @@ function openAddSourceModal(defaultFolderId) {
               statusEl.textContent=`✓ Extracted ${nOf(content.length,'character')}${chapters.length?` · ${chapters.length} chapter${chapters.length!==1?'s':''} found`:''}`; statusEl.className='success-badge'; statusEl.style.display='';
             }catch(err){ statusEl.style.display='none'; errEl.textContent='Could not read file: '+(err?.message||String(err)); errEl.style.display=''; }
           }}),
-          el('div',{style:'font-size:36px'},'📂'),el('div',{class:'pdf-zone-name',style:'font-size:13px;font-weight:700'},'Click to choose file'),
+          el('div',{style:'font-size:34px'},scIcon('folder-open')),el('div',{class:'pdf-zone-name',style:'font-size:13px;font-weight:700'},'Click to choose file'),
           el('div',{class:'u-muted-11'},'.txt · .pdf · .epub · .mobi')
         );
         contentWrap.append(zone,statusEl,errEl);
@@ -1151,9 +1151,9 @@ function openLibraryReader(sourceId) {
 
   // Citation placement toggle — front / back / neither
   const placements=[
-    {value:'front', label:'📖 As front'},
-    {value:'back',  label:'✏️ As back'},
-    {value:'none',  label:'🔗 Ref only'},
+    {value:'front', icon:'book-open', label:'As front'},
+    {value:'back',  icon:'pencil',    label:'As back'},
+    {value:'none',  icon:'link',      label:'Ref only'},
   ];
   let citPlacement='front';
   const placementRow=el('div',{style:'display:flex;gap:4px'});
@@ -1169,18 +1169,18 @@ function openLibraryReader(sourceId) {
     const pb=el('button',{
       title:p.title,
       style:'flex:1;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--muted);cursor:pointer;font-size:10px;font-weight:700;font-family:inherit;white-space:nowrap;transition:all 0.12s;'
-    },p.label);
+    },scLbl(p.icon,p.label));
     pb.addEventListener('click',()=>{ citPlacement=p.value; refreshPlacementBtns(); });
     placementRow.appendChild(pb);
   });
   refreshPlacementBtns();
 
-  const createCardBtn=el('button',{style:'width:100%;padding:6px 10px;border-radius:7px;border:none;background:var(--grad);color:var(--on-gradient);cursor:pointer;font-size:11px;font-weight:800;font-family:inherit;'},'🃏 Create Flashcard');
-  const defineBtn=el('button',{style:'width:100%;padding:6px 10px;border-radius:7px;border:1px solid rgba(var(--blue-rgb),0.4);background:rgba(var(--blue-rgb),0.1);color:var(--blue);cursor:pointer;font-size:11px;font-weight:800;font-family:inherit;'},'🔍 Define');
+  const createCardBtn=el('button',{style:'width:100%;padding:6px 10px;border-radius:7px;border:none;background:var(--grad);color:var(--on-gradient);cursor:pointer;font-size:11px;font-weight:800;font-family:inherit;'},[scIcon('card'),' Create Flashcard']);
+  const defineBtn=el('button',{style:'width:100%;padding:6px 10px;border-radius:7px;border:1px solid rgba(var(--blue-rgb),0.4);background:rgba(var(--blue-rgb),0.1);color:var(--blue);cursor:pointer;font-size:11px;font-weight:800;font-family:inherit;'},[scIcon('search'),' Define']);
   // Highlight/annotate — txt/epub/mobi only (PDF text lives in canvas-rendered pages,
   // no reliable way to overlay a highlight span there, so this button is left off the
   // toolbar entirely for PDF sources rather than offered and silently doing nothing).
-  const highlightBtn=el('button',{style:'width:100%;padding:6px 10px;border-radius:7px;border:1px solid rgba(251,146,60,0.4);background:rgba(251,146,60,0.12);color:#fb923c;cursor:pointer;font-size:11px;font-weight:800;font-family:inherit;'},'🖍 Highlight');
+  const highlightBtn=el('button',{style:'width:100%;padding:6px 10px;border-radius:7px;border:1px solid rgba(251,146,60,0.4);background:rgba(251,146,60,0.12);color:#fb923c;cursor:pointer;font-size:11px;font-weight:800;font-family:inherit;'},[scIcon('highlighter'),' Highlight']);
   selectionToolbar.append(selInfo, placementRow, createCardBtn, defineBtn);
   if(!IS_PDF) selectionToolbar.appendChild(highlightBtn);
   document.body.appendChild(selectionToolbar);
@@ -1603,26 +1603,26 @@ function openLibraryReader(sourceId) {
     title:'Add bookmark here',
     style:'background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text);width:34px;height:34px;cursor:pointer;font-size:16px;font-family:inherit;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0',
     onclick:addBookmark
-  },'＋');
+  },scIcon('plus'));
   const hamburgerBtn=el('button',{
     title:'Bookmarks',
     style:'background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text);width:34px;height:34px;cursor:pointer;font-size:15px;font-family:inherit;display:flex;align-items:center;justify-content:center;flex-shrink:0',
     onclick:toggleBmPanel
-  },'☰');
+  },scIcon('list'));
 
   const editToggleBtn=el('button',{
     title:'Edit source text',
     style:`background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text);padding:6px 10px;cursor:pointer;font-size:12px;font-family:inherit;font-weight:700;display:${isEditableSource?'flex':'none'};align-items:center;gap:4px;flex-shrink:0`,
     onclick:()=>enterEditMode()
-  },'✏️ Edit');
+  },[scIcon('pencil'),' Edit']);
   const editSaveBtn=el('button',{
     style:'background:var(--grad);border:none;border-radius:8px;color:var(--on-gradient);padding:6px 10px;cursor:pointer;font-size:12px;font-family:inherit;font-weight:800;display:none;align-items:center;gap:4px;flex-shrink:0',
     onclick:()=>exitEditMode(true)
-  },'✓ Save');
+  },[scIcon('check'),' Save']);
   const editCancelBtn=el('button',{
     style:'background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--muted);padding:6px 10px;cursor:pointer;font-size:12px;font-family:inherit;font-weight:700;display:none;align-items:center;gap:4px;flex-shrink:0',
     onclick:()=>exitEditMode(false)
-  },'✕ Cancel');
+  },[scIcon('close'),' Cancel']);
 
   // Zoom controls — PDF only. Re-rasterises the current pages at the new resolution
   // (see setPdfZoom above) rather than just CSS-stretching the existing bitmaps.
@@ -1658,14 +1658,14 @@ function openLibraryReader(sourceId) {
     overlay.remove();
   }
 
-  const closeBtn=el('button',{style:'background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text);padding:6px 14px;cursor:pointer;font-size:13px;font-family:inherit;font-weight:700'},'✕ Close');
+  const closeBtn=el('button',{style:'background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text);padding:6px 14px;cursor:pointer;font-size:13px;font-family:inherit;font-weight:700'},[scIcon('close'),' Close']);
   closeBtn.addEventListener('click', closeReader);
 
   const readerExportBtn=el('button',{
     title:'Export source file + bookmarks',
     style:'background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text);padding:6px 10px;cursor:pointer;font-size:12px;font-family:inherit;font-weight:700;display:flex;align-items:center;gap:4px;flex-shrink:0',
     onclick:()=>exportSourceWithBookmarks(source.id)
-  },'⬇ Export');
+  },[scIcon('download'),' Export']);
 
   // ── Mobile sidebar toggles ────────────────────────────────────────────────
   // On narrow screens the chapter list / extracted-text sidebar stop being
@@ -1677,15 +1677,15 @@ function openLibraryReader(sourceId) {
   const chaptersToggleBtn=(!IS_PDF && source.chapters?.length) ? el('button',{
     class:'reader-mobile-only',title:'Chapters','aria-label':'Toggle chapter list',style:readerHdrBtnStyle,
     onclick:()=>overlay.classList.toggle('reader-chapters-open')
-  },'📑') : null;
+  },scIcon('tabs')) : null;
   const pdfTextToggleBtn=IS_PDF ? el('button',{
     class:'reader-mobile-only',title:'Extracted text','aria-label':'Toggle extracted-text sidebar',style:readerHdrBtnStyle,
     onclick:()=>overlay.classList.toggle('reader-pdfside-open')
-  },'📄') : null;
+  },scIcon('file-text')) : null;
 
   const header=el('div',{class:'reader-header',style:'display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);flex-shrink:0;gap:12px'},
     el('div',{style:'display:flex;align-items:center;gap:10px;min-width:0'},
-      el('span',{style:'font-size:18px'},sourceTypeIcon(source)),
+      el('span',{style:'font-size:17px;display:inline-flex'},scIcon(sourceTypeIcon(source))),
       el('div',{style:'min-width:0'},
         el('div',{style:'font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'},source.name),
         el('div',{style:'font-size:11px;color:var(--muted);margin-top:1px'},`${nOf(source.content.length,'char')} · ${IS_PDF?'Select text on the right to create flashcards':'Select text to create flashcards'}`)
@@ -1713,7 +1713,7 @@ function openLibraryReader(sourceId) {
     if(!chapterSidebar) return;
     chapterSidebar.innerHTML='';
     chapterSidebar.appendChild(el('div',{style:'font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);padding:6px 10px;margin-bottom:4px'},'Chapters'));
-    const items=[{id:'',title:'📄 Full text'}, ...source.chapters.map(ch=>({id:ch.id,title:ch.title}))];
+    const items=[{id:'',title:scLbl('file-text','Full text')}, ...source.chapters.map(ch=>({id:ch.id,title:ch.title}))];
     items.forEach(it=>{
       const active=activeChapterId===it.id;
       const itemEl=el('div',{style:`padding:7px 10px;border-radius:7px;font-size:12px;cursor:pointer;margin-bottom:2px;font-weight:${active?'700':'500'};color:${active?'var(--blue)':'var(--muted)'};background:${active?'rgba(var(--blue-rgb),0.12)':'transparent'};border-left:2px solid ${active?'var(--blue)':'transparent'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background 0.12s`},it.title);
@@ -2244,7 +2244,7 @@ function openLibraryReader(sourceId) {
 }
 
 function openDefineFromReaderModal(term, citation) {
-  openModal('🔍 Define & Add', body => {
+  openModal(scLbl('search','Define & Add'), body => {
     const termEl=el('div',{style:'font-size:16px;font-weight:700;padding:8px 0;color:var(--blue)'},term);
     const resultEl=el('div',{style:'font-size:13px;color:var(--muted);line-height:1.6;min-height:48px'},'Loading definition…');
     const deckSel=el('select',{style:'width:100%;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text);font-size:13px;font-family:inherit;outline:none;margin:10px 0'});
@@ -2258,11 +2258,11 @@ function openDefineFromReaderModal(term, citation) {
     defineTerm(term, state.settings.defineLang||'en', opts).then(({kind,back,hint,pinyin})=>{
       cardBack=back; cardHint=hint;
       if(kind==='pinyin'){
-        resultEl.innerHTML = `<div style="font-size:15px;font-weight:700;color:var(--blue);margin-bottom:6px">${pinyin?`🀄 ${escHtml(pinyin)}`:''}</div>${escHtml(back)}`;
+        resultEl.replaceChildren(el('div',{style:'font-size:15px;font-weight:700;color:var(--blue);margin-bottom:6px'},pinyin?scLbl('translate',pinyin):''),el('div',{},back));
       } else if(kind==='translation'){
-        resultEl.innerHTML = `<div style="font-size:11px;color:var(--blue);margin-bottom:4px">🌐 ${escHtml(hint)}</div>${escHtml(back)}`;
+        resultEl.replaceChildren(el('div',{style:'font-size:11px;color:var(--blue);margin-bottom:4px'},scLbl('globe',hint)),el('div',{},back));
       } else {
-        resultEl.innerHTML = `${hint?`<em>${escHtml(hint)}</em><br>`:''}${escHtml(back)}`;
+        resultEl.replaceChildren(hint?el('em',{},hint):null,el('div',{},back));
       }
       saveBtn.style.display='block';
       saveBtn.onclick=()=>{
@@ -2281,7 +2281,7 @@ function openCreateCardFromReaderModal(selectedText, citation, placement) {
     state.decks.forEach(d=>deckSel.appendChild(el('option',{value:d.id,class:'u-bg'},d.name)));
 
     const citBadge=el('div',{style:'font-size:11px;color:var(--blue);background:rgba(var(--blue-rgb),0.1);border:1px solid rgba(var(--blue-rgb),0.2);border-radius:6px;padding:4px 10px;display:inline-block;margin-bottom:10px'},
-      `📎 Linked to "${state.sources.find(s=>s.id===citation.sourceId)?.name||'source'}"`);
+      scLbl('paperclip', `Linked to "${state.sources.find(s=>s.id===citation.sourceId)?.name||'source'}"`));
 
     const frontField=createField('Front','text','',true);
     const frontTA=frontField.querySelector('textarea'); frontTA.rows=4;

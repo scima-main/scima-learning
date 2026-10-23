@@ -47,14 +47,14 @@ def test_robots_disallows_games(site_base):
 
 def test_pi_recall_play_and_lives(page, site_base, seeded):
     goto_games(page, site_base, seeded, "preset:empty")
-    page.locator(".card", has_text="Pi Recall").first.get_by_role("button", name="▶ Play").click()
+    page.locator(".card", has_text="Pi Recall").first.get_by_role("button", name="Play").click()
     box = page.locator("#game-controls input")
     expect(box).to_be_visible()
     for ch in "1415":
         box.type(ch, delay=20)
-    expect(page.locator("#game-hud")).to_contain_text("⭐ 4")
+    expect(page.locator("#game-hud")).to_contain_text("4")
     box.type("0", delay=20)                     # π continues …926535 — '0' is wrong
-    expect(page.locator("#game-hud")).to_contain_text("❤ 2")
+    expect(page.locator("#game-hud")).to_contain_text("2")
     box.type("0", delay=20)
     box.type("0", delay=20)
     expect(page.locator("#game-stage")).to_contain_text("Out of lives", timeout=5000)
@@ -63,8 +63,8 @@ def test_pi_recall_play_and_lives(page, site_base, seeded):
 
 def test_playtest_from_editor_uses_current_chart(page, site_base, seeded):
     goto_games(page, site_base, seeded, "preset:empty")
-    page.get_by_role("button", name="✏ Editor").click()
-    page.get_by_role("button", name="▶ Playtest").click()
+    page.get_by_role("button", name="Editor").click()
+    page.get_by_role("button", name="Playtest").click()
     expect(page.locator("#game-controls input")).to_be_visible()
 
 
@@ -72,7 +72,7 @@ def test_playtest_from_editor_uses_current_chart(page, site_base, seeded):
 
 def test_editor_list_inspector_and_json(page, site_base, seeded):
     goto_games(page, site_base, seeded, "preset:empty")
-    page.get_by_role("button", name="✏ Editor").click()
+    page.get_by_role("button", name="Editor").click()
     rows = page.locator("#view-games .card [role='button'][aria-label^='Edit object']")
     expect(rows).to_have_count(6)                       # pi-recall built-in
 
@@ -102,9 +102,9 @@ def test_share_string_roundtrip_installs(page, site_base, seeded):
 
     box.fill("")
     box.fill(share)
-    page.get_by_role("button", name="⬇ Import from box").click()
+    page.get_by_role("button", name="Import from box").click()
     expect(page.locator("#view-games")).to_contain_text("Installed", timeout=5000)
-    page.get_by_role("button", name="▶ Play").first.click()   # back to library
+    page.get_by_role("button", name="Play").first.click()   # back to library
     expect(page.locator(".card", has_text="Pi Sudden Shift")).to_have_count(2)  # builtin + installed
 
 
@@ -117,13 +117,13 @@ def test_share_string_cross_implementation(page, site_base, seeded, tmp_path):
     cli_share = kit("share", str(f)).stdout.strip()
 
     goto_games(page, site_base, seeded, "preset:empty")
-    page.get_by_role("button", name="⇄ Import / Export").click()
+    page.get_by_role("button", name="Import / Export").click()
     box = page.locator("textarea[aria-label='Game JSON or share string']")
     box.fill(cli_share)                                  # browser decodes CLI string
-    page.get_by_role("button", name="⬇ Import from box").click()
+    page.get_by_role("button", name="Import from box").click()
     expect(page.locator("#view-games")).to_contain_text("Installed", timeout=5000)
 
-    page.get_by_role("button", name="▶ Play").first.click()
+    page.get_by_role("button", name="Play").first.click()
     page.locator(".card", has_text="CLI Pi").first.get_by_role("button", name="Share").click()
     browser_share = box.input_value()
     decoded = json.loads(kit("unshare", browser_share).stdout)   # CLI decodes browser string
@@ -147,15 +147,15 @@ def test_remix_attribution_chain(page, site_base, seeded):
                 {"t": "rule.end", "step": 0},
             ]}}
     goto_games(page, site_base, seeded, "preset:empty")
-    page.get_by_role("button", name="⇄ Import / Export").click()
+    page.get_by_role("button", name="Import / Export").click()
     box = page.locator("textarea[aria-label='Game JSON or share string']")
     box.fill(json.dumps(envelope))
-    page.get_by_role("button", name="⬇ Import from box").click()
+    page.get_by_role("button", name="Import from box").click()
     expect(page.locator("#view-games")).to_contain_text("Installed", timeout=5000)
 
     page.get_by_role("button", name="⑂ Fork selected into editor").click()
     page.locator("input[aria-label='Author name for attribution']").fill("Bo")
-    page.get_by_role("button", name="💾 Save").click()
+    page.get_by_role("button", name="Save").click()
     expect(page.locator("#view-games")).to_contain_text("Ada", timeout=5000)
     expect(page.locator("#view-games")).to_contain_text("Bo (remix)")
 
@@ -165,7 +165,7 @@ def test_remix_attribution_chain(page, site_base, seeded):
 def test_track_shows_banked_digits_and_cursor(page, site_base, seeded):
     goto_games(page, site_base, seeded, "preset:empty")
     page.locator(".card", has_text="Pi Recall").first.get_by_role(
-        "button", name="▶ Play").click()
+        "button", name="Play").click()
     box = page.locator("#game-controls input")
     for ch in "1415":
         box.type(ch, delay=20)
@@ -185,7 +185,7 @@ def test_track_shows_banked_digits_and_cursor(page, site_base, seeded):
 def test_gameover_reveals_next_25_digits_in_red(page, site_base, seeded):
     goto_games(page, site_base, seeded, "preset:empty")
     page.locator(".card", has_text="Pi Recall").first.get_by_role(
-        "button", name="▶ Play").click()
+        "button", name="Play").click()
     box = page.locator("#game-controls input")
     for ch in "1415":
         box.type(ch, delay=20)
@@ -258,6 +258,6 @@ def test_games_page_a11y_clean(page, site_base, seeded):
     goto_games(page, site_base, seeded, "preset:empty")
     assert content.poorly_named_controls(page) == []
     assert content.unnamed_visible_buttons(page) == []
-    page.get_by_role("button", name="✏ Editor").click()
+    page.get_by_role("button", name="Editor").click()
     assert content.poorly_named_controls(page) == []
     assert content.clickables_missing_role(page) == []

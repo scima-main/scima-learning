@@ -37,7 +37,7 @@ def test_quiz_waits_for_next_button(page, site_base, seeded):
     page.wait_for_timeout(1500)                      # old build auto-advanced here
     assert pages.session_progress(page) == (1, 7)    # still card 1 (quiz = all cards)
     expect(page.locator("#view-study")).not_to_contain_text("Next in")
-    page.get_by_role("button", name="Next →").click()
+    page.get_by_role("button", name="Next").click()
     assert pages.session_progress(page) == (2, 7)
 
 
@@ -56,7 +56,7 @@ def test_gaps_waits_then_finishes(page, site_base, seeded):
 
     page.wait_for_timeout(1200)
     expect(page.locator("#view-study")).not_to_contain_text("Session Complete!")
-    page.get_by_role("button", name="Finish →").click()   # last card
+    page.get_by_role("button", name="Finish").click()   # last card
     expect(page.locator("#view-study")).to_contain_text("Session Complete!")
 
 
@@ -86,7 +86,7 @@ def test_multiple_choice_waits_for_next(page, site_base, seeded):
 
     page.wait_for_timeout(900)                           # old build: 450ms auto
     assert pages.session_progress(page) == (1, 7)
-    page.get_by_role("button", name="Next →").click()
+    page.get_by_role("button", name="Next").click()
     assert pages.session_progress(page) == (2, 7)
 
 

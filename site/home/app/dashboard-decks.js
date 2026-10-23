@@ -304,7 +304,7 @@ function renderDecksHome(c) {
     el('div',{class:'section-title'},'Decks'),
     el('div',{class:'section-sub',style:'margin-bottom:10px'},`${state.decks.length} deck${state.decks.length!==1?'s':''} · ${state.folders.length} folder${state.folders.length!==1?'s':''}`),
     el('div',{class:'tab-bar container-actions'},
-      actionTab('📚 Manage Subjects',{title:'Add, rename or delete subjects — no page jump',onclick:()=>{ if (typeof openSettingsPanelModal === 'function') openSettingsPanelModal('subjects'); else openSettingsInNewTab('subjects'); }}),
+      actionTab(scLbl('books','Manage Subjects'),{title:'Add, rename or delete subjects — no page jump',onclick:()=>{ if (typeof openSettingsPanelModal === 'function') openSettingsPanelModal('subjects'); else openSettingsInNewTab('subjects'); }}),
       actionTab('+ New Folder',{title:'Create a folder — pick its subject',onclick:()=>openCreateFolderModal(null,null)}),
       (()=>{ const b=actionTab('+ New Deck',{variant:'primary',onclick:()=>openCreateDeckModal()}); b.id='tutorial-target-new-deck'; return b; })())
   );
@@ -316,7 +316,7 @@ function renderDecksHome(c) {
 
   if (!subjects.size) {
     c.append(topBar, el('div',{class:'empty-state'},
-      el('div',{class:'empty-icon'},'📚'), el('div',{class:'empty-title'},'No decks yet'),
+      el('div',{class:'empty-icon'},scIcon('books')), el('div',{class:'empty-title'},'No decks yet'),
       el('div',{class:'empty-sub'},'Create your first deck to start learning'),
       btn('Create Deck','primary',{onclick:()=>openCreateDeckModal()})
     ));
@@ -342,9 +342,9 @@ function renderDecksHome(c) {
         el('div',{class:'folder-meta'},`${nOf(subjDecks.length,'deck')}${subjFolders.length?` · ${nOf(subjFolders.length,'top-level folder')}`:''}${due>0?` · ${due} due`:''}`)
       ),
       el('div',{class:'folder-actions'},
-        btn('▶','ghost',{small:true,title:'Study this subject now','aria-label':`Study subject ${s.name} now`,onclick:e=>{e.stopPropagation();state.studyScope=[{type:'subject',id:sk}];navigate('study');}}),
-        btn('⬇','ghost',{small:true,title:'Export subject as JSON','aria-label':`Export subject ${s.name} as JSON`,onclick:e=>{e.stopPropagation();exportSubject(sk);}}),
-        btn('✏️','ghost',{small:true,title:'Edit subject','aria-label':`Edit subject ${s.name}`,onclick:e=>{e.stopPropagation(); if (typeof openSettingsPanelModal === 'function') openSettingsPanelModal('subjects'); else openSettingsInNewTab('subjects');}})
+        btn(scIcon('play'),'ghost',{small:true,title:'Study this subject now','aria-label':`Study subject ${s.name} now`,onclick:e=>{e.stopPropagation();state.studyScope=[{type:'subject',id:sk}];navigate('study');}}),
+        btn(scIcon('download'),'ghost',{small:true,title:'Export subject as JSON','aria-label':`Export subject ${s.name} as JSON`,onclick:e=>{e.stopPropagation();exportSubject(sk);}}),
+        btn(scIcon('pencil'),'ghost',{small:true,title:'Edit subject','aria-label':`Edit subject ${s.name}`,onclick:e=>{e.stopPropagation(); if (typeof openSettingsPanelModal === 'function') openSettingsPanelModal('subjects'); else openSettingsInNewTab('subjects');}})
       ),
       el('span',{style:'color:var(--muted);font-size:16px;margin-left:4px'},'›')
     );
@@ -367,7 +367,7 @@ function renderContainerView(c, subjectKey, folderId) {
   const subjectCrumb = el('span',{class:'breadcrumb-part',onclick:()=>{ state.deckNav={view:'subject',subjectKey}; renderView('decks'); }},s.name);
   makeDropTarget(subjectCrumb, null, subjectKey);
   const breadcrumb = el('div',{class:'breadcrumb'},
-    el('span',{class:'breadcrumb-part',onclick:()=>{ state.deckNav={view:'subjects'}; renderView('decks'); }},'📚 Decks'),
+    el('span',{class:'breadcrumb-part',onclick:()=>{ state.deckNav={view:'subjects'}; renderView('decks'); }},scLbl('books',' Decks')),
     el('span',{class:'breadcrumb-sep'},'›'),
     subjectCrumb);
   chain.forEach((f,i)=>{
@@ -392,10 +392,10 @@ function renderContainerView(c, subjectKey, folderId) {
   // ── one merged action bar for both container kinds, same order — the
   // name sits ABOVE it so the bar gets the full container width ──
   const bar = el('div',{class:'container-head',style:'margin-bottom:18px'},
-    el('div',{style:`font-weight:900;font-size:20px;margin-bottom:2px;${folder?'':'color:'+(s.defaultColor||'var(--text)')+';'}`}, folder ? `📁 ${folder.name}` : s.name),
+    el('div',{style:`font-weight:900;font-size:20px;margin-bottom:2px;${folder?'':'color:'+(s.defaultColor||'var(--text)')+';'}`}, folder ? scLbl('folder', folder.name) : s.name),
     el('div',{class:'u-muted-12',style:'margin-bottom:10px'},`${nOf(allDecks.length,'deck')}${childFolders.length?` · ${nOf(childFolders.length,'folder')}`:''}`),
     el('div',{class:'tab-bar container-actions'},
-      actionTab('▶ Study',{title:folder?'Study this folder now':'Study this subject now',
+      actionTab(scLbl('play','Study'),{title:folder?'Study this folder now':'Study this subject now',
         onclick:()=>{ state.studyScope= folder ? [{type:'folder',id:folderId}] : [{type:'subject',id:subjectKey}]; navigate('study'); }}),
       actionTab('Aa Case…',{title:'Standardize letter case / endings across this '+(folder?'folder (subfolders included)':'subject'),
         onclick:()=>{ const sub=new Set(folder?folderSubtreeIds(folderId):[]);
@@ -403,12 +403,12 @@ function renderContainerView(c, subjectKey, folderId) {
           const folders = folder ? state.folders.filter(f=>sub.has(f.id)) : state.folders.filter(f=>(f.subjectKey||DEFAULT_SUBJECT_KEY)===subjectKey);
           openCaseStandardizeModal(folder ? `the folder "${folder.name}" (incl. subfolders)` : `the subject "${s.name}"`,
             { cards: decks.flatMap(d=>d.cards), decks, folders }); }}),
-      actionTab('⬇ Export',{title:folder?'Export folder as JSON':'Export subject as JSON',
+      actionTab(scLbl('download','Export'),{title:folder?'Export folder as JSON':'Export subject as JSON',
         onclick:()=>{ folder ? exportFolder(folderId) : exportSubject(subjectKey); }}),
-      folder ? actionTab('📂 Move to Folder…',{onclick:()=>openMoveFolderModal(folderId)}) : null,
-      folder ? actionTab('📚 Move to Subject…',{onclick:()=>openMoveFolderSubjectModal(folderId)}) : null,
-      folder ? actionTab('✏ Rename',{title:`Rename folder ${folder.name}`,onclick:()=>openRenameFolderModal(folderId)})
-             : actionTab('✏️ Edit Subject',{title:'Edit this subject',onclick:()=>{ if (typeof openSettingsPanelModal === 'function') openSettingsPanelModal('subjects'); else openSettingsInNewTab('subjects'); }}),
+      folder ? actionTab(scLbl('folder-open','Move to Folder…'),{onclick:()=>openMoveFolderModal(folderId)}) : null,
+      folder ? actionTab(scLbl('books','Move to Subject…'),{onclick:()=>openMoveFolderSubjectModal(folderId)}) : null,
+      folder ? actionTab(scLbl('pencil','Rename'),{title:`Rename folder ${folder.name}`,onclick:()=>openRenameFolderModal(folderId)})
+             : actionTab(scLbl('pencil','Edit Subject'),{title:'Edit this subject',onclick:()=>{ if (typeof openSettingsPanelModal === 'function') openSettingsPanelModal('subjects'); else openSettingsInNewTab('subjects'); }}),
       folder ? actionTab('× Delete',{variant:'danger',title:`Delete folder ${folder.name}`,aria:`Delete folder ${folder.name}`,onclick:()=>deleteFolder(folderId)}) : null,
       actionTab('+ New Folder',{title:folder?'Create a subfolder here':'Create a folder in this subject',
         onclick:()=>openCreateFolderModal(subjectKey, folderId||null)}),
@@ -427,17 +427,17 @@ function renderContainerView(c, subjectKey, folderId) {
       const folderEl=el('div',{class:'folder-item',role:'button',tabindex:'0','aria-label':`Open folder ${f.name}`,
         onclick:()=>{ state.deckNav={view:'folder',subjectKey,folderId:f.id}; renderView('decks'); },
         onkeydown:clickKeys(()=>{ state.deckNav={view:'folder',subjectKey,folderId:f.id}; renderView('decks'); })},
-        mkIcon(f.emoji||'📁',f.image,'22px','4px'),
+        mkIcon(f.emoji||'folder',f.image,'22px','4px'),
         el('div',{style:'flex:1;min-width:0'},
           el('div',{class:'folder-name'},f.name),
           el('div',{class:'folder-meta'},`${fd.length} deck${fd.length!==1?'s':''}${sf.length?` · ${sf.length} subfolder${sf.length!==1?'s':''}`:''} ${due>0?`· ${due} due`:''}`)
         ),
         el('div',{class:'folder-actions'},
-          btn('▶','ghost',{small:true,title:'Study this folder now','aria-label':`Study folder ${f.name} now`,onclick:e=>{e.stopPropagation();state.studyScope=[{type:'folder',id:f.id}];navigate('study');}}),
-          btn('⬇','ghost',{small:true,title:'Export folder as JSON','aria-label':`Export folder ${f.name} as JSON`,onclick:e=>{e.stopPropagation();exportFolder(f.id);}}),
-          btn('📂','ghost',{small:true,title:'Move to Folder…','aria-label':`Move folder ${f.name} into another folder`,onclick:e=>{e.stopPropagation();openMoveFolderModal(f.id);}}),
-          btn('📚','ghost',{small:true,title:'Move to Subject…','aria-label':`Move folder ${f.name} to another subject`,onclick:e=>{e.stopPropagation();openMoveFolderSubjectModal(f.id);}}),
-          btn('✏','ghost',{small:true,title:'Rename folder','aria-label':`Rename folder ${f.name}`,onclick:e=>{e.stopPropagation();openRenameFolderModal(f.id);}}),
+          btn(scIcon('play'),'ghost',{small:true,title:'Study this folder now','aria-label':`Study folder ${f.name} now`,onclick:e=>{e.stopPropagation();state.studyScope=[{type:'folder',id:f.id}];navigate('study');}}),
+          btn(scIcon('download'),'ghost',{small:true,title:'Export folder as JSON','aria-label':`Export folder ${f.name} as JSON`,onclick:e=>{e.stopPropagation();exportFolder(f.id);}}),
+          btn(scIcon('folder-open'),'ghost',{small:true,title:'Move to Folder…','aria-label':`Move folder ${f.name} into another folder`,onclick:e=>{e.stopPropagation();openMoveFolderModal(f.id);}}),
+          btn(scIcon('books'),'ghost',{small:true,title:'Move to Subject…','aria-label':`Move folder ${f.name} to another subject`,onclick:e=>{e.stopPropagation();openMoveFolderSubjectModal(f.id);}}),
+          btn(scIcon('pencil'),'ghost',{small:true,title:'Rename folder','aria-label':`Rename folder ${f.name}`,onclick:e=>{e.stopPropagation();openRenameFolderModal(f.id);}}),
           btn('×','danger',{small:true,title:'Delete folder','aria-label':`Delete folder ${f.name}`,onclick:e=>{e.stopPropagation();deleteFolder(f.id);}})
         ),
         el('span',{style:'color:var(--muted);font-size:16px;margin-left:4px'},'›')
@@ -455,7 +455,7 @@ function renderContainerView(c, subjectKey, folderId) {
   }
 
   if (!childFolders.length && !childDecks.length)
-    c.appendChild(el('div',{class:'empty-state'},el('div',{class:'empty-icon'},'📂'),
+    c.appendChild(el('div',{class:'empty-state'},el('div',{class:'empty-icon'},scIcon('folder-open')),
       el('div',{class:'empty-title'}, folder?'Empty folder':'No content yet'),
       el('div',{class:'empty-sub'}, folder?'Add decks or subfolders here':'Create a folder or deck for this subject'),
       el('div',{style:'display:flex;gap:8px;justify-content:center;margin-top:4px'},
@@ -631,7 +631,7 @@ function openCaseStandardizeModal(scopeLabel, scope) {
     const preview = el('div', { style: 'display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border);max-height:200px;overflow-y:auto' });
 
     function scopeChip(label, key, available, note) {
-      return chip((opts[key] ? '✓ ' : '') + label, opts[key], () => {
+      return chip(opts[key] ? scLbl('check', label) : label, opts[key], () => {
         if (!available) return;
         opts[key] = !opts[key]; refresh();
       }, available ? note : `${note} (none in this scope)`);
@@ -751,7 +751,7 @@ function openEditDeckModal(deckId) {
   openModal('Edit Deck', body => {
     const nameField = createField('Deck Name','text',deck.name);
     nameField.querySelector('input').value = deck.name;
-    let _deckEmoji = deck.emoji || '📖', _deckImage = deck.image || null;
+    let _deckEmoji = deck.emoji || 'book-open', _deckImage = deck.image || null;
     const iconPicker = mkIconPicker(_deckEmoji, _deckImage, v=>{_deckEmoji=v;}, v=>{_deckImage=v;});
     body.append(nameField, iconPicker, btn('Save','primary',{full:true,onclick:()=>{
       const name=nameField.querySelector('input').value.trim(); if(!name)return;
@@ -765,13 +765,13 @@ function renderDeckCard(deck, grid) {
   const deckDue = getDueCards(deck.cards).length;
   const sk = deck.subject||DEFAULT_SUBJECT_KEY;
   const mult = subjectXPMultiplier(state.trackerState?.subjects, sk);
-  const pinBtn = el('button',{class:`btn btn-ghost btn-sm pin-toggle${deck.pinned?' pinned':''}`,'data-deck':deck.id,title:deck.pinned?'Unpin from sidebar':'Pin to sidebar',onclick:e=>{e.stopPropagation();togglePinDeck(deck.id);}},'📌');
+  const pinBtn = el('button',{class:`btn btn-ghost btn-sm pin-toggle${deck.pinned?' pinned':''}`,'data-deck':deck.id,title:deck.pinned?'Unpin from sidebar':'Pin to sidebar','aria-label':deck.pinned?'Unpin from sidebar':'Pin to sidebar',onclick:e=>{e.stopPropagation();togglePinDeck(deck.id);}},scIcon('pin'));
   const cardEl = el('div',{class:`card deck-card${deckDue>0?' glow':''}`},
     el('div',{style:'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px'},
       mkIcon(deck.emoji,deck.image,'36px','8px'),
       el('div',{style:'display:flex;gap:4px'},
         pinBtn,
-        btn('✏','ghost',{small:true,title:'Edit deck','aria-label':`Edit deck ${deck.name}`,onclick:e=>{e.stopPropagation();openEditDeckModal(deck.id);}}),
+        btn(scIcon('pencil'),'ghost',{small:true,title:'Edit deck','aria-label':`Edit deck ${deck.name}`,onclick:e=>{e.stopPropagation();openEditDeckModal(deck.id);}}),
         btn('×','danger',{small:true,title:'Delete deck','aria-label':`Delete deck ${deck.name}`,onclick:e=>{e.stopPropagation();deleteDeck(deck.id);}})
       )
     ),
@@ -783,12 +783,12 @@ function renderDeckCard(deck, grid) {
       deckDue>0 ? mkTag(`${deckDue} due`,'var(--pink)') : mkTag('Caught up','#22c55e')
     ),
     el('div',{style:'display:flex;flex-direction:column;gap:6px'},
-      btn('▶ Study Now','primary',{full:true,title:'Study this deck now',onclick:e=>{e.stopPropagation();state.studyScope=[{type:'deck',id:deck.id}];navigate('study');}}),
+      btn([scIcon('play'),' Study Now'],'primary',{full:true,title:'Study this deck now',onclick:e=>{e.stopPropagation();state.studyScope=[{type:'deck',id:deck.id}];navigate('study');}}),
       el('div',{style:'display:flex;gap:6px'},
         btn('Manage Cards','ghost',{full:true,onclick:()=>openDeckDetail(deck.id)}),
         btn('Aa','ghost',{small:true,title:'Standardize letter case / endings for this deck',onclick:e=>{e.stopPropagation();openCaseStandardizeModal(`the deck "${deck.name}"`,{cards:deck.cards,decks:[deck],folders:[]});}}),
-        btn('⬇️','ghost',{small:true,title:'Export deck as JSON',onclick:e=>{e.stopPropagation();exportSingleDeck(deck.id);}}),
-        btn('🖨️','ghost',{small:true,title:'Export double-sided PDF',onclick:e=>{e.stopPropagation();exportDeckPDF(deck.id);}})
+        btn(scIcon('download'),'ghost',{small:true,title:'Export deck as JSON',onclick:e=>{e.stopPropagation();exportSingleDeck(deck.id);}}),
+        btn(scIcon('print'),'ghost',{small:true,title:'Export double-sided PDF',onclick:e=>{e.stopPropagation();exportDeckPDF(deck.id);}})
       )
     )
   );
@@ -853,7 +853,7 @@ function renderSelectableDeckGrid(container, decks) {
     selectionBar.append(
       el('span',{},`${selected.size} deck${selected.size>1?'s':''} selected`),
       el('span',{style:'margin-left:auto;display:flex;gap:8px'},
-        btn('▶ Study Selected','ghost',{small:true,onclick:()=>{
+        btn([scIcon('play'),' Study Selected'],'ghost',{small:true,onclick:()=>{
           state.studyScope=[...selected].map(id=>({type:'deck',id}));
           navigate('study');
         }}),
@@ -907,7 +907,7 @@ function openMoveSubjectsModal(deckIds) {
     });
     sel.value = decks[0].subject || DEFAULT_SUBJECT_KEY;
     body.appendChild(sel);
-    body.appendChild(btn('Move →','primary',{full:true,onclick:()=>{
+    body.appendChild(btn(['Move ', scIcon('arrow-right')],'primary',{full:true,onclick:()=>{
       const key = sel.value;
       decks.forEach(d=>{
         d.subject = key;
@@ -959,7 +959,7 @@ function openMoveFolderSubjectModal(folderId) {
     });
     sel.value = folder.subjectKey || DEFAULT_SUBJECT_KEY;
     body.appendChild(sel);
-    body.appendChild(btn('Move →','primary',{full:true,onclick:()=>{
+    body.appendChild(btn(['Move ', scIcon('arrow-right')],'primary',{full:true,onclick:()=>{
       const key = sel.value;
       moveFolderToSubject(folderId, key);
       closeModal(); renderView('decks');
@@ -1034,9 +1034,9 @@ function openMoveDecksModal(deckIds) {
     const folders = state.folders.filter(f=>f.subjectKey===subjectKey);
     body.appendChild(el('div',{class:'u-section-label'},'Move to Existing Folder'));
     const sel=el('select',{style:'width:100%;padding:9px 12px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text);font-size:13px;font-family:inherit;outline:none;margin-bottom:8px'});
-    sel.appendChild(el('option',{value:'',class:'u-bg'},'📚 Top level (no folder)'));
-    folders.forEach(f=>sel.appendChild(el('option',{value:f.id,class:'u-bg'},`${f.emoji||'📁'} ${f.name}`)));
-    body.append(sel, btn('Move →','primary',{full:true,onclick:()=>{
+    sel.appendChild(el('option',{value:'',class:'u-bg'},'Top level (no folder)'));
+    folders.forEach(f=>sel.appendChild(el('option',{value:f.id,class:'u-bg'},scPrefix(f.emoji||'folder')+f.name)));
+    body.append(sel, btn(['Move ', scIcon('arrow-right')],'primary',{full:true,onclick:()=>{
       const targetId=sel.value||null;
       decks.forEach(d=>{ d.folderId=targetId; });
       scheduleSave(); closeModal(); showToast(`Moved ${count} deck${count>1?'s':''} 📦`);
@@ -1046,8 +1046,8 @@ function openMoveDecksModal(deckIds) {
     body.appendChild(el('div',{style:'border-top:1px solid var(--border);margin-top:16px;padding-top:14px'}));
     body.appendChild(el('div',{class:'u-section-label'},'Or Move to a New Folder'));
     const nameField = createField('New Folder Name','text','e.g. Chapter 4');
-    let _emoji='📁', _img=null;
-    const iconPicker = mkIconPicker('📁',null,v=>{_emoji=v;},v=>{_img=v;});
+    let _emoji='folder', _img=null;
+    const iconPicker = mkIconPicker('folder',null,v=>{_emoji=v;},v=>{_img=v;});
     body.append(nameField, iconPicker, btn('Create & Move','primary',{full:true,onclick:()=>{
       const name=nameField.querySelector('input').value.trim();
       if(!name){ showToast('Enter a folder name'); return; }
@@ -1264,7 +1264,7 @@ async function exportAllDataZip() {
       // Surfaced in a modal rather than just the toast — there can be several,
       // and the toast auto-dismisses, so a user who wasn't watching the screen
       // shouldn't have to just trust that "everything" was exported.
-      openModal('⚠ Full export completed with warnings', body => {
+      openModal(scLbl('alert',' Full export completed with warnings'), body => {
         body.append(
           el('div', { style:'font-size:13px;color:var(--muted);margin-bottom:12px' },
             `Your decks, sources (including their full text, bookmarks, and citations), tracker data, and settings all exported normally. ${failedSources.length} source${failedSources.length!==1?'s':''} couldn\u2019t bundle its original file bytes, so re-importing this backup will restore the text/notes for ${failedSources.length!==1?'them':'it'} but not the original PDF/EPUB formatting:`
@@ -1563,7 +1563,7 @@ function openCreateFolderModal(subjectKey, parentId) {
     let mode = 'create';
     const tabBar = el('div',{style:'display:flex;gap:0;margin-bottom:10px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.1)'});
     const tabCreate = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:var(--blue);color:#fff',onclick:()=>switchTab('create')},'+ New Folder');
-    const tabImport = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchTab('import')},'⬆ Import Folder');
+    const tabImport = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchTab('import')},scLbl('upload',' Import Folder'));
     tabBar.append(tabCreate, tabImport);
     body.appendChild(tabBar);
 
@@ -1572,8 +1572,8 @@ function openCreateFolderModal(subjectKey, parentId) {
 
     // --- Create pane ---
     const nameField = createField('Folder Name','text','e.g. Organic Chemistry');
-    let _folderEmoji='📁',_folderImage=null;
-    const folderIconPicker=mkIconPicker('📁',null,function(v){_folderEmoji=v;},function(v){_folderImage=v;});
+    let _folderEmoji='folder',_folderImage=null;
+    const folderIconPicker=mkIconPicker('folder',null,function(v){_folderEmoji=v;},function(v){_folderImage=v;});
     let subjectWrap = null;
     let subjectSel = null;
     if (!subjectKey) {
@@ -1603,7 +1603,7 @@ function openCreateFolderModal(subjectKey, parentId) {
     let parsedImport = null;
 
     const dropZone = el('label',{style:'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:28px;border:2px dashed rgba(255,255,255,0.15);border-radius:10px;cursor:pointer;text-align:center;margin-bottom:10px'},
-      el('div',{style:'font-size:28px'},'📂'),
+      el('div',{style:'font-size:26px'},scIcon('folder-open')),
       el('div',{style:'font-size:13px;font-weight:700'},'Click to choose folder JSON'),
       el('div',{class:'u-muted-11'},'.json exported from SCIMA')
     );
@@ -1675,7 +1675,7 @@ function openRenameFolderModal(folderId) {
   openModal('Edit Folder', body => {
     const nameField = createField('Folder Name','text',folder.name);
     nameField.querySelector('input').value = folder.name;
-    let _folderEmoji = folder.emoji || '📁', _folderImage = folder.image || null;
+    let _folderEmoji = folder.emoji || 'folder', _folderImage = folder.image || null;
     const iconPicker = mkIconPicker(_folderEmoji, _folderImage, v=>{_folderEmoji=v;}, v=>{_folderImage=v;});
     body.append(nameField, iconPicker, btn('Save','primary',{full:true,onclick:()=>{
       const name=nameField.querySelector('input').value.trim(); if(!name)return;
@@ -1711,20 +1711,20 @@ function renderAICapture(wrap) {
   // AI, then parses whatever they paste back. Persisted, same as aiJsonMode.
   const mode = state.settings.aiCaptureMode === 'manual' ? 'manual' : 'api';
   const modeBar = el('div', { class: 'tab-bar', style: 'margin-bottom:16px' });
-  [{ id: 'api', label: '🔌 Local Server' }, { id: 'manual', label: '📋 Copy / Paste' }].forEach(m => {
+  [{ id: 'api', icon: 'plug', label: 'Local Server' }, { id: 'manual', icon: 'clipboard', label: 'Copy / Paste' }].forEach(m => {
     modeBar.appendChild(el('button', { class: `tab-btn${mode === m.id ? ' active' : ''}`, onclick: () => {
       if (state.settings.aiCaptureMode === m.id) return;
       state.settings.aiCaptureMode = m.id; scheduleSave();
       renderAICapture(wrap);
-    } }, m.label));
+    } }, scLbl(m.icon, m.label)));
   });
   wrap.appendChild(modeBar);
 
   if (mode === 'api' && !normalizeAIEndpoint(state.settings.aiEndpoint)) {
     wrap.appendChild(el('div', { class: 'empty-state', style: 'padding:24px;text-align:center' },
-      el('div', { class: 'empty-icon' }, '🔌'),
+      el('div', { class: 'empty-icon' }, scIcon('plug')),
       el('div', { class: 'empty-title' }, 'No AI server configured'),
-      el('div', { class: 'empty-sub' }, 'Add a local server address (e.g. LM Studio’s http://127.0.0.1:1234) in Settings, or switch to 📋 Copy / Paste above to use any chat AI instead.'),
+      el('div', { class: 'empty-sub' }, 'Add a local server address (e.g. LM Studio’s http://127.0.0.1:1234) in Settings, or switch to Copy / Paste above to use any chat AI instead.'),
       btn('Go to Settings', 'primary', { title: 'Open AI settings in a new tab — this dialog stays put', onclick: () => openSettingsInNewTab('ai') })
     ));
     return;
@@ -1745,14 +1745,14 @@ function renderAICapture(wrap) {
   const existField = el('div', { class: 'field' }, el('label', {}, 'Add generated cards to'));
   const deckSel = el('select', { class: 'u-input' });
   state.decks.forEach(d => {
-    const o = el('option', { value: d.id, class: 'u-bg' }, `${d.emoji || '📚'} ${d.name}`);
+    const o = el('option', { value: d.id, class: 'u-bg' }, scPrefix(d.emoji || 'books') + d.name);
     if (d.id === (_lastAIGenerateDeckId || state.decks[0].id)) o.selected = true;
     deckSel.appendChild(o);
   });
   existField.appendChild(deckSel);
   const existWrap = el('div', { style: 'display:none' }, existField);
   const destBar = el('div', { class: 'tab-bar', style: 'margin-bottom:10px' });
-  [{ id: 'new', label: '🆕 New deck' }, { id: 'exist', label: '📚 Existing deck', needDecks: true }].forEach(d => {
+  [{ id: 'new', icon: 'file-plus', label: 'New deck' }, { id: 'exist', icon: 'books', label: 'Existing deck', needDecks: true }].forEach(d => {
     if (d.needDecks && !state.decks.length) return;
     destBar.appendChild(el('button', { class: `tab-btn${dest === d.id ? ' active' : ''}`, onclick: e => {
       dest = d.id;
@@ -1770,7 +1770,7 @@ function renderAICapture(wrap) {
   if (state.sources.length) {
     const srcSel = el('select', { class: 'u-input', style: 'flex:1' });
     srcSel.appendChild(el('option', { value: '', class: 'u-bg' }, 'Pull in a Library source…'));
-    state.sources.forEach(s => srcSel.appendChild(el('option', { value: s.id, class: 'u-bg' }, `${sourceTypeIcon(s)} ${s.name}`)));
+    state.sources.forEach(s => srcSel.appendChild(el('option', { value: s.id, class: 'u-bg' }, scPrefix(sourceTypeIcon(s)) + s.name)));
     sourceRow = el('div', { style: 'display:flex;gap:8px;margin-bottom:10px' },
       srcSel,
       btn('Insert', 'ghost', { small: true, onclick: () => {
@@ -1792,12 +1792,12 @@ function renderAICapture(wrap) {
   function renderModeHint() {
     if (mode === 'manual') {
       modeHint.textContent = state.settings.aiJsonMode
-        ? '🧩 JSON Schema mode: the copied prompt includes the schema as text and asks the model to reply with only matching JSON. Works well with capable chat AIs (ChatGPT, Claude.ai, Gemini); if the reply won’t parse, switch to Text and try again.'
-        : '📄 Text mode: the copied prompt asks for a simple Card1 / Front: / Back: template, which is parsed back out of whatever you paste. The most reliable option for any chat AI.';
+        ? 'JSON Schema mode: the copied prompt includes the schema as text and asks the model to reply with only matching JSON. Works well with capable chat AIs (ChatGPT, Claude.ai, Gemini); if the reply won’t parse, switch to Text and try again.'
+        : 'Text mode: the copied prompt asks for a simple Card1 / Front: / Back: template, which is parsed back out of whatever you paste. The most reliable option for any chat AI.';
     } else {
       modeHint.textContent = state.settings.aiJsonMode
-        ? '🧩 JSON Schema mode: the request sends a response_format json_schema so the server itself constrains the model’s output. Requires a server that supports Structured Output (LM Studio’s Structured Output toggle, recent llama.cpp). If your server ignores or rejects it, switch back to Text.'
-        : '📄 Text mode: the model is asked to reply in a simple Card1 / Front: / Back: template, which is parsed back out. Works with virtually any local model.';
+        ? 'JSON Schema mode: the request sends a response_format json_schema so the server itself constrains the model’s output. Requires a server that supports Structured Output (LM Studio’s Structured Output toggle, recent llama.cpp). If your server ignores or rejects it, switch back to Text.'
+        : 'Text mode: the model is asked to reply in a simple Card1 / Front: / Back: template, which is parsed back out. Works with virtually any local model.';
     }
   }
   renderModeHint();
@@ -1867,10 +1867,10 @@ function renderAICapture(wrap) {
     generatedSection.style.display = '';
     const n = selectedIdxs.length;
     const addLabel = dest === 'new'
-      ? `✨ Create Deck with ${n} Card${n === 1 ? '' : 's'}`
+      ? [scIcon('sparkles'), ` Create Deck with ${n} Card${n === 1 ? '' : 's'}`]
       : `Add ${n} Card${n === 1 ? '' : 's'}`;
     const selBar = el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px' },
-      el('div', { style: 'font-weight:800;font-size:13px' }, `✨ ${n}/${generatedCards.length} selected`),
+      el('div', { style: 'font-weight:800;font-size:13px' }, scLbl('sparkles', `${n}/${generatedCards.length} selected`)),
       el('div', { style: 'display:flex;gap:8px' },
         btn('All', 'ghost', { small: true, onclick: () => { selectedIdxs = generatedCards.map((_, i) => i); renderGenerated(); } }),
         btn('None', 'ghost', { small: true, onclick: () => { selectedIdxs = []; renderGenerated(); } }),
@@ -1880,7 +1880,7 @@ function renderAICapture(wrap) {
           if (dest === 'new') {
             const name = newNameField.querySelector('input').value.trim();
             if (!name) { showToast('Name the new deck first'); newNameField.querySelector('input').focus(); return; }
-            const deck = { id: uid('d'), name, emoji: '✨', image: null, subject: newSubjectSel.value,
+            const deck = { id: uid('d'), name, emoji: 'sparkles', image: null, subject: newSubjectSel.value,
               folderId: null, color: 'var(--blue)', cards: toAdd.map(mkGeneratedCard) };
             state.decks.push(deck);
             commitCards(toAdd);
@@ -1912,10 +1912,10 @@ function renderAICapture(wrap) {
         (cc.answerCount || 1) > 1
           ? el('div', { style: 'font-size:12px;color:var(--muted)' }, ...getCardAnswers(cc).map(a => el('div', {}, `• ${a}`)))
           : el('div', { style: 'font-size:12px;color:var(--muted)' }, cc.back),
-        (cc.answerCount || 1) > 1 ? el('div', { style: 'font-size:11px;color:var(--blue);margin-top:2px' }, `📋 all ${cc.answerCount} required`) : null,
-        cc.hint ? el('div', { style: 'font-size:11px;color:var(--muted);font-style:italic;margin-top:4px' }, `💡 ${cc.hint}`) : null,
+        (cc.answerCount || 1) > 1 ? el('div', { style: 'font-size:11px;color:var(--blue);margin-top:2px' }, scLbl('clipboard', `all ${cc.answerCount} required`)) : null,
+        cc.hint ? el('div', { style: 'font-size:11px;color:var(--muted);font-style:italic;margin-top:4px' }, scLbl('bulb', cc.hint)) : null,
         (cc.tags && cc.tags.length) ? el('div', { style: 'display:flex;gap:4px;flex-wrap:wrap;margin-top:6px' }, ...cc.tags.map(t => mkTag(t))) : null,
-        el('div', { style: `font-size:11px;margin-top:6px;color:${sel ? 'var(--blue)' : 'var(--muted)'}` }, sel ? '✓ Selected' : 'Tap to select')
+        el('div', { style: `font-size:11px;margin-top:6px;color:${sel ? 'var(--blue)' : 'var(--muted)'}` }, sel ? scLbl('check', ' Selected') : 'Tap to select')
       ));
     });
     generatedSection.append(selBar, grid);
@@ -1923,11 +1923,11 @@ function renderAICapture(wrap) {
 
   let genControls;
   if (mode === 'api') {
-    const genBtn = btn('✨ Generate Cards', 'primary', { full: true, onclick: async () => {
+    const genBtn = btn([scIcon('sparkles'), ' Generate Cards'], 'primary', { full: true, onclick: async () => {
       const text = textarea.value.trim();
       if (!text) { showToast('Paste some text first'); return; }
       errEl.style.display = 'none'; rawDetails.style.display = 'none';
-      genBtn.disabled = true; const prevLabel = genBtn.textContent; genBtn.textContent = '⏳ Generating…';
+      genBtn.disabled = true; genBtn.replaceChildren(scLbl('hourglass', ' Generating…'));
       try {
         const count = Number(countField.querySelector('input').value) || null;
         const instructions = instructionsField.querySelector('input').value.trim();
@@ -1946,7 +1946,7 @@ function renderAICapture(wrap) {
         errEl.textContent = e.message || 'Generation failed.';
         errEl.style.display = '';
       } finally {
-        genBtn.disabled = false; genBtn.textContent = prevLabel;
+        genBtn.disabled = false; genBtn.replaceChildren(scIcon('sparkles'), ' Generate Cards');
       }
     } });
     genControls = genBtn;
@@ -1958,7 +1958,7 @@ function renderAICapture(wrap) {
     const promptFallback = el('textarea', { readonly: true, rows: '6',
       style: 'display:none;width:100%;margin-top:8px;padding:10px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--text);font-size:11px;font-family:monospace;resize:vertical;box-sizing:border-box' });
 
-    const copyBtn = btn('📋 Copy Prompt', 'primary', { full: true, onclick: async () => {
+    const copyBtn = btn([scIcon('clipboard'), ' Copy Prompt'], 'primary', { full: true, onclick: async () => {
       const text = textarea.value.trim();
       if (!text) { showToast('Paste some text first'); return; }
       const count = Number(countField.querySelector('input').value) || null;
@@ -1989,12 +1989,12 @@ function renderAICapture(wrap) {
       e.target.value = '';
     } });
     const importRow = el('div', { style: 'display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap' },
-      btn('📁 Import .txt / .json', 'ghost', { small: true, onclick: () => importInput.click() }),
+      btn([scIcon('upload'), ' Import .txt / .json'], 'ghost', { small: true, onclick: () => importInput.click() }),
       importInput,
       el('div', { style: 'font-size:11px;color:var(--muted)' }, 'or paste the reply above directly')
     );
 
-    const parseBtn = btn('✨ Generate Cards from Reply', 'primary', { full: true, onclick: () => {
+    const parseBtn = btn([scIcon('sparkles'), ' Generate Cards from Reply'], 'primary', { full: true, onclick: () => {
       const raw = pasteArea.value.trim();
       if (!raw) { showToast('Paste the AI’s reply first'); return; }
       errEl.style.display = 'none'; rawDetails.style.display = 'none';
@@ -2215,20 +2215,20 @@ function openCreateDeckModal(subjectKey, folderId) {
     // Tab bar
     const tabBar = el('div',{style:'display:flex;gap:0;margin-bottom:10px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.1)'});
     const tabCreate = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:var(--blue);color:#fff',onclick:()=>switchDeckTab('create')},'+ New Deck');
-    const tabImport = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('import')},'⬆ Import JSON');
-    const tabText   = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('text')},'📄 Import Text');
-    const tabAI     = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('ai')},'✨ AI Capture');
-    const tabQuizlet= el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('quizlet')},'🎴 Quizlet');
+    const tabImport = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('import')},scLbl('upload',' Import JSON'));
+    const tabText   = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('text')},scLbl('file-text',' Import Text'));
+    const tabAI     = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('ai')},scLbl('sparkles',' AI Capture'));
+    const tabQuizlet= el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('quizlet')},scLbl('cards',' Quizlet'));
     tabBar.append(tabCreate, tabImport, tabText, tabAI, tabQuizlet);
     body.appendChild(tabBar);
 
     // --- Community deck browser link ---
     const communityBanner = el('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;margin-bottom:10px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08)'},
       el('div',{style:'font-size:12px;line-height:1.4'},
-        el('div',{style:'font-weight:700'},'🌐 Browse Community Decks'),
+        el('div',{style:'font-weight:700'},scLbl('globe',' Browse Community Decks')),
         el('div',{class:'u-muted-11'},'Find and download decks shared by other users')
       ),
-      btn('Open →','ghost',{small:true,onclick:()=>{ closeModal(); navigate('community'); }})
+      btn(['Open ', scIcon('arrow-right')],'ghost',{small:true,onclick:()=>{ closeModal(); navigate('community'); }})
     );
     body.appendChild(communityBanner);
 
@@ -2238,8 +2238,8 @@ function openCreateDeckModal(subjectKey, folderId) {
     // --- Create pane ---
     const nameField  = createField('Deck Name','text','e.g. Biology 101');
     nameField.querySelector('input').id = 'tutorial-target-deck-name-input';
-    let _deckEmoji='📖',_deckImage=null;
-    const iconPicker=mkIconPicker('📖',null,function(v){_deckEmoji=v;},function(v){_deckImage=v;});
+    let _deckEmoji='book-open',_deckImage=null;
+    const iconPicker=mkIconPicker('book-open',null,function(v){_deckEmoji=v;},function(v){_deckImage=v;});
 
     const subjectWrap = el('div',{class:'field'},el('label',{},'Subject'));
     const subjectSel = el('select',{class:'u-input','aria-label':'Subject'});
@@ -2269,7 +2269,7 @@ function openCreateDeckModal(subjectKey, folderId) {
     let parsedDeck = null;
 
     const dropZone = el('label',{style:'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:28px;border:2px dashed rgba(255,255,255,0.15);border-radius:10px;cursor:pointer;text-align:center;margin-bottom:10px'},
-      el('div',{style:'font-size:28px'},'🃏'),
+      el('div',{style:'font-size:26px'},scIcon('card')),
       el('div',{style:'font-size:13px;font-weight:700'},'Click to choose deck JSON'),
       el('div',{class:'u-muted-11'},'.json exported from SCIMA')
     );
@@ -2361,7 +2361,7 @@ function openCreateDeckModal(subjectKey, folderId) {
     // File drop zone (accepts .txt, .md, .pdf)
     const txtFileInput = el('input',{type:'file',accept:'.txt,.md,.pdf',style:'display:none'});
     const txtDropZone = el('label',{style:'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;border:2px dashed rgba(255,255,255,0.15);border-radius:10px;cursor:pointer;text-align:center;margin-bottom:10px'},
-      el('div',{style:'font-size:28px'},'📄'),
+      el('div',{style:'font-size:26px'},scIcon('file-text')),
       el('div',{style:'font-size:13px;font-weight:700'},'Click to choose file'),
       el('div',{class:'u-muted-11'},'.txt · .md · .pdf')
     );
@@ -2551,7 +2551,7 @@ function openCreateDeckModal(subjectKey, folderId) {
       const fId = folderId || null;
       const finalSubject = fId ? (state.folders.find(f=>f.id===fId)?.subjectKey || subjectKey || DEFAULT_SUBJECT_KEY) : (subjectKey || DEFAULT_SUBJECT_KEY);
       const newDeck = {
-        id: uid('d'), name, emoji: '📄', image: null,
+        id: uid('d'), name, emoji: 'file-text', image: null,
         subject: finalSubject, folderId: fId, color: 'var(--blue)',
         cards: parsedTextCards.map(c => ({
           id: uid('c'), front: c.front, back: c.back, hint: '', tags: [],
@@ -2619,7 +2619,7 @@ function openCreateDeckModal(subjectKey, folderId) {
       const override = qzNameField.querySelector('input').value.trim();
       const deck = sanitizeDeck({
         name: override || qzParsed.name || `Quizlet set ${qzParsed.id}`,
-        emoji: '🎴',
+        emoji: 'cards',
         subject: subjectKey || DEFAULT_SUBJECT_KEY,
         folderId: folderId || null,
         cards: qzParsed.cards.map(c=>sanitizeCard(c)),
@@ -2686,11 +2686,11 @@ function openDeckDetail(deckId) {
     'data-deck': deck.id,
     title: deck.pinned ? 'Unpin from sidebar' : 'Pin to sidebar',
     onclick: () => { togglePinDeck(deckId); pinToggleBtn.classList.toggle('pinned', state.decks.find(d=>d.id===deckId)?.pinned); }
-  }, '📌');
+  }, scIcon('pin'));
 
   container.append(
     el('div',{class:'ui-action-bar',style:'display:flex;align-items:center;gap:12px;margin-bottom:20px'},
-      btn('← Back','ghost',{small:true,onclick:()=>renderView('decks')}),
+      btn([scIcon('arrow-left'),' Back'],'ghost',{small:true,onclick:()=>renderView('decks')}),
       mkIcon(deck.emoji,deck.image,'36px','8px'),
       el('div',{},el('div',{style:'font-weight:900;font-size:18px'},deck.name),el('div',{class:'u-muted-12'},`${nOf(deck.cards.length,'card')}`)),
       el('div',{class:'ui-action-group',style:'margin-left:auto;display:flex;gap:8px;align-items:center'},pinToggleBtn,searchInput,
@@ -2711,7 +2711,7 @@ function openDeckDetail(deckId) {
     selectionBar.append(
       el('span',{},`${selected.size} card${selected.size>1?'s':''} selected`),
       el('span',{style:'margin-left:auto;display:flex;gap:8px'},
-        btn('▶ Study Selected','ghost',{small:true,onclick:()=>{
+        btn([scIcon('play'),' Study Selected'],'ghost',{small:true,onclick:()=>{
           state.studyScope=[{type:'deck',id:deckId}];
           state.studyRefine.mode='cards';
           state.studyRefine.cardIds=[...selected];
@@ -2784,7 +2784,7 @@ function openDeckDetail(deckId) {
     if(!filtered.length){
       if(d.cards.length===0){
         grid.appendChild(el('div',{style:'grid-column:1/-1;text-align:center;padding:40px'},
-          el('div',{style:'font-size:32px;margin-bottom:8px'},'🃏'),
+          el('div',{style:'font-size:30px;margin-bottom:8px'},scIcon('card')),
           el('div',{style:'color:var(--muted);margin-bottom:14px'},'No cards yet'),
           btn('+ Add First Card','primary',{onclick:()=>openCardModal(deckId,null)})
         ));
@@ -2814,16 +2814,16 @@ function openDeckDetail(deckId) {
         el('div',{style:'display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px'},
           ...(card.tags||[]).map(t=>mkTag(t)),
           mkTag(card.suspended?'suspended':card.state,stateColor),
-          card.leech ? mkTag('🩹 leech','#FB923C') : null,
-          source ? mkTag(`📖 ${source.name.slice(0,20)}`,'#A78BFA') : null
+          card.leech ? mkTag(scLbl('bandage','leech'),'#FB923C') : null,
+          source ? mkTag(scLbl('book-open',source.name.slice(0,20)),'#A78BFA') : null
         ),
         el('div',{style:'display:flex;gap:6px;align-items:center'},
           btn('Edit','ghost',{small:true,onclick:()=>openCardModal(deckId,card.id)}),
           btn('Duplicate','ghost',{small:true,title:'Duplicate this card',onclick:e=>{ e.stopPropagation(); duplicateCard(deckId,card.id); renderCards(); }}),
           btn('Delete','danger',{small:true,onclick:()=>{ deleteCard(deckId,card.id); selected.delete(card.id); renderCards(); }}),
           card.leech||card.suspended ? btn(card.suspended?'Unsuspend':'Suspend','ghost',{small:true,onclick:()=>{ card.suspended=!card.suspended; scheduleSave(); renderCards(); }}) : null,
-          source ? btn('📖 Source','ghost',{small:true,onclick:()=>openCitationViewer(card.citation)}) : null,
-          el('span',{style:'margin-left:auto;font-size:10px;color:var(--muted)',title:fmtDateTime(card.lastRated)},`ease ${card.ease?.toFixed(1)} · ${card.interval}d · 🕒 ${timeAgo(card.lastRated)}`)
+          source ? btn([scIcon('book-open'),' Source'],'ghost',{small:true,onclick:()=>openCitationViewer(card.citation)}) : null,
+          el('span',{style:'margin-left:auto;font-size:10px;color:var(--muted);display:inline-flex;align-items:center;gap:4px',title:fmtDateTime(card.lastRated)},`ease ${card.ease?.toFixed(1)} · ${card.interval}d ·`,scIcon('clock'),timeAgo(card.lastRated))
         )
       );
       cardElById.set(card.id, cardEl);
@@ -2848,7 +2848,7 @@ function moveCardsToDeck(sourceDeckId, targetDeckId, cardIds) {
 /** Shared by the combined modal and the Ctrl+Alt+K shortcut modal. */
 function createDeckAndMoveCards(deckId, cardIds, name, emoji, img) {
   const source = state.decks.find(d=>d.id===deckId); if(!source) return null;
-  const newDeck = sanitizeDeck({ id:uid('d'), name, emoji:emoji||'📖', image:img||null,
+  const newDeck = sanitizeDeck({ id:uid('d'), name, emoji:emoji||'book-open', image:img||null,
     subject:source.subject, folderId:source.folderId, color:'var(--blue)', cards:[] });
   state.decks.push(newDeck);
   moveCardsToDeck(deckId, newDeck.id, cardIds);
@@ -2865,7 +2865,7 @@ function openMoveCardsNewModal(deckId, cardIds) {
     body.append(nameField, btn('Create & Move','primary',{full:true,onclick:()=>{
       const name=nameField.querySelector('input').value.trim();
       if(!name){ showToast('Enter a deck name'); return; }
-      createDeckAndMoveCards(deckId, cardIds, name, '📖', null);
+      createDeckAndMoveCards(deckId, cardIds, name, 'book-open', null);
       closeModal(); showToast(`Created "${name}" and moved ${count} card${count>1?'s':''} 📦`);
       openDeckDetail(deckId);
     }}));
@@ -2885,7 +2885,7 @@ function openMoveCardsExistingModal(deckId, cardIds) {
     }
     const nameField = createField('Destination Deck Name','text',`e.g. ${others[0].name}`);
     const status = el('div',{style:'font-size:12px;color:#ef4444;margin-top:8px;min-height:16px'});
-    body.append(nameField, status, btn('Move →','primary',{full:true,onclick:()=>{
+    body.append(nameField, status, btn(['Move ', scIcon('arrow-right')],'primary',{full:true,onclick:()=>{
       const want = nameField.querySelector('input').value.trim();
       if(!want){ status.textContent='Enter a deck name.'; return; }
       const target = matchName(others.map(d=>({id:d.id,name:d.name})), want);
@@ -2923,8 +2923,8 @@ function openMoveCardsModal(deckId, cardIds) {
     if(others.length){
       body.appendChild(el('div',{class:'u-section-label'},'Move to Existing Deck'));
       const sel=el('select',{style:'width:100%;padding:9px 12px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text);font-size:13px;font-family:inherit;outline:none;margin-bottom:8px'});
-      others.forEach(d=>sel.appendChild(el('option',{value:d.id,class:'u-bg'},`${d.emoji||'📚'} ${d.name} (${d.cards.length})`)));
-      body.append(sel, btn('Move →','primary',{full:true,onclick:()=>{
+      others.forEach(d=>sel.appendChild(el('option',{value:d.id,class:'u-bg'},scPrefix(d.emoji||'books')+`${d.name} (${d.cards.length})`)));
+      body.append(sel, btn(['Move ', scIcon('arrow-right')],'primary',{full:true,onclick:()=>{
         const targetId=sel.value;
         moveCardsToDeck(deckId, targetId, cardIds);
         closeModal(); showToast(`Moved ${count} card${count>1?'s':''} 📦`);
@@ -2937,8 +2937,8 @@ function openMoveCardsModal(deckId, cardIds) {
     body.appendChild(el('div',{style:'border-top:1px solid var(--border);margin-top:16px;padding-top:14px'}));
     body.appendChild(el('div',{class:'u-section-label'},'Or Move to a New Deck'));
     const nameField = createField('New Deck Name','text','e.g. Chapter 4 Terms');
-    let _emoji='📖', _img=null;
-    const iconPicker = mkIconPicker('📖',null,v=>{_emoji=v;},v=>{_img=v;});
+    let _emoji='book-open', _img=null;
+    const iconPicker = mkIconPicker('book-open',null,v=>{_emoji=v;},v=>{_img=v;});
     body.append(nameField, iconPicker, btn('Create & Move','primary',{full:true,onclick:()=>{
       const name=nameField.querySelector('input').value.trim();
       if(!name){ showToast('Enter a deck name'); return; }
@@ -3076,10 +3076,10 @@ function openCardModal(deckId, cardId) {
     modeRow.append(
       mkModeBtn('basic','Basic','One question, one answer'),
       mkModeBtn('multi','Multi-answer','Several valid answers — e.g. "name a country in the EU"'),
-      mkModeBtn('markscheme','🧬 Mark scheme','Exam-style: question worth N marks, back is a keyword mark scheme'),
-      mkModeBtn('process','🔗 Process','Ordered chain of steps — e.g. fertilizer runoff → waterways → algae bloom'),
-      mkModeBtn('calculation','🧮 Calculation','Word problem with a numeric answer — tolerance, units, optional method marks'),
-      mkModeBtn('table','▦ Table','A data grid with some cells blanked out for the learner to fill in')
+      mkModeBtn('markscheme',scLbl('dna',' Mark scheme'),'Exam-style: question worth N marks, back is a keyword mark scheme'),
+      mkModeBtn('process',scLbl('link',' Process'),'Ordered chain of steps — e.g. fertilizer runoff → waterways → algae bloom'),
+      mkModeBtn('calculation',scLbl('abacus',' Calculation'),'Word problem with a numeric answer — tolerance, units, optional method marks'),
+      mkModeBtn('table',scLbl('table',' Table'),'A data grid with some cells blanked out for the learner to fill in')
     );
     function refreshModeButtons(){
       Object.entries(modeButtons).forEach(([id,b])=>{
@@ -3111,7 +3111,7 @@ function openCardModal(deckId, cardId) {
         initPool(parts);               // …which the split then replaces
         requiredInput.value = String(parts.length);
         showToast(`Split into ${parts.length} answers ✓`);
-      }},'✂ Create multi-answer');
+      }},[scIcon('scissors'),' Create multi-answer']);
     const modeBlock = el('div',{style:'display:flex;gap:8px;align-items:stretch;flex-shrink:0;margin:4px 0 10px'},
       modeRow, createMultiBtn);
 
@@ -3156,7 +3156,7 @@ function openCardModal(deckId, cardId) {
       const noun = poolNoun();
       const input = el('input',{type:'text',placeholder:`${noun} ${poolBoxes.length+1}…`,style:'flex:1'});
       input.value = value||'';
-      const removeBtn = el('button',{type:'button',class:'btn btn-sm btn-ghost',style:'padding:6px 10px',title:'Remove this'},'✕');
+      const removeBtn = el('button',{type:'button',class:'btn btn-sm btn-ghost',style:'padding:6px 10px',title:'Remove this','aria-label':'Remove this'},scIcon('close'));
       const row = el('div',{style:'display:flex;gap:6px;margin-bottom:6px'},input,removeBtn);
       let synInput = null, synRow = null;
       if(cardMode==='process'){
@@ -3282,7 +3282,7 @@ function openCardModal(deckId, cardId) {
       if(methodBoxes.length>=8){ showToast('Maximum 8 method marking points'); return; }
       const input = el('input',{type:'text',placeholder:`Method point ${methodBoxes.length+1}…`,style:'flex:1'});
       input.value = value||'';
-      const removeBtn = el('button',{type:'button',class:'btn btn-sm btn-ghost',style:'padding:6px 10px',title:'Remove this'},'✕');
+      const removeBtn = el('button',{type:'button',class:'btn btn-sm btn-ghost',style:'padding:6px 10px',title:'Remove this','aria-label':'Remove this'},scIcon('close'));
       const row = el('div',{style:'display:flex;gap:6px;margin-bottom:6px'},input,removeBtn);
       removeBtn.addEventListener('click',()=>{
         const idx=methodBoxes.findIndex(b=>b.row===row);
@@ -3366,7 +3366,7 @@ function openCardModal(deckId, cardId) {
     // woven into the header row and row-label column instead of here.
     const rowsCountInput = el('input',{type:'number',min:'1',max:'40',class:'u-input',style:'width:56px',value:String(tRows.length)});
     const colsCountInput = el('input',{type:'number',min:'1',max:'12',class:'u-input',style:'width:56px',value:String(tCols.length)});
-    const fullscreenBtn = el('button',{type:'button',title:'Fullscreen',style:'padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);cursor:pointer;font-size:12px;font-family:inherit;margin-left:auto;background:rgba(255,255,255,0.06);color:var(--text)'},'⛶');
+    const fullscreenBtn = el('button',{type:'button',title:'Fullscreen','aria-label':'Fullscreen',style:'padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);cursor:pointer;font-size:12px;font-family:inherit;margin-left:auto;background:rgba(255,255,255,0.06);color:var(--text)'},scIcon('maximize'));
 
     // Tool toggle — two mutually-exclusive buttons instead of relying on
     // "click the input to edit the value, click the sliver of border around
@@ -3381,8 +3381,8 @@ function openCardModal(deckId, cardId) {
       return b;
     }
     toolRow.append(
-      mkToolBtn('value','🖊 Value Editor','Click a cell to edit its answer-key value'),
-      mkToolBtn('combo','🎯 Combination Editor','Click a cell anywhere to toggle it blank for the active combination')
+      mkToolBtn('value',scLbl('pen',' Value Editor'),'Click a cell to edit its answer-key value'),
+      mkToolBtn('combo',scLbl('target',' Combination Editor'),'Click a cell anywhere to toggle it blank for the active combination')
     );
     const toolHint = el('span',{style:'font-size:11px;color:var(--muted)'});
     function refreshToolButtons(){
@@ -3404,7 +3404,7 @@ function openCardModal(deckId, cardId) {
       tableFullscreenWrap.style.background = tableFullscreen ? 'var(--bg,#111)' : '';
       tableFullscreenWrap.style.padding = tableFullscreen ? '20px' : '';
       tableFullscreenWrap.style.overflow = tableFullscreen ? 'auto' : '';
-      fullscreenBtn.textContent = tableFullscreen ? '✕' : '⛶';
+      fullscreenBtn.replaceChildren(scIcon(tableFullscreen ? 'minimize' : 'maximize'));
     });
     function applyRowColCounts(){
       const nRows=Math.max(1,Math.min(40,parseInt(rowsCountInput.value,10)||tRows.length));
@@ -3425,8 +3425,8 @@ function openCardModal(deckId, cardId) {
     }
     rowsCountInput.addEventListener('change',applyRowColCounts);
     colsCountInput.addEventListener('change',applyRowColCounts);
-    const undoBtn = el('button',{type:'button',title:'Undo (Ctrl+Z)',style:'padding:5px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);cursor:pointer;font-size:12px;font-family:inherit;background:rgba(255,255,255,0.06);color:var(--text)'},'↶ Undo');
-    const redoBtn = el('button',{type:'button',title:'Redo (Ctrl+Y)',style:'padding:5px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);cursor:pointer;font-size:12px;font-family:inherit;background:rgba(255,255,255,0.06);color:var(--text)'},'↷ Redo');
+    const undoBtn = el('button',{type:'button',title:'Undo (Ctrl+Z)',style:'padding:5px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);cursor:pointer;font-size:12px;font-family:inherit;background:rgba(255,255,255,0.06);color:var(--text)'},[scIcon('undo'),' Undo']);
+    const redoBtn = el('button',{type:'button',title:'Redo (Ctrl+Y)',style:'padding:5px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);cursor:pointer;font-size:12px;font-family:inherit;background:rgba(255,255,255,0.06);color:var(--text)'},[scIcon('redo'),' Redo']);
     undoBtn.addEventListener('click',()=>{ undoTable(); gridArea.focus({preventScroll:true}); });
     redoBtn.addEventListener('click',()=>{ redoTable(); gridArea.focus({preventScroll:true}); });
     function refreshUndoRedoButtons(){
@@ -3822,7 +3822,7 @@ function openCardModal(deckId, cardId) {
       });
       const actionRow=el('div',{style:'display:flex;gap:8px;align-items:center;margin-bottom:8px'},
         comboNameInput,
-        el('button',{type:'button',style:`padding:5px 10px;border-radius:6px;border:none;cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;background:color-mix(in srgb, ${comboColor(tComboIdx)} 15%, transparent);color:${comboColor(tComboIdx)}`},'🎲 Auto-generate'),
+        el('button',{type:'button',style:`padding:5px 10px;border-radius:6px;border:none;cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;background:color-mix(in srgb, ${comboColor(tComboIdx)} 15%, transparent);color:${comboColor(tComboIdx)}`},[scIcon('dice'),' Auto-generate']),
         tCombos.length>1?el('button',{type:'button',style:'padding:5px 10px;border-radius:6px;border:none;cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;background:rgba(239,68,68,0.1);color:#ef4444'},'Delete combination'):null
       );
       // Auto-generate: one random cell per row, per the spec — creator can
@@ -3866,9 +3866,9 @@ function openCardModal(deckId, cardId) {
             el('span',{draggable:'true',title:'Drag to reorder column',style:'flex-shrink:0;cursor:grab;font-size:10px;color:var(--muted);padding:0 2px;user-select:none'},'⠿'),
             // Touch fallback for the drag grip: nudge this column one slot
             // left/right (.touch-only — hidden unless the device has no hover).
-            el('button',{type:'button',class:'touch-only',title:'Move column left','aria-label':`Move column ${ci+1} left`,...(ci===0?{disabled:''}:{}),style:'flex-shrink:0;width:16px;height:18px;border-radius:4px;border:none;cursor:pointer;font-size:8px;background:rgba(255,255,255,0.08);color:var(--muted);padding:0',onclick:()=>moveColumnTo(ci,ci-1)},'◀'),
+            el('button',{type:'button',class:'touch-only',title:'Move column left','aria-label':`Move column ${ci+1} left`,...(ci===0?{disabled:''}:{}),style:'flex-shrink:0;width:16px;height:18px;border-radius:4px;border:none;cursor:pointer;font-size:8px;background:rgba(255,255,255,0.08);color:var(--muted);padding:0',onclick:()=>moveColumnTo(ci,ci-1)},scIcon('chevron-left')),
             el('input',{type:'text',placeholder:`Column ${ci+1}`,class:'u-input',style:'width:100%;font-size:11px;font-weight:700;padding:3px 4px',value:c.label,onfocus:()=>{ pushTableHistory(); },oninput:e=>{ c.label=e.target.value; refreshTablePreview(); }}),
-            el('button',{type:'button',class:'touch-only',title:'Move column right','aria-label':`Move column ${ci+1} right`,...(ci===tCols.length-1?{disabled:''}:{}),style:'flex-shrink:0;width:16px;height:18px;border-radius:4px;border:none;cursor:pointer;font-size:8px;background:rgba(255,255,255,0.08);color:var(--muted);padding:0',onclick:()=>moveColumnTo(ci,ci+1)},'▶'),
+            el('button',{type:'button',class:'touch-only',title:'Move column right','aria-label':`Move column ${ci+1} right`,...(ci===tCols.length-1?{disabled:''}:{}),style:'flex-shrink:0;width:16px;height:18px;border-radius:4px;border:none;cursor:pointer;font-size:8px;background:rgba(255,255,255,0.08);color:var(--muted);padding:0',onclick:()=>moveColumnTo(ci,ci+1)},scIcon('chevron-right')),
             tCols.length>1?el('button',{type:'button',title:'Delete column',style:'flex-shrink:0;width:18px;height:18px;border-radius:4px;border:none;cursor:pointer;font-size:10px;background:rgba(239,68,68,0.12);color:#ef4444',onclick:()=>deleteColumnAt(ci)},'×'):null
           )
         );
@@ -3907,8 +3907,8 @@ function openCardModal(deckId, cardId) {
             el('span',{draggable:'true',title:'Drag to reorder row',style:'cursor:grab;user-select:none'},'⠿'),
             `R${ri+1}`,
             // Touch fallback for the row drag grip (.touch-only, as above).
-            el('button',{type:'button',class:'touch-only',title:'Move row up','aria-label':`Move row ${ri+1} up`,...(ri===0?{disabled:''}:{}),style:'flex-shrink:0;width:14px;height:16px;border-radius:4px;border:none;cursor:pointer;font-size:8px;background:rgba(255,255,255,0.08);color:var(--muted);padding:0',onclick:()=>moveRowTo(ri,ri-1)},'▲'),
-            el('button',{type:'button',class:'touch-only',title:'Move row down','aria-label':`Move row ${ri+1} down`,...(ri===tRows.length-1?{disabled:''}:{}),style:'flex-shrink:0;width:14px;height:16px;border-radius:4px;border:none;cursor:pointer;font-size:8px;background:rgba(255,255,255,0.08);color:var(--muted);padding:0',onclick:()=>moveRowTo(ri,ri+1)},'▼'),
+            el('button',{type:'button',class:'touch-only',title:'Move row up','aria-label':`Move row ${ri+1} up`,...(ri===0?{disabled:''}:{}),style:'flex-shrink:0;width:14px;height:16px;border-radius:4px;border:none;cursor:pointer;font-size:8px;background:rgba(255,255,255,0.08);color:var(--muted);padding:0',onclick:()=>moveRowTo(ri,ri-1)},scIcon('chevron-up')),
+            el('button',{type:'button',class:'touch-only',title:'Move row down','aria-label':`Move row ${ri+1} down`,...(ri===tRows.length-1?{disabled:''}:{}),style:'flex-shrink:0;width:14px;height:16px;border-radius:4px;border:none;cursor:pointer;font-size:8px;background:rgba(255,255,255,0.08);color:var(--muted);padding:0',onclick:()=>moveRowTo(ri,ri+1)},scIcon('chevron-down')),
             tRows.length>1?el('button',{type:'button',title:'Delete row',style:'flex-shrink:0;width:16px;height:16px;border-radius:4px;border:none;cursor:pointer;font-size:10px;background:rgba(239,68,68,0.12);color:#ef4444',onclick:()=>deleteRowAt(ri)},'×'):null
           )
         );
@@ -4150,7 +4150,7 @@ function openCardModal(deckId, cardId) {
 
     let citation = existing?.citation||null;
     const citSection = el('div',{style:'border-top:1px solid var(--border);padding-top:14px;margin-top:4px'});
-    citSection.appendChild(el('div',{style:'font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px'},'📖 Source Citation (optional)'));
+    citSection.appendChild(el('div',{style:'font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px'},scLbl('book-open',' Source Citation (optional)')));
     const citInfo = el('div',{});
     function renderCitInfo() {
       citInfo.innerHTML = '';
@@ -4159,7 +4159,7 @@ function openCardModal(deckId, cardId) {
         const chap=citation.chapterId?src?.chapters?.find(ch=>ch.id===citation.chapterId):null;
         const excerpt=src?src.content.slice(citation.charStart,citation.charEnd):'';
         citInfo.appendChild(el('div',{style:'padding:10px 12px;border-radius:8px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.2);font-size:12px'},
-          el('div',{style:'font-weight:700;color:#A78BFA;margin-bottom:4px'},`📖 ${src?.name||'Unknown'}${chap?` — ${chap.title}`:''}`),
+          el('div',{style:'font-weight:700;color:#A78BFA;margin-bottom:4px'},scLbl('book-open',`${src?.name||'Unknown'}${chap?` — ${chap.title}`:''}`)),
           excerpt?el('div',{style:'color:var(--muted);font-style:italic;font-size:11px;line-height:1.5'},`"${excerpt.slice(0,120)}${excerpt.length>120?'…':''}"`):'',
           el('div',{style:'display:flex;gap:6px;margin-top:8px'},
             btn('View','ghost',{small:true,onclick:()=>openCitationViewer(citation)}),
@@ -4203,7 +4203,7 @@ function openCardModal(deckId, cardId) {
     // scheduleCard().
     const OVERLAY_MIN_W = 220, OVERLAY_MIN_H = 120;
     function makeDraggableOverlay(label, positionStyle){
-      const closeBtn = el('button',{type:'button',title:'Close preview',style:'background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0'},'✕');
+      const closeBtn = el('button',{type:'button',title:'Close preview','aria-label':'Close preview',style:'background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0'},scIcon('close'));
       const header = el('div',{style:'display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(255,255,255,0.04);border-bottom:1px solid var(--border);cursor:grab;flex-shrink:0;user-select:none;touch-action:none'},
         el('span',{style:'font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)'},label),
         closeBtn
@@ -4356,11 +4356,11 @@ function openCardModal(deckId, cardId) {
           bc.appendChild(setRichText(el('div',{style:'font-size:16px;line-height:1.5'}),formatCardBack(draft)||'Your answer…'));
         }
       }
-      if(hint) fc.appendChild(setRichText(el('div',{style:'font-size:12px;color:var(--muted);margin-top:10px'}),`💡 ${hint}`));
+      if(hint){const _hd=el('div',{style:'font-size:12px;color:var(--muted);margin-top:10px'});_hd.append(scLbl('bulb','Hint'),setRichText(el('span'),' — '+hint));fc.appendChild(_hd);}
     }
-    const previewToggleBtn = btn('👁 Show Preview','ghost',{full:true,onclick:()=>{
+    const previewToggleBtn = btn([scIcon('eye'),' Show Preview'],'ghost',{full:true,onclick:()=>{
       previewVisible = !previewVisible;
-      previewToggleBtn.textContent = previewVisible ? '🙈 Hide Preview' : '👁 Show Preview';
+      previewToggleBtn.replaceChildren(scIcon(previewVisible?'eye-off':'eye'), previewVisible?' Hide Preview':' Show Preview');
       frontOverlay.overlay.style.display = previewVisible ? 'flex' : 'none';
       backOverlay.overlay.style.display = previewVisible ? 'flex' : 'none';
       if(previewVisible) refreshPreview();
@@ -4463,7 +4463,7 @@ function openCitationPicker(onSelect) {
     }
     state.sources.forEach(src => {
       body.appendChild(el('div',{class:'source-item card',style:'margin-bottom:8px;cursor:pointer',onclick:()=>{ closeModal(); openCitationRangeModal(src,onSelect); }},
-        el('div',{class:'source-icon'},sourceTypeIcon(src)),
+        el('div',{class:'source-icon'},scIcon(sourceTypeIcon(src))),
         el('div',{},el('div',{class:'source-name'},src.name),el('div',{class:'source-meta'},`${nOf(src.content.length,'char')} · ${nOf(src.chapters?.length||0,'chapter')}`))
       ));
     });
@@ -4494,8 +4494,8 @@ function openCitationRangeModal(source, onSelect) {
       );
       const counter=el('div',{style:'font-size:11px;color:var(--muted);text-align:center;margin-top:4px'},`Occurrence ${occIdx+1} of ${allOccurrences.length}`);
       const arrows=el('div',{style:'display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px'},
-        btn('◀ Prev','ghost',{small:true,onclick:()=>{ occIdx=(occIdx-1+allOccurrences.length)%allOccurrences.length; charStart=allOccurrences[occIdx].start; charEnd=allOccurrences[occIdx].end; renderOccNav(); }}),
-        btn('Next ▶','ghost',{small:true,onclick:()=>{ occIdx=(occIdx+1)%allOccurrences.length; charStart=allOccurrences[occIdx].start; charEnd=allOccurrences[occIdx].end; renderOccNav(); }})
+        btn([scIcon('chevron-left'),' Prev'],'ghost',{small:true,onclick:()=>{ occIdx=(occIdx-1+allOccurrences.length)%allOccurrences.length; charStart=allOccurrences[occIdx].start; charEnd=allOccurrences[occIdx].end; renderOccNav(); }}),
+        btn(['Next ', scIcon('chevron-right')],'ghost',{small:true,onclick:()=>{ occIdx=(occIdx+1)%allOccurrences.length; charStart=allOccurrences[occIdx].start; charEnd=allOccurrences[occIdx].end; renderOccNav(); }})
       );
       occNav.append(preview,counter,arrows);
     }
@@ -4545,7 +4545,7 @@ function openCitationViewer(citation) {
   const source=state.sources.find(s=>s.id===citation.sourceId);
   if(!source){ showToast('Source not found'); return; }
   const chap=citation.chapterId?source.chapters?.find(c=>c.id===citation.chapterId):null;
-  openModal(`📖 ${source.name}`, body => {
+  openModal(scLbl('book-open', source.name), body => {
     if(chap) body.appendChild(el('div',{class:'source-chapter-badge'},chap.title));
     const ctx=300;
     const start=Math.max(0,citation.charStart-ctx), end=Math.min(source.content.length,citation.charEnd+ctx);

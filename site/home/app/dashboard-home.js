@@ -15,7 +15,7 @@ function renderHome(c) {
 
   if (!state.decks.length) {
     c.appendChild(el('div', { class: 'empty-state', style:'padding-top:80px' },
-      el('div', { class:'empty-icon' }, '✦'),
+      el('div', { class:'empty-icon' }, scIcon('spark')),
       el('div', { class:'empty-title' }, 'Welcome to SCIMA Learning'),
       el('div', { class:'empty-sub' }, 'Create your first deck to start forging memories.'),
       btn('Create First Deck', 'primary', { onclick: () => navigate('decks') })
@@ -25,13 +25,13 @@ function renderHome(c) {
 
   const statsGrid = el('div', { class:'grid-4', style:'margin-bottom:24px' });
   [
-    { label:'Due Today', val:due, icon:'📋', color:'var(--pink)' },
-    { label:'Reviewed', val:todayRev, icon:'✅', color:'var(--blue)' },
-    { label:'Retention', val:`${ret}%`, icon:'🎯', color: ret>=80?'#22c55e':'var(--blue)' },
-    { label:'Day Streak', val:state.streak, icon:'🔥', color:'#FB923C' },
+    { label:'Due Today', val:due, icon:'clipboard', color:'var(--pink)' },
+    { label:'Reviewed', val:todayRev, icon:'check-circle', color:'var(--blue)' },
+    { label:'Retention', val:`${ret}%`, icon:'target', color: ret>=80?'#22c55e':'var(--blue)' },
+    { label:'Day Streak', val:state.streak, icon:'flame', color:'#FB923C' },
   ].forEach(s => {
     statsGrid.appendChild(el('div', { class:'card stat-card' },
-      el('div',{class:'stat-icon'},s.icon), el('div',{class:'stat-val',style:`color:${s.color}`},String(s.val)), el('div',{class:'stat-lab'},s.label)));
+      el('div',{class:'stat-icon'},scIcon(s.icon)), el('div',{class:'stat-val',style:`color:${s.color}`},String(s.val)), el('div',{class:'stat-lab'},s.label)));
   });
 
   const deckGrid = el('div', { class:'grid-3' });
@@ -44,7 +44,7 @@ function renderHome(c) {
     deckGrid.appendChild(el('div', { class:`card deck-card${deckDue>0?' glow':''}` },
       el('div',{style:'display:flex;justify-content:space-between;align-items:flex-start'},
         mkIcon(deck.emoji,deck.image,'36px','8px'),
-        el('button',{class:`btn btn-ghost btn-sm pin-toggle${deck.pinned?' pinned':''}`,'data-deck':deck.id,title:deck.pinned?'Unpin from sidebar':'Pin to sidebar',onclick:e=>{e.stopPropagation();togglePinDeck(deck.id);}},'📌')
+        el('button',{class:`btn btn-ghost btn-sm pin-toggle${deck.pinned?' pinned':''}`,'data-deck':deck.id,title:deck.pinned?'Unpin from sidebar':'Pin to sidebar',onclick:e=>{e.stopPropagation();togglePinDeck(deck.id);}},scIcon('pin'))
       ),
       el('div',{class:'deck-name'},deck.name),
       el('div',{class:'deck-meta'},`${nOf(deck.cards.length,'card')}${folder?' · '+folder.name:''}`),
@@ -61,7 +61,7 @@ function renderHome(c) {
   const goalPct = Math.min(100, Math.round((todayRev/goal)*100));
   const goalCard = el('div',{class:'card',style:'padding:16px 20px;margin-bottom:20px'},
     el('div',{style:'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px'},
-      el('div',{style:'font-size:12px;font-weight:700;color:var(--muted)'},'🎯 Daily Goal'),
+      el('div',{style:'font-size:12px;font-weight:700;color:var(--muted)'},scLbl('target',' Daily Goal')),
       el('div',{style:'font-size:12px;font-weight:800'},`${todayRev} / ${goal}${todayRev>=goal?' ✓':''}`)
     ),
     el('div',{class:'prog-bar'},el('div',{style:`height:100%;width:${goalPct}%;background:${todayRev>=goal?'#22c55e':'var(--blue)'};border-radius:3px`}))
@@ -75,7 +75,7 @@ function renderHome(c) {
     ),
     statsGrid,
     goalCard,
-    el('div',{style:'font-weight:800;margin-bottom:12px;font-size:14px'},'📚 Your Decks'),
+    el('div',{style:'font-weight:800;margin-bottom:12px;font-size:14px'},scLbl('books',' Your Decks')),
     deckGrid
   );
 }

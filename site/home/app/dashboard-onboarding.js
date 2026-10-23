@@ -65,7 +65,7 @@ const TOUR_ACTIVE_KEY = 'scima_tour_active';
 // entirely) and it respects the user's own tab order and hidden tabs.
 const NAV_BLURBS = {
   home:      'Home — your daily snapshot: what\u2019s due, retention, your streak and the daily goal, with Study Now on each deck.',
-  decks:     'Decks — your flashcards, grouped by subject and folder. "+ New Deck" also has Import JSON, Import Text and an ✨ AI Capture tab that writes cards from text.',
+  decks:     'Decks — your flashcards, grouped by subject and folder. "+ New Deck" also has Import JSON, Import Text and an AI Capture tab that writes cards from text.',
   study:     'Study — launches a review session across one deck, a folder, a subject or everything due today, in six modes.',
   library:   'Library — imported books, PDFs and articles to read, highlight and cite straight into cards.',
   analytics: 'Analytics — retention, streak and study-time charts, with Quests and achievements on the same page.',
@@ -204,7 +204,7 @@ const TUTORIAL_STEPS = [
   },
   {
     title: 'Flip the card',
-    body: 'Click the card to reveal the answer. The ✍️ button beside the hint opens a scratchpad if you want to work something out first.',
+    body: 'Click the card to reveal the answer. The pen button beside the hint opens a scratchpad if you want to work something out first.',
     selector: '.flashcard',
     view: 'study',
     waitFor: 'click',
@@ -858,6 +858,6 @@ function _positionOverlay(selectorOverride) {
     arrow.style.display = 'none';
   } else {
     arrow.style.cssText = `display:block;position:fixed;top:${arrowTop}px;left:${arrowLeft}px;transform:rotate(${arrowRotate}deg);`;
-    arrow.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 2 L10 16 M10 16 L4 10 M10 16 L16 10" stroke="var(--blue)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    arrow.innerHTML = scIconSvg('arrow-down', 'tour-arrow');
   }
 }

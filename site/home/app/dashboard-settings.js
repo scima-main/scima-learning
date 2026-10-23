@@ -3,13 +3,13 @@
    function. Part of the dashboard-*.js split; see dashboard-core.js's header
    for the full rationale and load-order rules.
 
-   PANEL LAYOUT: a full-width ❓ Help card, one grid-2 of eight evenly-sized
-   domain panels, and a full-width 💾 Data Management card:
-
-     📚 Study & Scheduling   │ ✍️ Scratchpad
-     🎨 Appearance & Theme   │ 📘 Subjects
-     ♿ Accessibility & Notif.│ 🤖 AI & Integrations
-     📖 Library & Reading    │ 🗂️ Navigation
+   PANEL LAYOUT: a full-width Help card, one grid-2 of eight evenly-sized
+   domain panels, and a full-width Data Management card (panel icons come
+   from the shared SVG set — assets/svg/):
+     books   Study & Scheduling │ pen      Scratchpad
+     palette Appearance & Theme │ book     Subjects
+     access. Accessibility      │ robot    AI & Integrations
+     book-open Library & Reading│ dividers Navigation
 
    (rows pair panels of similar height; the grid collapses to one column on
    phone widths — see dashboard.css). The same regrouping that used to live
@@ -61,16 +61,17 @@ function scSettingsPanelKey(key) {
 }
 
 function panelHeader(label, key, color) {
+  const labelText = typeof label === 'string' ? label : (label && label.textContent) || key;
   return el('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px'},
     el('div',{style:`font-weight:800;${color ? `color:${color};` : ''}`}, label),
     el('button',{class:'btn btn-ghost btn-sm', title:'Copy link to this section',
-      'aria-label':`Copy a link that opens Settings at ${label}`,
+      'aria-label':`Copy a link that opens Settings at ${labelText}`,
       style:'padding:3px 8px;font-size:11px;opacity:0.8',
       onclick:async e=>{ e.stopPropagation();
         const url = location.origin + location.pathname.replace(/index\.html$/, '') + '#settings/' + key;
         const ok = (typeof copyTextToClipboard === 'function') && await copyTextToClipboard(url);
         showToast(ok ? 'Section link copied ✓' : url, ok ? 2500 : 6000);
-      }},'🔗'));
+      }},scIcon('link')));
 }
 
 /** Jump to one Settings panel. The Settings page and single-document builds
@@ -109,7 +110,7 @@ function scBuildSubjectsCard(opts = {}) {
   // are kept (their decks keep their tag) and can be restored.
   const subjectsCard = el('div', { class:'card', style:'padding:20px' });
   if (!embedded) subjectsCard.id = 'tutorial-target-subjects-card';
-  if (!embedded) subjectsCard.appendChild(panelHeader('📘 Subjects','subjects'));
+  if (!embedded) subjectsCard.appendChild(panelHeader(scLbl('book','Subjects'),'subjects'));
   subjectsCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:14px' },
     'Subjects group your decks and folders. Pick one when you create a deck — it drives the deck\u2019s colour tag, its breadcrumb, its XP multiplier and the Analytics breakdown. Deleting one \u2014 built-ins included \u2014 offers to move its decks elsewhere first, and leaves a \u21a9 Restore row here in case you change your mind.'));
 
@@ -292,7 +293,7 @@ function scBuildSubjectsCard(opts = {}) {
 // pattern with its ⋯ popover as the "modal" (see dashboard-scratchpad.js).
 const SETTINGS_PANEL_MODALS = {
   subjects: {
-    title: '📘 Manage Subjects',
+    title: scLbl('book','Manage Subjects'),
     cta: 'Open full Settings',
     hint: 'The same editor Settings shows — changes save as you go.',
     build: opts => scBuildSubjectsCard(opts),
@@ -356,7 +357,7 @@ function renderSettings(c) {
   const grid=el('div',{class:'grid-2'});
   const helpCard=el('div',{class:'card',style:'padding:20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap'},
     el('div',{},
-      el('div',{style:'font-weight:800;margin-bottom:4px'},'❓ Help'),
+      el('div',{style:'font-weight:800;margin-bottom:4px'},scLbl('help','Help')),
       el('div',{style:'font-size:12px;color:var(--muted)'},'Rewatch the guided walkthrough: subjects, decks, flashcards, studying, the sidebar and the shortcuts. It builds a real practice deck as it goes \u2014 you can keep it or discard it at the end.')
     ),
     btn('Replay tutorial','primary',{onclick:()=>startTutorial(0,'replay')})
@@ -364,7 +365,7 @@ function renderSettings(c) {
 
 
   // ── 1. 📚 Study & Scheduling — the SRS engine and session-shaping knobs ──
-  const studyCard=el('div',{class:'card',style:'padding:20px'},panelHeader('📚 Study & Scheduling','study','var(--pink)'));
+  const studyCard=el('div',{class:'card',style:'padding:20px'},panelHeader(scLbl('books','Study & Scheduling'),'study','var(--pink)'));
   const algoSel=el('select',{class:'u-input','aria-label':'SRS scheduling algorithm',onchange:e=>{ state.settings.algorithm=e.target.value; scheduleSave(); }});
   [['fsrs','FSRS (Recommended)'],['sm2','SM-2 (Classic)']].forEach(([v,t])=>{ const o=el('option',{value:v,class:'u-bg'},t); if(state.settings.algorithm===v)o.selected=true; algoSel.appendChild(o); });
   studyCard.append(
@@ -395,37 +396,37 @@ function renderSettings(c) {
     tzPreview.textContent=`(today: ${today()})`;
   });
   tzWrap.append(
-    el('div',{style:'font-size:13px;font-weight:600;display:flex;gap:6px;align-items:baseline'},'🌍 Day boundary timezone',tzPreview),
+    el('div',{style:'font-size:13px;font-weight:600;display:flex;gap:6px;align-items:baseline'},scLbl('globe','Day boundary timezone'),tzPreview),
     el('div',{style:'font-size:11px;color:var(--muted);margin:2px 0 6px'},'Streaks, the daily goal and review history roll over at midnight in this zone instead of UTC.'),
     tzSel);
   studyCard.appendChild(tzWrap);
 
   // ── 5. ♿ Accessibility & Notifications — display/sound assists + reminders ──
-  const a11yCard=el('div',{class:'card',style:'padding:20px'},panelHeader('♿ Accessibility & Notifications','accessibility','var(--blue)'));
+  const a11yCard=el('div',{class:'card',style:'padding:20px'},panelHeader(scLbl('accessibility','Accessibility & Notifications'),'accessibility','var(--blue)'));
   a11yCard.append(
-    makeToggle('🔠 Dyslexia-Friendly Mode','Wider letter/word/line spacing and an evenly-spaced font throughout the app','dyslexia'),
-    makeToggle('◐ High Contrast','Boost text contrast and border visibility on top of your current theme','highContrast'),
+    makeToggle(scLbl('type','Dyslexia-Friendly Mode'),'Wider letter/word/line spacing and an evenly-spaced font throughout the app','dyslexia'),
+    makeToggle(scLbl('contrast','High Contrast'),'Boost text contrast and border visibility on top of your current theme','highContrast'),
     makeToggle('Power Saving Mode','Disables animations and visual effects for better performance','powerSaving'),
     makeToggle('Text-to-Speech','Read cards aloud during study','tts'),
     makeToggle('Push Notifications','Daily review reminders','notifications')
   );
 
   // ── 7. 📖 Library & Reading — the reader's language/definition options ──
-  const libraryCard=el('div',{class:'card',style:'padding:20px'},panelHeader('📖 Library & Reading','library','var(--blue)'));
+  const libraryCard=el('div',{class:'card',style:'padding:20px'},panelHeader(scLbl('book-open','Library & Reading'),'library','var(--blue)'));
   const defineLangSel=el('select',{class:'u-input','aria-label':'Define target language',onchange:e=>{ state.settings.defineLang=e.target.value; scheduleSave(); }});
   Object.entries(LANGS).forEach(([code,name])=>{ const o=el('option',{value:code,class:'u-bg'},name); if((state.settings.defineLang||'en')===code)o.selected=true; defineLangSel.appendChild(o); });
   libraryCard.append(
     el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},
-      el('div',{style:'font-size:13px;font-weight:600;margin-bottom:2px'},'🔍 Define Target Language'),
+      el('div',{style:'font-size:13px;font-weight:600;margin-bottom:2px'},scLbl('search','Define Target Language')),
       el('div',{style:'font-size:11px;color:var(--muted);margin-bottom:8px'},'Smart Definition translates terms into this language if they aren\u2019t already in it'),
       defineLangSel
     ),
-    makeToggle('🀄 Show Pinyin','Display Mandarin pinyin when selecting Chinese characters while reading','showPinyin'),
-    makeToggle('🔤 Single-Word Definitions','For a single word in a spaced script (Latin, Cyrillic, Arabic, etc.), show a definition in its own language instead of translating it','singleWordDefinition'),
+    makeToggle(scLbl('translate','Show Pinyin'),'Display Mandarin pinyin when selecting Chinese characters while reading','showPinyin'),
+    makeToggle(scLbl('type','Single-Word Definitions'),'For a single word in a spaced script (Latin, Cyrillic, Arabic, etc.), show a definition in its own language instead of translating it','singleWordDefinition'),
     (()=>{
       const wrap=el('div',{style:'display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-top:1px solid rgba(255,255,255,0.05);margin-top:4px;gap:10px;flex-wrap:wrap'});
       const lbl=el('div',{},
-        el('div',{style:'font-size:13px;font-weight:600'},'🔖 Open book at…'),
+        el('div',{style:'font-size:13px;font-weight:600'},scLbl('bookmark','Open book at…')),
         el('div',{style:'font-size:11px;color:var(--muted);margin-top:2px'},'Where to resume when re-opening a source')
       );
       const sel=el('select',{style:'padding:5px 10px;border-radius:7px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text);font-size:12px;font-family:inherit;cursor:pointer'});
@@ -441,8 +442,8 @@ function renderSettings(c) {
 
   // ── 6. 🤖 AI & Integrations — the local LLM endpoint + Quizlet proxy ──────
   const aiCard=el('div',{class:'card',style:'padding:20px'},
-    panelHeader('🤖 AI & Integrations','ai','var(--blue)'),
-    el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:14px'},'✨ AI Card Generation: generate flashcards from pasted text using a local LLM server on your own machine — nothing is sent to a hosted API, and there\u2019s no API key to store. Works with LM Studio, Ollama\u2019s OpenAI-compatible endpoint, llama.cpp server, or anything else that speaks the OpenAI chat-completions format.')
+    panelHeader(scLbl('robot','AI & Integrations'),'ai','var(--blue)'),
+    el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:14px'},'AI Card Generation: generate flashcards from pasted text using a local LLM server on your own machine — nothing is sent to a hosted API, and there\u2019s no API key to store. Works with LM Studio, Ollama\u2019s OpenAI-compatible endpoint, llama.cpp server, or anything else that speaks the OpenAI chat-completions format.')
   );
   const endpointInput=el('input',{type:'text',class:'u-input',placeholder:'http://127.0.0.1:1234',value:state.settings.aiEndpoint||'',
     oninput:e=>{ state.settings.aiEndpoint=e.target.value.trim(); scheduleSave(); }});
@@ -481,7 +482,7 @@ function renderSettings(c) {
   proxyInput.value=state.settings.quizletProxy||'';
   proxyInput.addEventListener('change',()=>{ state.settings.quizletProxy=proxyInput.value.trim(); scheduleSave(); });
   proxyWrap.append(
-    el('div',{style:'font-size:13px;font-weight:600'},'🔀 Quizlet proxy template (optional)'),
+    el('div',{style:'font-size:13px;font-weight:600'},scLbl('shuffle','Quizlet proxy template (optional)')),
     el('div',{style:'font-size:11px;color:var(--muted);margin:2px 0 6px'},'If Quizlet blocks the built-in server proxy, route webapi calls through your own proxy. {url} is replaced with the encoded Quizlet request.'),
     proxyInput);
   aiCard.appendChild(proxyWrap);
@@ -490,7 +491,7 @@ function renderSettings(c) {
   // this file on the settings route). Guarded so a stale cache without the
   // scratchpad module still renders the rest of Settings.
   const scratchCard = el('div', { class:'card', style:'padding:20px' });
-  scratchCard.appendChild(panelHeader('✍️ Scratchpad','scratch','var(--blue)'));
+  scratchCard.appendChild(panelHeader(scLbl('pen','Scratchpad'),'scratch','var(--blue)'));
   scratchCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:10px' },
     'Defaults for the per-question drawing pad in study sessions. Pads are ephemeral — kept only while you answer a question, deleted the moment you answer it, and wiped when the session ends.'));
   if (typeof spSetting === 'function' && typeof SP_SWATCHES !== 'undefined') {
@@ -526,7 +527,7 @@ function renderSettings(c) {
       swatchRow.appendChild(el('button', {
         type:'button', class:'sp-mini-btn', 'aria-label':'Custom default scratchpad color', title:'Custom color…',
         onclick: e => { try { openColorPicker(e.currentTarget, spSetting('color'), c => { spSetSetting('color', c); redrawSwatches(); }); } catch (err) {} },
-      }, '🎨'));
+      }, scIcon('palette')));
     };
     redrawSwatches();
     spRow('Default pen color', 'Applied to fresh pads and new strokes', swatchRow);
@@ -569,7 +570,7 @@ function renderSettings(c) {
     spToggle('Show grid on open', 'Start new pads with the background grid visible', 'gridVisible');
     spToggle('Snap to grid', 'Drawing and dragging snap to the (rotated) grid', 'snap');
     spToggle('Autosave while answering', 'Restore the pad if you close and reopen it on the same question', 'autosave');
-    spToggle('Confirm before clearing', 'Ask before 🧹 Clear pad wipes the drawing', 'confirmClear');
+    spToggle('Confirm before clearing', 'Ask before Clear pad wipes the drawing', 'confirmClear');
     spToggle('Open in fullscreen', 'The pad covers the whole window instead of docking to the side', 'fullscreen');
   }
 
@@ -581,7 +582,7 @@ function renderSettings(c) {
   const sched = state.settings.themeSchedule || DEFAULT_SCHEDULE;
   // ── Appearance ────────────────────────────────────────────────────────────
   const appearCard = el('div', { class:'card', style:'padding:20px' });
-  appearCard.appendChild(panelHeader('🎨 Appearance & Theme','appearance','var(--blue)'));
+  appearCard.appendChild(panelHeader(scLbl('palette','Appearance & Theme'),'appearance','var(--blue)'));
 
   // Schedule-override notice
   if (sched.enabled && resolveScheduledTheme(sched, state.settings.customPresets)) {
@@ -589,7 +590,7 @@ function renderSettings(c) {
     const matchKey = getAllPresets().find(p => p.theme.blue === scheduledNow.blue && p.theme.pink === scheduledNow.pink)?.name || 'scheduled';
     appearCard.appendChild(el('div', {
       style:'font-size:11px;color:var(--blue);background:rgba(var(--blue-rgb),0.08);border:1px solid rgba(var(--blue-rgb),0.2);border-radius:8px;padding:8px 12px;margin-bottom:14px;display:flex;align-items:center;gap:6px'
-    }, '🕐', ` Schedule active — currently showing "${matchKey}" theme. Manual theme applies when schedule is off.`));
+    }, scIcon('clock'), ` Schedule active — currently showing "${matchKey}" theme. Manual theme applies when schedule is off.`));
   }
 
   // ── Preset swatches (built-in + custom) ──────────────────────────────
@@ -672,7 +673,7 @@ function renderSettings(c) {
     a.href = 'data:application/json,' + encodeURIComponent(data);
     a.download = 'scima-presets.json'; a.click();
     if (hasImages) showToast('Note: image backgrounds were stripped from export (file size)');
-  }}, '📤 Export presets'));
+  }}, [scIcon('upload'),' Export presets']));
   const presetImportInput = el('input', { type:'file', accept:'.json', style:'display:none', onchange: async e => {
     try {
       const data = JSON.parse(await e.target.files[0].text());
@@ -685,7 +686,7 @@ function renderSettings(c) {
     } catch { showToast('Could not read preset file'); }
     presetImportInput.value = '';
   }});
-  presetIORow.appendChild(el('button', { class:'btn btn-ghost btn-sm', onclick: () => presetImportInput.click() }, '📥 Import presets'));
+  presetIORow.appendChild(el('button', { class:'btn btn-ghost btn-sm', onclick: () => presetImportInput.click() }, [scIcon('download'),' Import presets']));
   presetIORow.appendChild(presetImportInput);
   appearCard.appendChild(presetIORow);
 
@@ -791,7 +792,7 @@ function renderSettings(c) {
       reader.onload = ev => { updatePattern({ imageDataUrl: ev.target.result }); renderView('settings'); };
       reader.readAsDataURL(file);
     }});
-    const uploadBtn = btn('📁 Upload image', 'ghost', { onclick: () => fileIn.click(), style:'width:100%;margin-bottom:8px' });
+    const uploadBtn = btn([scIcon('upload'),' Upload image'], 'ghost', { onclick: () => fileIn.click(), style:'width:100%;margin-bottom:8px' });
 
     // URL paste
     const urlRow = el('div', { style:'display:flex;gap:6px;margin-bottom:10px' });
@@ -905,7 +906,7 @@ function renderSettings(c) {
   ));
 
   // Reset button
-  appearCard.appendChild(btn('↩ Reset to Default', 'ghost', { onclick: () => {
+  appearCard.appendChild(btn([scIcon('rotate-ccw'),' Reset to Default'], 'ghost', { onclick: () => {
     state.settings.theme = { ...DEFAULT_THEME };
     applyThemeVars(state.settings.theme);
     scheduleSave(); renderView('settings'); renderSidebar();
@@ -921,7 +922,7 @@ function renderSettings(c) {
   // override notice reads it before this section renders.)
 
   const schedSection = el('div');
-  schedSection.appendChild(el('div', { style:'font-weight:800;margin-bottom:4px' }, '🕐 Theme Schedule'));
+  schedSection.appendChild(el('div', { style:'font-weight:800;margin-bottom:4px' }, scLbl('clock','Theme Schedule')));
   schedSection.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:14px' }, 'Automatically switch themes at set times or based on sunrise/sunset.'));
 
   // Enable toggle
@@ -944,10 +945,10 @@ function renderSettings(c) {
 
   // Mode selector tabs
   const modeBar = el('div', { style:'display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap' });
-  [['daily','📅 Daily'],['weekly','🗓 Weekly'],['sun','🌅 Sunrise/Sunset']].forEach(([m,label]) => {
+  [['daily','calendar','Daily'],['weekly','calendar-days','Weekly'],['sun','sunrise','Sunrise/Sunset']].forEach(([m,ico,label]) => {
     const b = el('button', { class:`btn btn-sm ${sched.mode===m?'btn-primary':'btn-ghost'}`, onclick:()=>{
       sched.mode = m; scheduleSave(); tickThemeSchedule(); renderSchedBody();
-    }}, label);
+    }}, scLbl(ico,label));
     modeBar.appendChild(b);
   });
   schedSection.appendChild(modeBar);
@@ -1074,8 +1075,8 @@ function renderSettings(c) {
           latInput.style.borderColor = ''; lngInput.style.borderColor = '';
           showToast('Location saved ✓'); refreshSunPreview(); tickThemeSchedule();
         } catch(e) { showToast('Location error: ' + (e.message||'denied')); }
-        geoBtn.textContent = '📍 Detect'; geoBtn.disabled = false;
-      }}, '📍 Detect');
+        geoBtn.replaceChildren(scIcon('map-pin'),' Detect'); geoBtn.disabled = false;
+      }}, [scIcon('map-pin'),' Detect']);
 
       // Sun-times preview (updates when inputs change)
       const sunPreviewEl = el('div', { style:'font-size:11px;color:var(--muted);margin:6px 0 12px;min-height:16px' });
@@ -1085,7 +1086,7 @@ function renderSettings(c) {
         if (!times) { sunPreviewEl.textContent = '⚠️ Polar day/night — no sunrise/sunset today'; return; }
         const fmt = m => { const mm = ((m%1440)+1440)%1440; return String(Math.floor(mm/60)).padStart(2,'0')+':'+String(Math.round(mm%60)).padStart(2,'0'); };
         const riseM = times.rise + (sun.riseOffset||0), setM = times.set + (sun.setOffset||0);
-        sunPreviewEl.textContent = `Today: ☀️ ${fmt(riseM)}  🌙 ${fmt(setM)}`;
+        sunPreviewEl.replaceChildren('Today: ', scIcon('sun'), ' '+fmt(riseM)+'  ', scIcon('moon'), ' '+fmt(setM));
       }
       refreshSunPreview();
 
@@ -1110,14 +1111,14 @@ function renderSettings(c) {
         sunPreviewEl,
         el('div',{style:'display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px'},
           el('div',{style:'padding:12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border)'},
-            el('div',{style:'font-size:12px;font-weight:700;margin-bottom:8px'},'☀️ Daytime theme'),
+            el('div',{style:'font-size:12px;font-weight:700;margin-bottom:8px'},scLbl('sun','Daytime theme')),
             el('div',{style:'font-size:11px;color:var(--muted);margin-bottom:6px'},'Applied at sunrise'),
             makePresetSel(sun.dayPreset||'light', k=>{sun.dayPreset=k;scheduleSave();tickThemeSchedule();}),
             el('div',{style:'font-size:11px;color:var(--muted);margin-top:8px;margin-bottom:4px'},'Offset (min)'),
             makeOffsetInput(sun.riseOffset, v=>sun.riseOffset=v)
           ),
           el('div',{style:'padding:12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border)'},
-            el('div',{style:'font-size:12px;font-weight:700;margin-bottom:8px'},'🌙 Nighttime theme'),
+            el('div',{style:'font-size:12px;font-weight:700;margin-bottom:8px'},scLbl('moon','Nighttime theme')),
             el('div',{style:'font-size:11px;color:var(--muted);margin-bottom:6px'},'Applied at sunset'),
             makePresetSel(sun.nightPreset||'default', k=>{sun.nightPreset=k;scheduleSave();tickThemeSchedule();}),
             el('div',{style:'font-size:11px;color:var(--muted);margin-top:8px;margin-bottom:4px'},'Offset (min)'),
@@ -1145,7 +1146,7 @@ function renderSettings(c) {
   // toggle their visibility. Hidden tabs move to the drawer at the bottom of
   // the sidebar (accessible but not cluttering the main nav list).
   const navCard = el('div', { class:'card', style:'padding:20px' });
-  navCard.appendChild(panelHeader('🗂️ Navigation','navigation'));
+  navCard.appendChild(panelHeader(scLbl('dividers','Navigation'),'navigation'));
   navCard.appendChild(el('div', { style:'font-size:12px;color:var(--muted);margin-bottom:14px' }, 'Reorder or hide sidebar tabs. Hidden tabs go to the drawer at the bottom of the sidebar.'));
 
   function renderNavEditor() {
@@ -1160,20 +1161,20 @@ function renderSettings(c) {
         const order = getOrderedNavItems().map(n => n.id);
         [order[i-1], order[i]] = [order[i], order[i-1]];
         state.settings.navOrder = order; scheduleSave(); renderSidebar(); renderNavEditor();
-      }}, '▲');
+      }}, scIcon('chevron-up'));
       const downBtn = el('button', { class:'btn btn-ghost btn-sm', disabled: i === ordered.length-1, 'aria-label':`Move ${item.label} tab down`, style:'padding:2px 8px;font-size:11px', onclick: () => {
         const order = getOrderedNavItems().map(n => n.id);
         [order[i], order[i+1]] = [order[i+1], order[i]];
         state.settings.navOrder = order; scheduleSave(); renderSidebar(); renderNavEditor();
-      }}, '▼');
+      }}, scIcon('chevron-down'));
       // Hide/show toggle
       const eyeBtn = el('button', { class:'btn btn-ghost btn-sm', title: isHidden ? 'Show in sidebar' : 'Hide (move to drawer)', 'aria-label': isHidden ? `Show ${item.label} in sidebar` : `Hide ${item.label} (move to drawer)`, style:'padding:2px 8px;font-size:13px', onclick: () => {
         const h = new Set(state.settings.hiddenTabs || []);
         isHidden ? h.delete(item.id) : h.add(item.id);
         state.settings.hiddenTabs = [...h]; scheduleSave(); renderSidebar(); renderNavEditor();
-      }}, isHidden ? '👁' : '🫣');
+      }}, scIcon(isHidden ? 'eye' : 'eye-off'));
       row.append(
-        el('span', { style:'font-size:15px;width:20px;text-align:center' }, item.icon),
+        el('span', { style:'font-size:15px;width:20px;text-align:center;display:inline-flex;align-items:center;justify-content:center' }, scAuto(item.icon)),
         el('span', { style:`font-size:13px;font-weight:600;flex:1;color:${isHidden?'var(--muted)':'var(--text)'}` }, item.label),
         upBtn, downBtn, eyeBtn
       );
@@ -1182,7 +1183,7 @@ function renderSettings(c) {
   }
   renderNavEditor();
   navCard.appendChild(el('div', { style:'margin-top:10px' },
-    btn('↩ Reset Tab Order', 'ghost', { onclick: () => {
+    btn([scIcon('rotate-ccw'),' Reset Tab Order'], 'ghost', { onclick: () => {
       state.settings.navOrder = [...NAV_ITEMS_DEFAULT_ORDER];
       state.settings.hiddenTabs = [];
       scheduleSave(); renderSidebar(); renderNavEditor();
@@ -1191,13 +1192,13 @@ function renderSettings(c) {
 
 
   const dataCard=el('div',{class:'card',style:'padding:20px;margin-top:16px'},
-    el('div',{style:'font-weight:800;margin-bottom:6px'},'💾 Data Management'),
+    el('div',{style:'font-weight:800;margin-bottom:6px'},scLbl('database','Data Management')),
     el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:14px'},`${nOf(state.decks.length,'deck')} · ${nOf(state.decks.flatMap(d=>d.cards).length,'card')} · ${nOf(state.sources.length,'source')} · ${nOf(state.folders.length,'folder')}`)
   );
   const btnRow=el('div',{style:'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px'});
 
-  btnRow.appendChild(btn('📤 Export All Data (.zip)','ghost',{onclick:()=>{ exportAllDataZip(); }}));
-  btnRow.appendChild(btn('📦 Export Decks Only','ghost',{onclick:()=>{
+  btnRow.appendChild(btn([scIcon('upload'),' Export All Data (.zip)'],'ghost',{onclick:()=>{ exportAllDataZip(); }}));
+  btnRow.appendChild(btn([scIcon('box'),' Export Decks Only'],'ghost',{onclick:()=>{
     const a=document.createElement('a');
     const citedSourceIds=new Set(state.decks.flatMap(d=>d.cards).map(c=>c.citation?.sourceId).filter(Boolean));
     const citedSources=(state.sources||[]).filter(s=>citedSourceIds.has(s.id));
@@ -1241,18 +1242,18 @@ function renderSettings(c) {
         const deckCount=data.decks?.length||0, folderCount=data.folders?.length||0, sourceCount=data.sources?.length||0;
         const libFolderCount=data.libraryFolders?.length||0, pdfCount=Object.keys(pdfFiles).length, htmlCount=Object.keys(htmlFiles).length;
         body.appendChild(el('div',{style:'padding:14px;border-radius:10px;background:rgba(var(--blue-rgb),0.08);border:1px solid rgba(var(--blue-rgb),0.2);margin-bottom:16px'},
-          el('div',{style:'font-weight:700;color:var(--blue);margin-bottom:8px'},'📦 Import Contents'),
-          deckCount?el('div',{class:'u-muted-12'},`📚 ${deckCount} deck${deckCount!==1?'s':''}`):'',
-          folderCount?el('div',{class:'u-muted-12'},`📁 ${folderCount} folder${folderCount!==1?'s':''}`):'',
-          sourceCount?el('div',{class:'u-muted-12'},`📖 ${sourceCount} source${sourceCount!==1?'s':''}`):'',
-          libFolderCount?el('div',{class:'u-muted-12'},`🗂️ ${libFolderCount} library folder${libFolderCount!==1?'s':''}`):'',
-          pdfCount?el('div',{class:'u-muted-12'},`📄 ${pdfCount} PDF${pdfCount!==1?'s':''} bundled`):'',
-          htmlCount?el('div',{class:'u-muted-12'},`🖼️ ${htmlCount} illustrated book${htmlCount!==1?'s':''} bundled`):'',
-          data.reviewHistory?el('div',{class:'u-muted-12'},'📅 Review history included'):'',
-          data.trackerState?el('div',{class:'u-muted-12'},'⭐ XP/tracker data included'):'',
-          data.streak!==undefined?el('div',{class:'u-muted-12'},'🔥 Streak included'):'',
-          data.settings?el('div',{class:'u-muted-12'},'⚙️ Settings/preferences included'):'',
-          data.settings?.theme?el('div',{class:'u-muted-12'},'🎨 Appearance/theme included'):''
+          el('div',{style:'font-weight:700;color:var(--blue);margin-bottom:8px'},scLbl('box','Import Contents')),
+          deckCount?el('div',{class:'u-muted-12'},scLbl('books',` ${deckCount} deck${deckCount!==1?'s':''}`)):'',
+          folderCount?el('div',{class:'u-muted-12'},scLbl('folder',` ${folderCount} folder${folderCount!==1?'s':''}`)):'',
+          sourceCount?el('div',{class:'u-muted-12'},scLbl('book-open',` ${sourceCount} source${sourceCount!==1?'s':''}`)):'',
+          libFolderCount?el('div',{class:'u-muted-12'},scLbl('dividers',` ${libFolderCount} library folder${libFolderCount!==1?'s':''}`)):'',
+          pdfCount?el('div',{class:'u-muted-12'},scLbl('file-text',` ${pdfCount} PDF${pdfCount!==1?'s':''} bundled`)):'',
+          htmlCount?el('div',{class:'u-muted-12'},scLbl('image',` ${htmlCount} illustrated book${htmlCount!==1?'s':''} bundled`)):'',
+          data.reviewHistory?el('div',{class:'u-muted-12'},scLbl('calendar',' Review history included')):'',
+          data.trackerState?el('div',{class:'u-muted-12'},scLbl('star',' XP/tracker data included')):'',
+          data.streak!==undefined?el('div',{class:'u-muted-12'},scLbl('flame',' Streak included')):'',
+          data.settings?el('div',{class:'u-muted-12'},scLbl('gear',' Settings/preferences included')):'',
+          data.settings?.theme?el('div',{class:'u-muted-12'},scLbl('palette',' Appearance/theme included')):''
         ));
 
         async function restoreBinaries(){
@@ -1318,10 +1319,10 @@ function renderSettings(c) {
     }catch(err){ showToast('Could not read file: '+(err?.message||String(err))); }
     importInput.value='';
   }});
-  btnRow.appendChild(btn('📥 Import','ghost',{onclick:()=>importInput.click()}));
+  btnRow.appendChild(btn([scIcon('download'),' Import'],'ghost',{onclick:()=>importInput.click()}));
   dataCard.append(btnRow, importInput,
     el('div',{style:'padding-top:14px;border-top:1px solid rgba(255,255,255,0.05)'},
-      btn('🗑️ Clear All Data','danger',{onclick:()=>{
+      btn([scIcon('trash'),' Clear All Data'],'danger',{onclick:()=>{
         confirmDestructive('Delete ALL flashcard data?',
           'Are you sure you want to delete every deck, card, source, stat and setting in this browser? This cannot be undone — export a backup first if in doubt.',
           'Delete forever', () => {

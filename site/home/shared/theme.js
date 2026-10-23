@@ -63,7 +63,7 @@ const BG_PATTERNS = {
     svg: (op, sc, col) => `<svg xmlns='http://www.w3.org/2000/svg' width='${80*sc}' height='${80*sc}'><path d='M0 ${40*sc}Q${20*sc} ${20*sc} ${40*sc} ${40*sc}T${80*sc} ${40*sc}' fill='none' stroke='${col}' stroke-width='${0.7*sc}' opacity='${op}'/><path d='M0 ${60*sc}Q${20*sc} ${40*sc} ${40*sc} ${60*sc}T${80*sc} ${60*sc}' fill='none' stroke='${col}' stroke-width='${0.7*sc}' opacity='${op}'/><path d='M0 ${20*sc}Q${20*sc} ${0} ${40*sc} ${20*sc}T${80*sc} ${20*sc}' fill='none' stroke='${col}' stroke-width='${0.7*sc}' opacity='${op}'/></svg>` },
   noise:       { name: 'Noise',
     svg: (op, sc, col) => { const s=4*sc; const cells=[0.08,0.02,0.12,0.04,0.03,0.10,0.01,0.09,0.11,0.05,0.07,0.02,0.06,0.09,0.03,0.08]; return `<svg xmlns='http://www.w3.org/2000/svg' width='${s}' height='${s}'>${cells.map((a,i)=>`<rect x='${(i%4)*sc}' y='${Math.floor(i/4)*sc}' width='${sc}' height='${sc}' fill='${col}' opacity='${Math.min(1,a*op*8)}'/>`).join('')}</svg>`; } },
-  image:       { name: '🖼 Custom image', svg: null },
+  image:       { name: 'Custom image', svg: null },
 };
 
 /**

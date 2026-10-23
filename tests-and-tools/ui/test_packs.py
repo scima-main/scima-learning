@@ -51,8 +51,8 @@ def test_api_listing_preferred_over_manifest(page, site_base, seeded):
 def test_add_to_decks_imports_sanitized(page, site_base, seeded):
     goto_packs(page, site_base, seeded)
     card = page.locator("#packs-grid .card", has_text="Spanish Starter Pack")
-    card.get_by_role("button", name="➕ Add to Decks").click()
-    expect(card.get_by_role("button", name="✓ Added")).to_be_visible(timeout=8000)
+    card.get_by_role("button", name="Add to Decks").click()
+    expect(card.get_by_role("button", name="Added")).to_be_visible(timeout=8000)
 
     st = storage.read_app_state(page)
     deck = next(d for d in st["decks"] if d["name"] == "Spanish Starter Pack")
@@ -67,8 +67,8 @@ def test_add_to_decks_imports_sanitized(page, site_base, seeded):
 def test_add_twice_creates_second_copy(page, site_base, seeded):
     goto_packs(page, site_base, seeded)
     card = page.locator("#packs-grid .card", has_text="Spanish Starter Pack")
-    card.get_by_role("button", name="➕ Add to Decks").click()
-    btn = card.get_by_role("button", name="✓ Added")
+    card.get_by_role("button", name="Add to Decks").click()
+    btn = card.get_by_role("button", name="Added")
     expect(btn).to_be_visible(timeout=8000)
     page.wait_for_function(
         "() => (JSON.parse(localStorage.getItem('mf_state')||'{}').decks||[])"
@@ -188,7 +188,7 @@ def test_legacy_duplicate_root_pack_imports_single_folder(page, site_base,
     expect(page.locator("#packs-status")).to_contain_text("listed via server",
                                                           timeout=8000)
     card = page.locator("#packs-grid .card", has_text="Dup Pack")
-    card.get_by_role("button", name="➕ Add to Decks").click()
+    card.get_by_role("button", name="Add to Decks").click()
     page.wait_for_timeout(600)
     st = storage.read_app_state(page)
     named = [f for f in st["folders"] if f["name"] == "DupFolder"]

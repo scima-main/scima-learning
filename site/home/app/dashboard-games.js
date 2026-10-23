@@ -151,13 +151,13 @@ function renderGames(c) {
   c.append(
     el('div', { style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px' },
       el('div', {},
-        el('div', { class: 'section-title' }, '️ Arcade'),
+        el('div', { class: 'section-title' }, scLbl('gamepad','Arcade')),
         el('div', { class: 'section-sub' }, 'Custom study games — designed in-app or outside it, shared as JSON')),
       makeHelpBtn('How game charts work', () => openGameHelp(), false)),
     el('div', { class: 'tab-bar', style: 'margin-bottom:16px' },
-      ...[['play', '▶ Play'], ['editor', '✏ Editor'], ['io', '⇄ Import / Export']].map(([id, label]) =>
+      ...[['play', 'play', 'Play'], ['editor', 'pencil', 'Editor'], ['io', 'swap', 'Import / Export']].map(([id, ico, label]) =>
         el('button', { class: `tab-btn${_gamesTab === id ? ' active' : ''}`, 'data-view': id,
-          onclick: () => { _gamesTab = id; renderView('games'); } }, label)))
+          onclick: () => { _gamesTab = id; renderView('games'); } }, scLbl(ico,label))))
   );
   if (_gamesTab === 'play') _renderGamesLibrary(c, store);
   else if (_gamesTab === 'editor') _renderGamesEditor(c, store);
@@ -185,13 +185,13 @@ function _renderGamesLibrary(c, store) {
     const best = entry.id ? store.best[entry.id] : null;
     const card = el('div', { class: 'card', style: 'padding:16px' },
       el('div', { style: 'display:flex;justify-content:space-between;gap:8px;align-items:flex-start' },
-        el('div', { style: 'font-weight:800;font-size:15px' }, `🕹️ ${g.name}`),
+        el('div', { style: 'font-weight:800;font-size:15px;display:flex;align-items:center;gap:7px' }, scIcon('joystick'), g.name),
         el('span', { class: 'tag', style: 'background:rgba(91,206,250,0.13)' }, `v${g.version}`)),
       el('div', { class: 'u-muted-11', style: 'margin:4px 0 10px' },
         attributionLine(g) || (entry.builtin ? 'built-in' : ''),
         best ? ` · best ${best.score}` : ''),
       el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' },
-        btn('▶ Play', 'primary', { small: true, onclick: () => _startPlay(g, entry.id) }),
+        btn([scIcon('play'),' Play'], 'primary', { small: true, onclick: () => _startPlay(g, entry.id) }),
         btn('Edit', 'ghost', { small: true, 'aria-label': `Edit ${g.name}`, onclick: () => { _gamesSel = sanitizeGameSpec({ game: g }); if (entry.id) _gamesSel._originId = entry.id; _gamesTab = 'editor'; renderView('games'); } }),
         btn('Share', 'ghost', { small: true, onclick: () => { _gamesSel = g; _gamesIOMode = 'share'; _gamesTab = 'io'; renderView('games'); } }))
     );
@@ -220,7 +220,7 @@ function _renderPlayPanel(c, store) {
     }, 500);
   }
   const hud = el('div', { id: 'game-hud', style: 'display:flex;gap:16px;flex-wrap:wrap;font-weight:800;font-size:14px;margin-bottom:14px' });
-  wrap.append(el('div', { style: 'font-weight:900;font-size:18px;margin-bottom:8px' }, `🕹️ ${P.spec.name}`), hud);
+  wrap.append(el('div', { style: 'font-weight:900;font-size:18px;margin-bottom:8px;display:flex;align-items:center;gap:8px' }, scIcon('joystick'), P.spec.name), hud);
   const stage = el('div', { id: 'game-stage', style: 'min-height:120px;margin-bottom:14px' });
   wrap.appendChild(stage);
   const controls = el('div', { id: 'game-controls', style: 'display:flex;gap:8px;flex-wrap:wrap' });
@@ -235,10 +235,10 @@ function _refreshPlayHud() {
   const s = _gamesPlaySess.sess;
   hud.innerHTML = '';
   hud.append(...[
-    el('span', {}, `⭐ ${s.score}`),
-    el('span', { style: 'color:#FB923C' }, `❤ ${Math.max(0, s.lives)}`),
-    el('span', { style: 'color:var(--blue)' }, `🔥 ${s.combo}`),
-    s.timeLeft !== null ? el('span', {}, `⏱ ${Math.ceil(s.timeLeft)}s`) : null,
+    el('span', { style: 'display:inline-flex;align-items:center;gap:4px' }, scIcon('star'), String(s.score)),
+    el('span', { style: 'color:#FB923C;display:inline-flex;align-items:center;gap:4px' }, scIcon('heart'), String(Math.max(0, s.lives))),
+    el('span', { style: 'color:var(--blue);display:inline-flex;align-items:center;gap:4px' }, scIcon('flame'), String(s.combo)),
+    s.timeLeft !== null ? el('span', { style: 'display:inline-flex;align-items:center;gap:4px' }, scIcon('stopwatch'), `${Math.ceil(s.timeLeft)}s`) : null,
     el('span', { class: 'u-muted-11' }, `step ${s.step} · ✅${s.correct} ❌${s.misses}`),
     s.tokens.length ? el('span', {}, s.tokens.join('')) : null,
   ].filter(Boolean));
@@ -322,7 +322,7 @@ function _renderPlayStage(store) {
     controls.append(box, btn('Submit', 'primary', { onclick: () => { _playFeed({ type: 'commit', buffer: box.value }, store); box.value = ''; } }));
     setTimeout(() => box.focus(), 0);
   }
-  controls.appendChild(btn('← Quit', 'ghost', { small: true, onclick: () => { _playFeed({ type: 'abort' }, store); } }));
+  controls.appendChild(btn([scIcon('arrow-left'),' Quit'], 'ghost', { small: true, onclick: () => { _playFeed({ type: 'abort' }, store); } }));
 }
 
 function _playFeed(event, store) {
@@ -352,15 +352,15 @@ function _finishPlay(store) {
     if ((s.seq || []).length) stage.appendChild(_renderGameTrack(s, true));
     stage.appendChild(el('div', { style: 'text-align:center;padding:10px' },
       el('div', { style: 'font-size:34px;font-weight:900;margin-bottom:6px' },
-        s.endReason === 'lives' ? '💥 Out of lives' : s.endReason === 'timer' ? '⏱ Time!' : s.endReason === 'abort' ? '🏳️ Quit' : '🏁 Complete'),
+        scLbl(s.endReason === 'lives' ? 'burst' : s.endReason === 'timer' ? 'stopwatch' : s.endReason === 'abort' ? 'flag' : 'flag-checkered', s.endReason === 'lives' ? ' Out of lives' : s.endReason === 'timer' ? ' Time!' : s.endReason === 'abort' ? ' Quit' : ' Complete')),
       el('div', { style: 'font-size:16px;font-weight:800' }, `Score ${s.score} · ✅${s.correct} ❌${s.misses} · max combo ${s.maxCombo}`),
       s.tokens.length ? el('div', { style: 'font-size:20px;margin-top:6px' }, s.tokens.join(' ')) : null));
   }
   if (controls) {
     controls.innerHTML = '';
     controls.append(
-      btn('↻ Retry', 'primary', { onclick: () => _startPlay(_gamesPlaySess.spec, _gamesPlaySess.id) }),
-      btn('← Library', 'ghost', { onclick: () => { _gamesPlaySess = null; renderView('games'); } }));
+      btn([scIcon('rotate-cw'),' Retry'], 'primary', { onclick: () => _startPlay(_gamesPlaySess.spec, _gamesPlaySess.id) }),
+      btn([scIcon('arrow-left'),' Library'], 'ghost', { onclick: () => { _gamesPlaySess = null; renderView('games'); } }));
   }
 }
 
@@ -378,8 +378,8 @@ function _renderGamesEditor(c, store) {
   authorInput.addEventListener('change', () => { _gamesAuthor = authorInput.value.slice(0, 80); });
   bar.append(nameInput, authorInput,
     btn('+ Object', 'primary', { small: true, onclick: () => { _editorSelIdx = g.objects.length; g.objects.push(sanitizeGameObject({ t: 'event.score', step: 0 })); renderView('games'); } }),
-    btn('▶ Playtest', 'ghost', { small: true, onclick: () => { _startPlay(g, null); _gamesTab = 'play'; renderView('games'); } }),
-    btn('💾 Save', 'primary', { small: true, onclick: async () => {
+    btn([scIcon('play'),' Playtest'], 'ghost', { small: true, onclick: () => { _startPlay(g, null); _gamesTab = 'play'; renderView('games'); } }),
+    btn([scIcon('save'),' Save'], 'primary', { small: true, onclick: async () => {
       const spec = sanitizeGameSpec({ game: g });
       const id = await gameIdOf(spec);
       const orig = g._originId || null;
@@ -412,8 +412,8 @@ function _renderGamesEditor(c, store) {
       el('span', { class: 'u-muted-11', style: 'flex:1;font-size:11px' },
         Object.entries(o.props).map(([k, v]) => `${k}=${Array.isArray(v) ? v.join('|') : v}`).join(' ')),
       el('span', { style: 'display:flex;gap:4px' },
-        btn('↑', 'ghost', { small: true, 'aria-label': `Move object ${i + 1} earlier`, onclick: e => { e.stopPropagation(); if (i > 0) { [g.objects[i - 1], g.objects[i]] = [g.objects[i], g.objects[i - 1]]; _editorSelIdx = i - 1; renderView('games'); } } }),
-        btn('↓', 'ghost', { small: true, 'aria-label': `Move object ${i + 1} later`, onclick: e => { e.stopPropagation(); if (i < g.objects.length - 1) { [g.objects[i + 1], g.objects[i]] = [g.objects[i], g.objects[i + 1]]; _editorSelIdx = i + 1; renderView('games'); } } }),
+        btn(scIcon('arrow-up'), 'ghost', { small: true, 'aria-label': `Move object ${i + 1} earlier`, onclick: e => { e.stopPropagation(); if (i > 0) { [g.objects[i - 1], g.objects[i]] = [g.objects[i], g.objects[i - 1]]; _editorSelIdx = i - 1; renderView('games'); } } }),
+        btn(scIcon('arrow-down'), 'ghost', { small: true, 'aria-label': `Move object ${i + 1} later`, onclick: e => { e.stopPropagation(); if (i < g.objects.length - 1) { [g.objects[i + 1], g.objects[i]] = [g.objects[i], g.objects[i + 1]]; _editorSelIdx = i + 1; renderView('games'); } } }),
         btn('⧉', 'ghost', { small: true, 'aria-label': `Duplicate object ${i + 1}`, onclick: e => { e.stopPropagation(); g.objects.splice(i + 1, 0, structuredClone(o)); renderView('games'); } }),
         btn('×', 'danger', { small: true, 'aria-label': `Delete object ${i + 1}`, onclick: e => { e.stopPropagation(); g.objects.splice(i, 1); _editorSelIdx = -1; renderView('games'); } }))));
   });
@@ -480,7 +480,7 @@ function _renderGamesIO(c, store) {
       'Box holds a SCIMAGAME1-… share string (skeletal, deflated) or full envelope JSON. Paste either to import.'),
     out, status,
     el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' },
-      btn('⬇ Import from box', 'primary', { small: true, onclick: async () => {
+      btn([scIcon('download'),' Import from box'], 'primary', { small: true, onclick: async () => {
         const raw = out.value.trim();
         let spec = null;
         if (raw.startsWith('{')) {
@@ -497,11 +497,11 @@ function _renderGamesIO(c, store) {
         _gamesSel = spec;
         status.textContent = `✓ Installed "${spec.name}" (${id.slice(0, 12)}…) — ${spec.objects.length} objects`;
       } }),
-      btn('⬆ Export selected as JSON', 'ghost', { small: true, onclick: () => {
+      btn([scIcon('upload'),' Export selected as JSON'], 'ghost', { small: true, onclick: () => {
         if (!_gamesSel) { status.textContent = 'Pick a game first (Edit or Play tab).'; return; }
         out.value = JSON.stringify({ $schema: 'scima', schema: 'share', schemaVersion: 1, kind: 'game', game: sanitizeGameSpec(_gamesSel) }, null, 2);
       } }),
-      btn('🔗 Share string of selected', 'ghost', { small: true, onclick: () => {
+      btn([scIcon('link'),' Share string of selected'], 'ghost', { small: true, onclick: () => {
         if (!_gamesSel) { status.textContent = 'Pick a game first.'; return; }
         out.value = gameShareString(_gamesSel);
       } }),

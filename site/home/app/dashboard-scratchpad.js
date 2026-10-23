@@ -1,8 +1,8 @@
 'use strict';
 /* dashboard-scratchpad.js — the Infinite Scratchpad: a per-question drawing
    surface (spec: "infinite scratchpad") available from every study session
-   via the circular ✍️ button in the session progress row (top-right, left of
-   💡 Show Hint). Infinite pan, finite zoom (10%–1000%, 1% steps), 360°
+   via the circular pen button in the session progress row (top-right, left
+   of Show Hint). Infinite pan, finite zoom (10%–1000%, 1% steps), 360°
    rotatable grid, pen/highlighter/shapes/polygon/text/image tools, object
    eraser, undo/redo, PNG/SVG/JSON/clipboard export, and per-question
    autosave.
@@ -35,7 +35,7 @@
    POST-DELIVERY REFINEMENTS (user feedback round 2):
    * head bar: ↑ ↓ ← → dock movers (pad parks against any viewport half;
      the mover for the current dock is disabled, so → starts greyed),
-     ⛶ + × sit at the far right; F toggles fullscreen;
+   fullscreen + close sit at the far right; F toggles fullscreen;
    * the panel is resizable via a grip on its inner edge (double-click
      resets); size is per orientation and clamped to 260px…94%;
    * toolbar glyphs are uniform 18×18 inline SVGs — the request was LaTeX,
@@ -104,27 +104,13 @@ const SP_TOOLS = [
 ];
 
 // Toolbar glyph set — one viewBox, one stroke width, currentColor throughout.
+// Toolbar glyphs come from the shared sprite (assets/svg/) like everything
+// else in the app — tool id → icon name.
 const SP_TOOL_ICONS = {
-  select:    '<path d="M4.5 2.5 14 9.2l-4.6.9-2 4.4z" fill="currentColor" stroke="none"/>',
-  pan:       '<path d="M6.4 8.6V4.2a1.1 1.1 0 0 1 2.2 0V8m0-3.9a1.1 1.1 0 0 1 2.2 0V8m0-3a1.1 1.1 0 0 1 2.2 0v5.6c0 3-2 5.2-4.9 5.2-2.4 0-3.6-1.1-4.8-3.2L2.6 9.9c-.5-.9-.2-1.7.5-2 .6-.3 1.4-.1 1.9.7l1.4 2"/>',
-  text:      '<path d="M4 4.5h10M9 4.5V15"/>',
-  pen:       '<path d="M3.5 14.5l1-3.2 7.6-7.6a1.6 1.6 0 0 1 2.3 2.3L6.7 13.6zM11 4.8l2.3 2.3"/>',
-  highlight: '<path d="M9.2 3.6l5.2 5.2-2.6 2.6H9.2l-2.6-2.6zM6.6 8.8 3.5 12v2.5H6L9.2 11.4M3.5 16.5h11"/>',
-  eraser:    '<path d="M8.3 14.5H5.2L2.9 12.2a1.5 1.5 0 0 1 0-2.1l6.5-6.5a1.5 1.5 0 0 1 2.1 0l3.4 3.4a1.5 1.5 0 0 1 0 2.1l-5.4 5.4zM5.6 7.6l5.5 5.5M3.5 16.5h11"/>',
-  line:      '<path d="M4 14 14 4"/>',
-  arrow:     '<path d="M4 14 13.2 4.8M13.6 4.4h-4.2m4.2 0v4.2"/>',
-  rect:      '<rect x="3.5" y="5" width="11" height="8" rx="1"/>',
-  ellipse:   '<ellipse cx="9" cy="9" rx="5.6" ry="4.4"/>',
-  triangle:  '<path d="M9 4 14.6 14H3.4z"/>',
-  polygon:   '<path d="M9 3.4 14.4 7.3l-2 6.3H5.6l-2-6.3z"/>',
-  image:     '<rect x="3" y="4" width="12" height="10" rx="1.5"/><circle cx="6.6" cy="7.4" r="1.1"/><path d="M3.6 12.6 7 9.4l2.6 2.4 2.5-2.2 2.4 2.4"/>',
+  select: 'cursor', pan: 'hand', text: 'type', pen: 'pen', highlight: 'highlighter',
+  eraser: 'eraser', line: 'slash', arrow: 'arrow-up-right', rect: 'square',
+  ellipse: 'circle', triangle: 'triangle', polygon: 'hexagon', image: 'image',
 };
-function spToolIconSvg(id) {
-  const body = SP_TOOL_ICONS[id];
-  if (!body) return '';
-  return `<svg viewBox="0 0 18 18" width="19" height="19" fill="none" stroke="currentColor" ` +
-    `stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
-}
 
 // Quick palette (spec §21 — black/gray/white/red/orange/yellow/green/blue/
 // purple/pink). Ordered light-first because the canvas backdrop is dark.
@@ -462,21 +448,21 @@ function spBuildPanel() {
   _sp.fullBtn = el('button', {
     type: 'button', class: 'sp-icon-btn', 'aria-label': 'Toggle fullscreen scratchpad',
     title: 'Fullscreen (Esc exits)', onclick: () => spSetFullscreen(!_sp.fullscreen),
-  }, '⛶');
+  }, scIcon('maximize'));
   const closeBtn = el('button', {
     type: 'button', class: 'sp-icon-btn', 'aria-label': 'Close scratchpad',
     title: 'Close scratchpad (Esc)', onclick: () => spToggle(_sp.card),
-  }, '×');
+  }, scIcon('close'));
   // Dock movers - the pad parks against any viewport half; the mover for
   // the dock it already occupies is disabled (a neutral pill per CSS).
   _sp.dockBtns = [];
   const dockGroup = el('div', { class: 'sp-dock-group', role: 'group', 'aria-label': 'Dock scratchpad' });
-  for (const [dir, glyph] of [['top', '↑'], ['bottom', '↓'], ['left', '←'], ['right', '→']]) {
+  for (const [dir, glyph] of [['top', 'arrow-up'], ['bottom', 'arrow-down'], ['left', 'arrow-left'], ['right', 'arrow-right']]) {
     const b = el('button', {
       type: 'button', class: 'sp-icon-btn sp-dock-btn', 'data-dock': dir,
       'aria-label': `Dock ${dir}`, title: `Dock ${dir}`,
       onclick: () => spSetDock(dir),
-    }, glyph);
+    }, scIcon(glyph));
     b.disabled = (dir === _sp.dock);
     _sp.dockBtns.push(b);
     dockGroup.appendChild(b);
@@ -487,7 +473,7 @@ function spBuildPanel() {
   // a new tab, so the session never navigates away. The header keeps only
   // the pad's own window controls.
   const head = el('div', { class: 'sp-head' },
-    el('div', { class: 'sp-title' }, '✍️ Scratchpad'),
+    el('div', { class: 'sp-title' }, scLbl('pen','Scratchpad')),
     dockGroup,
     el('div', { class: 'sp-head-spacer' }),
     _sp.fullBtn, closeBtn);
@@ -503,7 +489,7 @@ function spBuildPanel() {
       title: `${t.label}${t.key ? ` — ${t.key.toUpperCase()}` : ''}`,
       onclick: () => spSetTool(t.id),
     });
-    b.innerHTML = spToolIconSvg(t.id);
+    b.replaceChildren(scIcon(SP_TOOL_ICONS[t.id]));
     _sp.toolBtns.push(b);
     toolbar.appendChild(b);
   }
@@ -516,7 +502,7 @@ function spBuildPanel() {
   _sp.widthBtn = el('button', {
     type: 'button', class: 'sp-tool', 'aria-label': 'Stroke width & style options', title: 'Stroke width & more options',
     onclick: () => spShowMorePopover(),
-  }, '〰');
+  }, scIcon('wave'));
   toolbar.appendChild(_sp.widthBtn);
 
   // Canvas stack: grid (z1) → question DOM layer (z2) → objects (z3) ──────
@@ -539,7 +525,7 @@ function spBuildPanel() {
     e.stopPropagation();                       // tool shortcuts must not fire while typing
     if (e.key === 'Escape' || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) { e.preventDefault(); spCommitText(); _sp.objCanvas.focus(); }
   });
-  _sp.badge = el('div', { class: 'sp-badge-restored', style: 'display:none' }, '✍️ scratchpad restored');
+  _sp.badge = el('div', { class: 'sp-badge-restored', style: 'display:none' }, scLbl('pen','scratchpad restored'));
   _sp.popover = el('div', { class: 'sp-popover', role: 'dialog', 'aria-label': 'Scratchpad options' });
 
   _sp.canvasWrap = el('div', { class: 'sp-canvas-wrap' },
@@ -550,8 +536,8 @@ function spBuildPanel() {
   const ico = (label, title, fn, cls) => el('button', {
     type: 'button', class: 'sp-icon-btn' + (cls ? ' ' + cls : ''), 'aria-label': label, title, onclick: fn,
   }, label.includes(' ') ? '' : label);
-  _sp.undoBtn = el('button', { type: 'button', class: 'sp-icon-btn', 'aria-label': 'Undo (Ctrl+Z)', title: 'Undo — Ctrl+Z', onclick: () => spUndo() }, '↺');
-  _sp.redoBtn = el('button', { type: 'button', class: 'sp-icon-btn', 'aria-label': 'Redo (Ctrl+Shift+Z)', title: 'Redo — Ctrl+Shift+Z', onclick: () => spRedo() }, '↻');
+  _sp.undoBtn = el('button', { type: 'button', class: 'sp-icon-btn', 'aria-label': 'Undo (Ctrl+Z)', title: 'Undo — Ctrl+Z', onclick: () => spUndo() }, scIcon('rotate-ccw'));
+  _sp.redoBtn = el('button', { type: 'button', class: 'sp-icon-btn', 'aria-label': 'Redo (Ctrl+Shift+Z)', title: 'Redo — Ctrl+Shift+Z', onclick: () => spRedo() }, scIcon('rotate-cw'));
   _sp.zoomSlider = el('input', {
     type: 'range', class: 'sp-zoom-slider', min: '0', max: '1000', step: '1', value: '500',
     'aria-label': 'Zoom (10% to 1000%)',
@@ -564,7 +550,7 @@ function spBuildPanel() {
   _sp.gridToggleBtn = el('button', {
     type: 'button', class: 'sp-icon-btn', 'aria-label': 'Toggle grid background', title: 'Toggle grid', 'aria-pressed': 'true',
     onclick: () => { _sp.grid.visible = !_sp.grid.visible; spUpdateChrome(); spInvalidate(); spTouch(); },
-  }, '▦');
+  }, scIcon('grid'));
   const bottom = el('div', { class: 'sp-bottom' },
     _sp.undoBtn, _sp.redoBtn,
     el('div', { class: 'sp-sep-v' }),
@@ -573,11 +559,11 @@ function spBuildPanel() {
     _sp.zoomLabel,
     el('button', { type: 'button', class: 'sp-icon-btn', 'aria-label': 'Zoom in', title: 'Zoom in — Ctrl+Alt++', onclick: () => spZoomStep(1.25) }, '+'),
     el('div', { class: 'sp-sep-v' }),
-    el('button', { type: 'button', class: 'sp-icon-btn', 'aria-label': 'Return to center', title: 'Return to center — question, or selection', onclick: () => spCenterView() }, '⌖'),
-    el('button', { type: 'button', class: 'sp-icon-btn', 'aria-label': 'Fit all content', title: 'Fit content', onclick: () => spFitAll() }, '⤢'),
+    el('button', { type: 'button', class: 'sp-icon-btn', 'aria-label': 'Return to center', title: 'Return to center — question, or selection', onclick: () => spCenterView() }, scIcon('crosshair')),
+    el('button', { type: 'button', class: 'sp-icon-btn', 'aria-label': 'Fit all content', title: 'Fit content', onclick: () => spFitAll() }, scIcon('fit')),
     _sp.gridToggleBtn,
     el('div', { class: 'sp-sep-v' }),
-    el('button', { type: 'button', class: 'sp-icon-btn', 'aria-label': 'More scratchpad options', title: 'More — style, grid rotation, export, clear, help', onclick: e => { if (_sp.popover.classList.contains('sp-open')) spClosePopovers(); else spShowMorePopover(); } }, '⋯'));
+    el('button', { type: 'button', class: 'sp-icon-btn', 'aria-label': 'More scratchpad options', title: 'More — style, grid rotation, export, clear, help', onclick: e => { if (_sp.popover.classList.contains('sp-open')) spClosePopovers(); else spShowMorePopover(); } }, scIcon('dots')));
 
   _sp.panel = el('section', {
     id: 'scratch-panel', role: 'region', 'aria-label': 'Infinite scratchpad', 'aria-hidden': 'true',
@@ -1206,7 +1192,7 @@ function spUpdateChrome() {
   _sp.undoBtn.disabled = !_sp.hist || !_sp.hist.canUndo;
   _sp.redoBtn.disabled = !_sp.hist || !_sp.hist.canRedo;
   _sp.gridToggleBtn.setAttribute('aria-pressed', String(!!_sp.grid.visible));
-  _sp.fullBtn.textContent = _sp.fullscreen ? '🗗' : '⛶';
+  _sp.fullBtn.replaceChildren(scIcon(_sp.fullscreen ? 'minimize' : 'maximize'));
   for (const b of _sp.toolBtns) b.setAttribute('aria-pressed', String(b.getAttribute('data-tool') === _sp.tool));
   if (_sp.colorBtn) {
     _sp.colorBtn.style.background = _sp.style.color;
@@ -2407,7 +2393,7 @@ function spShowMorePopover(anchor) {
         onclick: () => { spStylePatch({ width: w }); spRefreshPopover(); },
       }));
     }
-    widthRow.appendChild(spMiniBtn('🎨', {
+    widthRow.appendChild(spMiniBtn(scIcon('palette'), {
       aria: 'Custom color', title: 'Custom color',
       onclick: () => spPickColor(_sp.popover, c => { spStylePatch({ color: c }); spRefreshPopover(); }),
     }));
@@ -2456,7 +2442,7 @@ function spShowMorePopover(anchor) {
         onclick: () => { spSetGridAngle(a); spRefreshPopover(); },
       }));
     }
-    anglePresets.appendChild(spMiniBtn('↺', { aria: 'Reset grid rotation', title: 'Reset rotation', onclick: () => { spSetGridAngle(0); spRefreshPopover(); } }));
+    anglePresets.appendChild(spMiniBtn(scIcon('rotate-ccw'), { aria: 'Reset grid rotation', title: 'Reset rotation', onclick: () => { spSetGridAngle(0); spRefreshPopover(); } }));
     const spacingRow = spSliderRow('Spacing', 8, 96, 2, _sp.grid.spacing,
       v => { _sp.grid.spacing = v; spInvalidate(); spTouch(); }, v => v + 'px');
     const gridOpRow = spSliderRow('Grid opacity', 10, 100, 5, Math.round(_sp.grid.opacity * 100),
@@ -2470,7 +2456,7 @@ function spShowMorePopover(anchor) {
     if (_sp.q.present) {
       pop.appendChild(spPopSection('Question',
         el('div', { class: 'sp-row' },
-          spMiniBtn(_sp.q.unlocked ? '🔓 Unlocked' : '🔒 Locked', {
+          spMiniBtn(scLbl(_sp.q.unlocked ? 'unlock' : 'lock', _sp.q.unlocked ? 'Unlocked' : 'Locked'), {
             toggle: _sp.q.unlocked, aria: 'Toggle question layer lock',
             onclick: () => {
               _sp.q.unlocked = !_sp.q.unlocked;
@@ -2485,10 +2471,10 @@ function spShowMorePopover(anchor) {
     if (spSelectedObjs().length) {
       pop.appendChild(spPopSection('Arrange',
         el('div', { class: 'sp-row' },
-          spMiniBtn('⬆ Front', { onclick: () => { spArrange('front'); spRefreshPopover(); } }),
-          spMiniBtn('↑ Forward', { onclick: () => { spArrange('forward'); spRefreshPopover(); } }),
-          spMiniBtn('↓ Backward', { onclick: () => { spArrange('backward'); spRefreshPopover(); } }),
-          spMiniBtn('⬇ Back', { onclick: () => { spArrange('back'); spRefreshPopover(); } }))));
+          spMiniBtn(scLbl('arrow-up','Front'), { onclick: () => { spArrange('front'); spRefreshPopover(); } }),
+          spMiniBtn(scLbl('chevron-up','Forward'), { onclick: () => { spArrange('forward'); spRefreshPopover(); } }),
+          spMiniBtn(scLbl('chevron-down','Backward'), { onclick: () => { spArrange('backward'); spRefreshPopover(); } }),
+          spMiniBtn(scLbl('arrow-down','Back'), { onclick: () => { spArrange('back'); spRefreshPopover(); } }))));
     }
 
     // ── Export (spec §23) ──
@@ -2497,19 +2483,19 @@ function spShowMorePopover(anchor) {
         spMiniBtn('PNG', { onclick: () => { spClosePopovers(); spExportPNG(); } }),
         spMiniBtn('SVG', { onclick: () => { spClosePopovers(); spExportSVG(); } }),
         spMiniBtn('JSON', { onclick: () => { spClosePopovers(); spExportJSON(); } }),
-        spMiniBtn('📋 Copy', { aria: 'Copy to clipboard', onclick: () => { spClosePopovers(); spExportClipboard(); } }))));
+        spMiniBtn(scLbl('clipboard','Copy'), { aria: 'Copy to clipboard', onclick: () => { spClosePopovers(); spExportClipboard(); } }))));
 
     // ── Clear & reset (spec §25) ──
     pop.appendChild(spPopSection('Clear & reset',
       el('div', { class: 'sp-row' },
-        spMiniBtn('🧹 Clear pad', { danger: true, onclick: () => { spClosePopovers(); spClearPad(); } }),
+        spMiniBtn(scLbl('broom','Clear pad'), { danger: true, onclick: () => { spClosePopovers(); spClearPad(); } }),
         spMiniBtn('Reset view', { onclick: () => { spResetView(); spClosePopovers(); } }),
         spMiniBtn('Fit content', { onclick: () => { spFitAll(); spClosePopovers(); } }),
         spMiniBtn('100%', { aria: 'Zoom to 100 percent', onclick: () => { spSetZoom(1); spClosePopovers(); } }))));
 
     // ── Help (spec §26 cheat sheet) ──
     const help = el('details', { class: 'sp-pop-section sp-help' });
-    help.appendChild(el('summary', {}, '⌨️ Keyboard shortcuts'));
+    help.appendChild(el('summary', {}, scLbl('keyboard','Keyboard shortcuts')));
     const rows = [
       ['Ctrl/⌘+Alt+S', 'open / close scratchpad'], ['Esc', 'close (or cancel current action)'],
       ['V H T P M E', 'select pan text pen highlighter eraser'], ['L A R O U I', 'line arrow rect ellipse polygon image'],
@@ -2542,7 +2528,7 @@ function spShowMorePopover(anchor) {
           if (typeof isExtension !== 'undefined' && isExtension) spClosePopovers();
           openSettingsInNewTab('scratch');
         },
-      }, '⚙ Edit Defaults')));
+      }, scLbl('gear','Edit Defaults'))));
   });
 }
 function spSetGridAngle(a) {
@@ -2590,22 +2576,22 @@ function spOpenCtxMenuAt(x, y, hit) {
   const hasSel = spSelectedObjs().length > 0;
   const selText = spSelectedObjs().filter(o => o.type === 'text');
   if (hasSel || hit) {
-    item('📋 Copy', () => spCopy());
-    item('📄 Duplicate', () => spDuplicate());
-    if (selText.length === 1) item('✏️ Edit text', () => spOpenEditorFor(selText[0], false));
-    item('⬆ Bring to front', () => spArrange('front'));
-    item('⬇ Send to back', () => spArrange('back'));
-    item('🗑 Delete', () => spDeleteSelection(), { danger: true });
+    item(scLbl('copy','Copy'), () => spCopy());
+    item(scLbl('copy','Duplicate'), () => spDuplicate());
+    if (selText.length === 1) item(scLbl('pencil','Edit text'), () => spOpenEditorFor(selText[0], false));
+    item(scLbl('arrow-up','Bring to front'), () => spArrange('front'));
+    item(scLbl('arrow-down','Send to back'), () => spArrange('back'));
+    item(scLbl('trash','Delete'), () => spDeleteSelection(), { danger: true });
     sep();
   }
-  item('📥 Paste', () => spPaste(), { disabled: !_sp.clipboard.length });
+  item(scLbl('clipboard','Paste'), () => spPaste(), { disabled: !_sp.clipboard.length });
   item('Select all', () => spSelectAll());
   sep();
-  item('⌖ Return to center', () => spCenterView());
+  item(scLbl('crosshair','Return to center'), () => spCenterView());
   item('⤢ Fit content', () => spFitAll());
-  item('🔍 Zoom 100%', () => spSetZoom(1));
+  item(scLbl('search','Zoom 100%'), () => spSetZoom(1));
   sep();
-  item('🧹 Clear pad…', () => spClearPad(), { danger: true });
+  item(scLbl('broom','Clear pad…'), () => spClearPad(), { danger: true });
   // ctxMenu lives on document.body → position:fixed in viewport coords.
   const wR = _sp.canvasWrap.getBoundingClientRect();
   m.style.display = 'block';
@@ -2868,7 +2854,7 @@ function spMakeOpenButton(card) {
     'aria-expanded': String(_sp.open), 'aria-controls': 'scratch-panel',
     title: 'Scratchpad — Ctrl+Alt+S',
     onclick: () => spToggle(card),
-  }, '✍️');
+  }, scIcon('pen'));
   if (!_sp.openBtns) _sp.openBtns = [];
   _sp.openBtns.push(b);
   return b;

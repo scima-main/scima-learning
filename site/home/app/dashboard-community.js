@@ -111,7 +111,7 @@ const COMMUNITY_MARKUP = `<div class="sc-root-bar"><span class="dot" id="api-dot
         class="empty-state"
         style="display:none"
       >
-        <div class="big-emoji">🔎</div>
+        <div class="big-emoji">${scIconSvg('search')}</div>
         <div>No decks matched your search.</div>
       </div>
     </div>
@@ -150,7 +150,7 @@ const COMMUNITY_MARKUP = `<div class="sc-root-bar"><span class="dot" id="api-dot
         class="empty-state"
         style="display:none"
       >
-        <div class="big-emoji">📭</div>
+        <div class="big-emoji">${scIconSvg('mailbox')}</div>
         <div>No decks have been published yet.</div>
       </div>
 
@@ -159,7 +159,7 @@ const COMMUNITY_MARKUP = `<div class="sc-root-bar"><span class="dot" id="api-dot
     <!-- Upload -->
     <section id="upload-panel">
 
-      <h3>⬆ Upload a deck</h3>
+      <h3>${scLblSvg('upload','Upload a deck')}</h3>
 
       <p>
         Publish a SCIMA deck export to the community registry.
@@ -416,7 +416,7 @@ const COMMUNITY_MARKUP = `<div class="sc-root-bar"><span class="dot" id="api-dot
       class="btn btn-ghost btn-sm"
       id="back-to-search"
     >
-      ← Back to decks
+      ${scLblSvg('arrow-left','Back to decks')}
     </button>
 
     <div
@@ -735,7 +735,7 @@ const dashboardStore = {
     const d = sanitizeDeck({
       id: dashUid('d'),
       name: deckExport.deck.name || deck.name,
-      emoji: deckExport.deck.emoji || '📖',
+      emoji: deckExport.deck.emoji || 'book-open',
       image: deckExport.deck.image || null,
       subject: subjectKey || DEFAULT_SUBJECT_KEY,
       folderId: folderId || null,
@@ -763,7 +763,7 @@ function openModal(title, buildBody) {
   const box = el('div', { class: 'sc-modal-box' },
     el('div', { class: 'sc-modal-header' },
       el('h3', { class: 'sc-modal-title' }, title),
-      el('button', { class: 'sc-modal-close', onclick: () => closeModal() }, '✕'),
+      el('button', { class: 'sc-modal-close', 'aria-label': 'Close', onclick: () => closeModal() }, scIcon('close')),
     ),
     el('div', { class: 'sc-modal-body' }),
   );
@@ -1081,7 +1081,7 @@ function makeDeckCard(deck) {
     el(
       'div',
       { class: 'deck-emoji' },
-      deck.emoji || '📖'
+      scAuto(deck.emoji || 'book-open')
     ),
 
     el(
@@ -1109,7 +1109,7 @@ function makeDeckCard(deck) {
       el(
         'span',
         {},
-        `⬇ ${deck.downloads ?? 0}`
+        `${scIconSvg('download')} ${deck.downloads ?? 0}`
       )
     ),
 
@@ -2070,7 +2070,7 @@ function useLocalDeck(deck) {
   try {
     applyParsedExport(
       localDeckToExport(deck),
-      `${deck.emoji || '📚'} ${deck.name} — from your decks`
+      scPrefix(deck.emoji || 'books') + `${deck.name} — from your decks`
     );
 
     // Carry the deck's dashboard subject over to the registry's Subject
@@ -2112,11 +2112,11 @@ function openLocalDeckPicker() {
 
   openDeckExplorerOverlay({
     singleDeck: true,
-    title: '📂 Choose a Deck to Upload',
-    confirmLabel: 'Use this deck ✓',
+    title: 'Choose a Deck to Upload',
+    confirmLabel: 'Use this deck',
     footerButtons: [
       {
-        label: '📄 Choose a JSON file instead…',
+        label: scLbl('file-text','Choose a JSON file instead…'),
         variant: 'ghost',
         onClick(close) {
           close();
@@ -2408,7 +2408,7 @@ async function openDeck(id) {
         el(
           'div',
           { class: 'big-emoji' },
-          '⚠️'
+          scIcon('alert')
         ),
 
         el(
@@ -2458,7 +2458,7 @@ function renderDeckDetail(deck) {
         {
           class: 'deck-detail-emoji',
         },
-        sourceDeck?.emoji || '📖'
+        scAuto(sourceDeck?.emoji || 'book-open')
       ),
 
       el(
@@ -2592,7 +2592,7 @@ function renderDeckDetail(deck) {
       (() => {
         const button =
           btn(
-            '⬇ Download deck',
+            [scIcon('download'), ' Download deck'],
             'primary'
           );
 
@@ -2630,7 +2630,7 @@ function renderDeckDetail(deck) {
         // Shareable deep link to THIS deck's detail screen (#community/<id>).
         const button =
           btn(
-            '🔗 Copy link',
+            [scIcon('link'), ' Copy link'],
             'ghost'
           );
 
@@ -2648,7 +2648,7 @@ function renderDeckDetail(deck) {
                 ok ? 2500 : 6000
               );
             }
-            if (ok) button.textContent = '✓ Copied';
+            if (ok) button.replaceChildren(scIcon('check'), ' Copied');
           }
         );
 
@@ -2831,8 +2831,8 @@ async function downloadDeck(deck, button) {
     );
   } finally {
     button.disabled = false;
-    button.textContent =
-      '⬇ Download deck';
+    button.replaceChildren(
+      scIcon('download'), ' Download deck');
   }
 }
 

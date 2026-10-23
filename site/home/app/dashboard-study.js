@@ -27,7 +27,7 @@ function attachNextControls(container, rating){
   const countdown = secs > 0
     ? el('span',{class:'u-muted-11',style:'font-size:12px;font-weight:800;min-width:74px'},`Next in ${secs}s`)
     : null;
-  row.appendChild(btn(last ? 'Finish →' : 'Next →','primary',{
+  row.appendChild(btn(last ? ['Finish ', scIcon('arrow-right')] : ['Next ', scIcon('arrow-right')],'primary',{
     onclick:()=>{ clearNextTimer(); rateCard(rating); }}));
   if(countdown) row.appendChild(countdown);
   container.appendChild(row);
@@ -380,12 +380,12 @@ function startSessionFromEntry(entry, resume, onlyWrong = false) {
 // Resumed from where they stopped. Open/closed state is module-level so it
 // survives picker re-renders within a page load.
 let _studyHistOpen = false;
-const STUDY_MODE_ICONS = { review:'🔄', cram:'💨', quiz:'✍️', gaps:'🧩', weakness:'⚠️', multi:'☑️' };
+const STUDY_MODE_ICONS = { review:'refresh', cram:'wind', quiz:'pen', gaps:'puzzle', weakness:'alert', multi:'check-square' };
 
 function renderStudyHistorySection() {
   const wrap = el('div', { style: 'margin-bottom:16px' });
   const entries = state.sessionLog || [];
-  const toggle = btn(`🕘 Session History${entries.length ? ` (${entries.length})` : ''}`, 'ghost',
+  const toggle = btn([scIcon('history'), `Session History${entries.length ? ` (${entries.length})` : ''}`], 'ghost',
     { small: true, onclick: () => { _studyHistOpen = !_studyHistOpen; renderView('study'); } });
   toggle.id = 'session-history-toggle';
   toggle.setAttribute('aria-expanded', String(_studyHistOpen));
@@ -409,8 +409,8 @@ function renderStudyHistorySection() {
           { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
         panel.appendChild(el('div', { class: 'card', style: 'padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap' },
           el('div', { style: 'flex:1;min-width:160px' },
-            el('div', { style: 'font-weight:800;font-size:12px' },
-              `${e.exam ? '📝 ' : ''}${STUDY_MODE_ICONS[e.mode] || '📚'} ${e.mode || 'review'} · ${when}`),
+            el('div', { style: 'font-weight:800;font-size:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap' },
+              e.exam ? scIcon('note') : null, scAuto(STUDY_MODE_ICONS[e.mode] || 'books'), `${e.mode || 'review'} · ${when}`),
             el('div', { class: 'u-muted-11' },
               `${e.cardsAttempted || 0}/${e.totalCards || 0} cards · ✅${e.correct || 0} ❌${e.incorrect || 0}` +
               (e.accuracyPct != null ? ` · ${e.accuracyPct}%` : ''))),
@@ -509,8 +509,8 @@ function openStudyOptionsDrawer() {
   const panel = el('div', { id: 'study-opts-panel', tabindex: '-1', role: 'dialog', 'aria-label': 'Session options' });
   const body = el('div', { id: 'study-opts-body' });
   const head = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0' },
-    el('div', { style: 'font-weight:900;font-size:15px' }, '⚙ Session options'),
-    el('button', { 'aria-label': 'Close session options', style: 'background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:2px 6px' , onclick: () => closeStudyOptions() }, '×'));
+    el('div', { style: 'font-weight:900;font-size:15px' }, scLbl('gear','Session options')),
+    el('button', { 'aria-label': 'Close session options', style: 'background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:2px 6px' , onclick: () => closeStudyOptions() }, scIcon('close')));
   const preview = el('div', { id: 'study-opts-preview', class: 'u-muted-11', style: 'padding:10px 12px;border-radius:10px;background:rgba(var(--blue-rgb),0.08);border:1px solid rgba(var(--blue-rgb),0.2)' });
   const section = (title) => {
     const sec = el('div', { class: 'study-opts-section' });
@@ -574,16 +574,16 @@ function openStudyOptionsDrawer() {
   }
 
   // 1 · Display
-  const sDisplay = section(' Display');
+  const sDisplay = section(scLbl('eye','Display'));
   row(sDisplay).appendChild(sw('Show card images', 'Display front/back images during study',
     () => state.settings.showStudyImages !== false,
     v => { state.settings.showStudyImages = v; scheduleSave(); }, 'img-toggle'));
-  row(sDisplay).appendChild(sw('🔁 Reverse cards', 'See the back, answer the front (basic cards)',
+  row(sDisplay).appendChild(sw(scLbl('repeat','Reverse cards'), 'See the back, answer the front (basic cards)',
     () => !!state.settings.studyReverse,
     v => { state.settings.studyReverse = v; scheduleSave(); }, 'reverse-toggle'));
 
   // 2 · Time limits — per-card and whole-session, one section, own toggles
-  const sTime = section('⏱ Time limits');
+  const sTime = section(scLbl('stopwatch','Time limits'));
   row(sTime).appendChild(sw('Per-card countdown', 'Written Quiz auto-submits each card when its timer runs out',
     () => !!state.settings.quizTimed,
     v => { state.settings.quizTimed = v; scheduleSave(); }, 'quiz-timed'));
@@ -597,7 +597,7 @@ function openStudyOptionsDrawer() {
     v => { qp.timeLimitMin = v; }, 'Minutes:', 'Global time limit in minutes (0 = off)', 'qp-minutes'));
 
   // 3 · Queue shaping
-  const sQueue = section('🧾 Queue');
+  const sQueue = section(scLbl('receipt','Queue'));
   const chips = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' });
   function refreshChips() {
     chips.innerHTML = '';
@@ -618,8 +618,8 @@ function openStudyOptionsDrawer() {
     sw('Shuffle', 'Random queue order (off = deck order)', () => qp.shuffle !== false, v => { qp.shuffle = v; }, 'qp-shuffle'));
 
   // 4 · Exam mode
-  const sExam = section('📝 Exam mode');
-  row(sExam).appendChild(sw('Exam mode', 'Move freely between questions with ← / →; answers are cached per card and nothing is graded or revealed until 🏁 Finish & reveal (Written Quiz & Fill in the Gaps)',
+  const sExam = section(scLbl('note','Exam mode'));
+  row(sExam).appendChild(sw('Exam mode', 'Move freely between questions with ← / →; answers are cached per card and nothing is graded or revealed until Finish & reveal (Written Quiz & Fill in the Gaps)',
     () => !!qp.exam, v => { qp.exam = v; }, 'qp-exam'));
   sExam.appendChild(el('div', { class: 'u-muted-11', style: 'font-size:11px;line-height:1.5' },
     'Exam grades written answers: single, multi-answer, mark-scheme, process and calculation cards. Table cards sit exam sessions out — their grid editor is a live-check surface.'));
@@ -648,17 +648,17 @@ function renderStudyPicker(c) {
   const scopeDue = getDueCards(refinedCards).length;
 
   const MODES=[
-    {id:'review',icon:'🔄',label:'SRS Review',desc:'Due cards, spaced repetition'},
-    {id:'cram',icon:'💨',label:'Cram Mode',desc:'All cards, no scheduling'},
-    {id:'quiz',icon:'✍️',label:'Written Quiz',desc:'Type your answer, self-mark'},
-    {id:'gaps',icon:'🧩',label:'Fill in the Gaps',desc:'Recall the missing word in context'},
-    {id:'weakness',icon:'⚠️',label:'Weakness',desc:'Cards you struggle with'},
-    {id:'multi',icon:'☑️',label:'Multiple Choice',desc:'Pick the right answer from 4'},
+    {id:'review',icon:'refresh',label:'SRS Review',desc:'Due cards, spaced repetition'},
+    {id:'cram',icon:'wind',label:'Cram Mode',desc:'All cards, no scheduling'},
+    {id:'quiz',icon:'pen',label:'Written Quiz',desc:'Type your answer, self-mark'},
+    {id:'gaps',icon:'puzzle',label:'Fill in the Gaps',desc:'Recall the missing word in context'},
+    {id:'weakness',icon:'alert',label:'Weakness',desc:'Cards you struggle with'},
+    {id:'multi',icon:'check-square',label:'Multiple Choice',desc:'Pick the right answer from 4'},
   ];
 
   // ── Recents: one-click quick access to previously-studied scopes ──
   const recentsRow = el('div',{style:'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px'});
-  recentsRow.appendChild(mkScopePill('🌍','All Decks', sameScopeSet(state.studyScope,[{type:'all',id:null}]), ()=>{ state.studyScope=[{type:'all',id:null}]; renderView('study'); }, null));
+  recentsRow.appendChild(mkScopePill('globe','All Decks', sameScopeSet(state.studyScope,[{type:'all',id:null}]), ()=>{ state.studyScope=[{type:'all',id:null}]; renderView('study'); }, null));
   orderedRecentScopes().forEach(r=>{
     recentsRow.appendChild(mkScopePill(r.icon, r.label, sameScopeSet(state.studyScope, r.scopes), ()=>{ state.studyScope=r.scopes; renderView('study'); }, { pinned:r.pinned, onToggle:()=>{ toggleRecentPin(r.key); renderView('study'); } }));
   });
@@ -671,7 +671,7 @@ function renderStudyPicker(c) {
       el('div',{style:'font-weight:800;font-size:13px'},summary.label),
       el('div',{class:'u-muted-11'},`${scopedCards.length} total cards · ${scopeDue} due`)
     ),
-    btn('📂 Browse Decks…','ghost',{onclick:openStudyScopeExplorer})
+    btn([scIcon('folder-open'),' Browse Decks…'],'ghost',{onclick:openStudyScopeExplorer})
   );
 
   // ── Refine: an extra, finer-grained filter layered on top of the scope
@@ -688,10 +688,10 @@ function renderStudyPicker(c) {
   REFINE_MODES.forEach(m=>refineSelect.appendChild(el('option',{value:m.id},m.label)));
   refineSelect.value = refine.mode;
   refineSelect.addEventListener('change',()=>{ refine.mode=refineSelect.value; scheduleSave(); renderView('study'); });
-  refineRow.append(el('label',{style:'font-size:12px;font-weight:700;color:var(--text)'},'🎯 Refine:'), refineSelect);
+  refineRow.append(el('label',{style:'font-size:12px;font-weight:700;color:var(--text)'},scLbl('target','Refine:')), refineSelect);
 
   if(refine.mode==='cards'){
-    refineRow.append(btn(`📇 Pick Cards… (${refine.cardIds.length} selected)`,'ghost',{small:true,onclick:()=>openCardPickerModal(scopedCards, refine)}));
+    refineRow.append(btn([scIcon('cards'), `Pick Cards… (${refine.cardIds.length} selected)`],'ghost',{small:true,onclick:()=>openCardPickerModal(scopedCards, refine)}));
   } else if(refine.mode==='stale' || refine.mode==='ease'){
     const nInput = el('input',{type:'number',min:'1',max:String(Math.max(1,scopedCards.length)),style:'width:60px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-weight:700;font-size:12px'});
     nInput.value = refine.n;
@@ -705,7 +705,7 @@ function renderStudyPicker(c) {
       refineRow.append(dirSelect);
     }
   }
-  if(refine.mode!=='all') refineRow.append(btn('✕ Clear','ghost',{small:true,onclick:()=>{ refine.mode='all'; scheduleSave(); renderView('study'); }}));
+  if(refine.mode!=='all') refineRow.append(btn([scIcon('close'),' Clear'],'ghost',{small:true,onclick:()=>{ refine.mode='all'; scheduleSave(); renderView('study'); }}));
   refineRow.append(el('span',{style:'font-size:11px;color:var(--muted);margin-left:auto'}, refine.mode==='all' ? nOf(scopedCards.length,'card') : `${refinedCards.length} of ${nOf(scopedCards.length,'card')} selected`));
 
   // ── Session options live in a slide-over drawer (⚙) — the old stack of
@@ -713,7 +713,7 @@ function renderStudyPicker(c) {
   // had grown into four inconsistent strips; the drawer groups them into
   // Display / Time limits / Queue / Exam sections. See openStudyOptionsDrawer().
   const optionsBar = el('div',{style:'display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:10px'});
-  const optsBtn = btn('⚙ Session options','ghost',{small:true,onclick:()=>openStudyOptionsDrawer()});
+  const optsBtn = btn([scIcon('gear'),' Session options'],'ghost',{small:true,onclick:()=>openStudyOptionsDrawer()});
   optsBtn.id = 'study-opts-btn';
   const optsSummary = el('span',{class:'u-muted-11',style:'margin-left:auto',id:'study-opts-summary'});
   optionsBar.append(optsBtn, optsSummary);
@@ -723,25 +723,25 @@ function renderStudyPicker(c) {
 // "How it works" copy for the six study modes — opened from the ⓘ button in
 // each mode card's top-right corner, complementing the card's one-line desc.
 const MODE_HELP = {
-  review: { icon:'🔄', title:'SRS Review', blurb:'The default spaced-repetition loop: only what\u2019s due, scheduled by your algorithm.', tips:[
+  review: { icon:'refresh', title:'SRS Review', blurb:'The default spaced-repetition loop: only what\u2019s due, scheduled by your algorithm.', tips:[
     'The queue is exactly the due cards in scope, plus new cards up to your daily New Cards cap (Settings).',
     'Reveal the answer, then rate Again / Hard / Good / Easy — FSRS or SM-2 (your Settings choice) turns that rating into the card\u2019s next review date and ease.',
     'XP per card scales with ease and the subject multiplier; using Show Hint halves it.']},
-  cram: { icon:'💨', title:'Cram Mode', blurb:'Every card in scope, random order, due or not.', tips:[
+  cram: { icon:'wind', title:'Cram Mode', blurb:'Every card in scope, random order, due or not.', tips:[
     'No due-date filtering and no new-card cap: the whole refined scope goes into the queue, shuffled.',
     'Ratings still update the real schedule and award XP — cramming doubles as a catch-up session, it just doesn\u2019t wait for cards to come due.']},
-  quiz: { icon:'✍️', title:'Written Quiz', blurb:'Type the answer from memory; it\u2019s marked for you.', tips:[
+  quiz: { icon:'pen', title:'Written Quiz', blurb:'Type the answer from memory; it\u2019s marked for you.', tips:[
     'Instead of flipping, you type the answer; it\u2019s marked against the card\u2019s accepted answers using the session\u2019s Match mode (fuzzy tolerates case/whitespace/latex-readable forms, exact doesn\u2019t).',
-    '⌘/Ctrl+Enter submits. With ⏱️ Timed ticked, each card auto-submits when its per-card countdown runs out (counts as a timeout if empty).',
+    '⌘/Ctrl+Enter submits. With Timed ticked, each card auto-submits when its per-card countdown runs out (counts as a timeout if empty).',
     'Nothing advances on its own: after marking, use Next/Finish (or the self-rate row). Settings → Auto-next countdown can add a visible N-second timer to that button.',
     'The session summary gains typing stats: WPM, keystrokes/second, backspaces, timeouts.']},
-  gaps: { icon:'🧩', title:'Fill in the Gaps', blurb:'A key word from the answer is blanked in its sentence — recall it in context.', tips:[
+  gaps: { icon:'puzzle', title:'Fill in the Gaps', blurb:'A key word from the answer is blanked in its sentence — recall it in context.', tips:[
     'One content word (stopwords skipped) is hidden from the back text and shown as a blank inside the full sentence.',
     'Type the word or pick from the candidate chips; near-misses score as "close" and appear in the session\u2019s gap stats.']},
-  weakness: { icon:'⚠️', title:'Weakness', blurb:'Only the cards you struggle with enter the queue.', tips:[
+  weakness: { icon:'alert', title:'Weakness', blurb:'Only the cards you struggle with enter the queue.', tips:[
     'Scope narrows to cards with at least one lapse or an ease below 2.3 — the ones the SRS is still fighting over.',
     'Rating them well raises ease and lengthens intervals, so cards graduate out of this pool as they strengthen.']},
-  multi: { icon:'☑️', title:'Multiple Choice', blurb:'One correct answer plus three distractors from the session.', tips:[
+  multi: { icon:'check-square', title:'Multiple Choice', blurb:'One correct answer plus three distractors from the session.', tips:[
     'Options are the card\u2019s own answer plus three backs drawn from the other basic cards in the session, shuffled.',
     'Only basic cards qualify (they\u2019re the only type with a single plain answer to offer), and the scope needs at least four of them — that\u2019s why Start gates harder here.']},
 };
@@ -769,7 +769,7 @@ function openModeHelp(id) {
     if(m.id==='review') startBtn.id='tutorial-target-study-start';
     modeGrid.appendChild(el('div',{class:`card${hasCards?' glow':''}`,style:`position:relative;padding:20px;opacity:${hasCards?1:0.5}`},
       makeHelpBtn(`How ${m.label} works`, e=>{ e.stopPropagation(); openModeHelp(m.id); }, true),
-      el('div',{style:'font-size:28px;margin-bottom:8px'},m.icon),
+      el('div',{style:'font-size:26px;margin-bottom:8px'},scIcon(m.icon)),
       el('div',{style:'font-weight:800;font-size:14px;margin-bottom:4px'},m.label),
       el('div',{style:'font-size:11px;color:var(--muted);margin-bottom:14px'},m.desc),
       startBtn
@@ -801,7 +801,7 @@ function openModeHelp(id) {
 // state.studyScope, and the confirmed scopes are applied back onto it.
 function openStudyScopeExplorer() {
   openDeckExplorerOverlay({
-    title: '📂 Choose Study Scope',
+    title: 'Choose Study Scope',
     initialSelection: state.studyScope || [],
     onConfirm(scopes) {
       state.studyScope = scopes.length ? scopes : [{type:'all',id:null}];
@@ -844,7 +844,7 @@ function openCardPickerModal(scopedCards, refine) {
         chk.addEventListener('change',()=>{ if(chk.checked) selected.add(card.id); else selected.delete(card.id); countLabel.textContent = `${selected.size} selected`; });
         row.append(chk,
           el('div',{style:'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'}, formatCardFront(card)),
-          el('span',{style:'font-size:10px;color:var(--muted);flex-shrink:0',title:fmtDateTime(card.lastRated)}, `🕒 ${timeAgo(card.lastRated)}`)
+          el('span',{style:'font-size:10px;color:var(--muted);flex-shrink:0',title:fmtDateTime(card.lastRated)}, scIcon('clock'), timeAgo(card.lastRated))
         );
         listWrap.appendChild(row);
       });
@@ -852,7 +852,7 @@ function openCardPickerModal(scopedCards, refine) {
     renderList();
     searchInput.addEventListener('input', e=>{ search=e.target.value.toLowerCase(); renderList(); });
 
-    body.appendChild(btn('Use Selection ✓','primary',{full:true,onclick:()=>{
+    body.appendChild(btn([scIcon('check'),' Use Selection'],'primary',{full:true,onclick:()=>{
       refine.mode='cards';
       refine.cardIds=[...selected];
       scheduleSave();
@@ -946,10 +946,10 @@ function renderStudySession(c) {
   // from the per-card ⏱️ Timed mode; hitting zero finishes the session.
   let clockLabel = null;
   if (sess.timeLimitSec) {
-    clockLabel = el('span',{style:'font-size:12px;font-weight:900;color:var(--blue);min-width:56px;text-align:right'},'⏱ --:--');
+    clockLabel = el('span',{class:'session-clock',style:'font-size:12px;font-weight:900;color:var(--blue);min-width:56px;text-align:right;display:inline-flex;align-items:center;justify-content:flex-end;gap:4px'},scIcon('stopwatch'),el('span',{},'--:--'));
     const paint = () => {
       const left = Math.max(0, sess.timeLimitSec - Math.round((Date.now() - sess.startTime) / 1000));
-      clockLabel.textContent = `⏱ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+      clockLabel.lastChild.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
       clockLabel.style.color = left <= 30 ? '#ef4444' : left <= 60 ? '#FB923C' : 'var(--blue)';
       if (left <= 0) sessionTimeUp();
     };
@@ -958,11 +958,11 @@ function renderStudySession(c) {
   }
 
   const progress=el('div',{class:'ui-action-bar',style:'display:flex;align-items:center;gap:12px;margin-bottom:20px'},
-    btn('← Exit','ghost',{small:true,onclick:()=>{ clearQuizTimer(); clearNextTimer(); clearSessionClock(); if(window.speechSynthesis) window.speechSynthesis.cancel(); spSessionEnd(); logAbortedSession(studySession); studySession=null; renderView('study'); }}),
+    btn([scIcon('arrow-left'),' Exit'],'ghost',{small:true,onclick:()=>{ clearQuizTimer(); clearNextTimer(); clearSessionClock(); if(window.speechSynthesis) window.speechSynthesis.cancel(); spSessionEnd(); logAbortedSession(studySession); studySession=null; renderView('study'); }}),
     el('div',{style:'flex:1'},
       el('div',{style:'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'},
         el('span',{style:'font-size:12px;font-weight:700;color:var(--muted)'},`${sess.idx+1} / ${sess.queue.length}`),
-        sess.combo>=3?mkTag(`🔥 ${sess.combo}x`,'#FB923C'):null
+        sess.combo>=3?mkTag(scLbl('flame',`${sess.combo}x`),'#FB923C'):null
       ),
       el('div',{class:'study-progress'},el('div',{class:'study-prog-fill',style:`width:${(sess.idx/sess.queue.length)*100}%`}))
     ),
@@ -971,7 +971,7 @@ function renderStudySession(c) {
     // A hint costs half the card's XP (see rateCard()) — greyed out entirely
     // when the card has no hint to show, so it's not a dead click.
     (() => {
-      const hintBtn = btn(sess.showHint?'💡 Hint shown':'💡 Show Hint','ghost',{small:true,disabled:!card.hint,
+      const hintBtn = btn([scIcon('bulb'), sess.showHint?'Hint shown':'Show Hint'],'ghost',{small:true,disabled:!card.hint,
         onclick:()=>{ sess.showHint=true; renderStudySession(document.getElementById('view-study')); }});
       if(card.hint) hintBtn.style.cssText='color:#22c55e;border-color:color-mix(in srgb, #22c55e 35%, transparent);background:color-mix(in srgb, #22c55e 10%, transparent)';
       return hintBtn;
@@ -981,8 +981,8 @@ function renderStudySession(c) {
 
   const scrollArea=el('div',{class:'quiz-scroll-area'});
   scrollArea.appendChild(progress);
-  const citBadge = card.citation ? el('div',{class:'citation-badge',onclick:()=>openCitationViewer(card.citation)},'📖 Source') : null;
-  if(sess.showHint && card.hint) scrollArea.appendChild(setRichText(el('div',{class:'flashcard-hint',style:'margin-bottom:12px'}),`💡 ${card.hint}`));
+  const citBadge = card.citation ? el('div',{class:'citation-badge',onclick:()=>openCitationViewer(card.citation)},scLbl('book-open','Source')) : null;
+  if(sess.showHint && card.hint){const _h=el('div',{class:'flashcard-hint',style:'margin-bottom:12px'});_h.append(scLbl('bulb','Hint'),setRichText(el('span'),' — '+card.hint));scrollArea.appendChild(_h);}
   const {scrollContent,stickyFooter} = sess.mode==='quiz'
     ? renderQuizCard(card,citBadge,scrollArea)
     : sess.mode==='gaps'
@@ -1005,11 +1005,11 @@ function renderStudySession(c) {
       b.style.cssText += 'flex:1;padding:14px 12px;font-size:14px;font-weight:800;';
       return b;
     };
-    const prevB = bigBtn('← Prev', 'ghost', { onclick: () => examNav(-1) });
+    const prevB = bigBtn([scIcon('arrow-left'),' Prev'], 'ghost', { onclick: () => examNav(-1) });
     if (sess.idx === 0) prevB.disabled = true;
-    const nextB = bigBtn('Next →', 'ghost', { onclick: () => examNav(1) });
+    const nextB = bigBtn(['Next ', scIcon('arrow-right')], 'ghost', { onclick: () => examNav(1) });
     if (sess.idx + 1 >= sess.queue.length) nextB.disabled = true;
-    const finishB = btn('🏁 Finish & reveal', 'primary', { full: true,
+    const finishB = btn([scIcon('flag-checkered'),' Finish & reveal'], 'primary', { full: true,
       title: 'Grade every cached answer and reveal the results', onclick: () => examFinish() });
     finishB.style.cssText += 'padding:13px 12px;font-size:13px;font-weight:800;';
     stickyFooter.appendChild(el('div', { style: 'display:flex;gap:10px;align-items:center' },
@@ -1148,7 +1148,7 @@ function renderFlashcard(card, citBadge) {
   let stickyFooter;
   if(!sess.flipped){
     stickyFooter=el('div',{class:'quiz-sticky-footer',style:'flex-direction:row;justify-content:center'},
-      btn('Reveal →','primary',{onclick:reveal}),
+      btn(['Reveal ', scIcon('arrow-right')],'primary',{onclick:reveal}),
       btn('Skip','ghost',{onclick:()=>{ sess.stats.skipped++; sess._cardTimes.push(Date.now()-(sess._cardStart||Date.now())); nextCard(); }})
     );
   } else {
@@ -1375,18 +1375,18 @@ function renderGapCard(card, citBadge) {
     inputAreas.forEach((inp,i)=>{ inp.disabled=true;
       inp.style.borderColor = hits[i]==='correct' ? '#22c55e' : hits[i]==='close' ? '#FB923C' : '#ef4444'; });
     compareEl.style.display=''; compareEl.className=`quiz-compare ${result}`; compareEl.innerHTML='';
-    const emoji=result==='correct'?'✅':result==='close'?'🟡':'❌';
+    const emoji=result==='correct'?'check-circle':result==='close'?'circle-half':'x-circle';
     const label=result==='correct'?'Correct!':result==='close'?`Close — ${nCorrect}/${hits.length} gaps`:'Incorrect';
     compareEl.append(
-      el('div',{class:`quiz-label ${result}`},`${emoji} ${label}`),
+      el('div',{class:`quiz-label ${result}`},scLbl(emoji,label)),
       el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em'},
         (isMulti?(isMarkscheme?'Missing marking point:':'Missing answer:'):'Missing word:')+(hits.length>1?'s':'')),
-      ...answersToCheck.map((a,i)=>setRichText(el('div',{class:'quiz-answer-text',style:`margin-bottom:2px;color:${hits[i]==='correct'?'#22c55e':hits[i]==='close'?'#FB923C':'var(--text)'}`}),`${hits[i]==='correct'?'✅ ':hits[i]==='close'?'🟡 ':'⬜ '}${a}`)),
+      ...answersToCheck.map((a,i)=>el('div',{class:'quiz-answer-text',style:`margin-bottom:2px;color:${hits[i]==='correct'?'#22c55e':hits[i]==='close'?'#FB923C':'var(--text)'}`},scIcon(hits[i]==='correct'?'check-circle':hits[i]==='close'?'circle-half':'square'),setRichText(el('span'),a))),
       setRichText(el('div',{style:'font-size:12px;color:var(--muted);margin-top:8px'}),fullAnswerText)
     );
     if(citBadge) compareEl.appendChild(citBadge);
     const rateRow=el('div',{class:'quiz-self-rate'});
-    [{label:'✅ Got it',rating:4,color:'#22c55e'},{label:'🟡 Close',rating:2,color:'#FB923C'},{label:'❌ Wrong',rating:1,color:'#ef4444'}].forEach(rb=>{
+    [{label:[scIcon('check-circle'),'Got it'],rating:4,color:'#22c55e'},{label:[scIcon('circle-half'),'Close'],rating:2,color:'#FB923C'},{label:[scIcon('x-circle'),'Wrong'],rating:1,color:'#ef4444'}].forEach(rb=>{
       rateRow.appendChild(el('button',{class:'btn btn-sm',style:`background:color-mix(in srgb, ${rb.color} 8%, transparent);color:${rb.color};border:1px solid color-mix(in srgb, ${rb.color} 20%, transparent)`,onclick:()=>rateCard(rb.rating)},rb.label));
     });
     stickyFooter.appendChild(rateRow);
@@ -1457,10 +1457,10 @@ function renderProcessGapCard(card, citBadge) {
     if(sess._gap) sess._gap[result==='correct'?'correct':'wrong']++;
 
     compareEl.style.display=''; compareEl.className=`quiz-compare ${result}`; compareEl.innerHTML='';
-    const emoji=result==='correct'?'✅':'❌';
+    const emoji=result==='correct'?'check-circle':'x-circle';
     const label=result==='correct'?'Correct!':'Incorrect';
     compareEl.append(
-      el('div',{class:`quiz-label ${result}`},`${emoji} ${label}`),
+      el('div',{class:`quiz-label ${result}`},scLbl(emoji,label)),
       el('div',{style:'font-size:10px;color:var(--muted);margin:8px 0 6px;text-transform:uppercase;letter-spacing:0.05em'},'Full process:'),
       el('ol',{style:'text-align:left;margin:0 auto;max-width:380px;padding-left:22px;line-height:1.8;font-size:13px'},
         ...steps.map((s,i)=>setRichText(el('li',{style:`color:${i===removedIndex?(result==='correct'?'#22c55e':'#ef4444'):'var(--text)'}`}),s))
@@ -1468,7 +1468,7 @@ function renderProcessGapCard(card, citBadge) {
     );
     if(citBadge) compareEl.appendChild(citBadge);
     const rateRow=el('div',{class:'quiz-self-rate'});
-    [{label:'✅ Got it',rating:4,color:'#22c55e'},{label:'🟡 Close',rating:2,color:'#FB923C'},{label:'❌ Wrong',rating:1,color:'#ef4444'}].forEach(rb=>{
+    [{label:[scIcon('check-circle'),'Got it'],rating:4,color:'#22c55e'},{label:[scIcon('circle-half'),'Close'],rating:2,color:'#FB923C'},{label:[scIcon('x-circle'),'Wrong'],rating:1,color:'#ef4444'}].forEach(rb=>{
       rateRow.appendChild(el('button',{class:'btn btn-sm',style:`background:color-mix(in srgb, ${rb.color} 8%, transparent);color:${rb.color};border:1px solid color-mix(in srgb, ${rb.color} 20%, transparent)`,onclick:()=>rateCard(rb.rating)},rb.label));
     });
     stickyFooter.appendChild(rateRow);
@@ -1532,21 +1532,21 @@ function renderProcessQuizCard(card, citBadge) {
     const result = skipped ? 'wrong' : marksAwarded===requiredAnswers ? 'correct' : marksAwarded>0 ? 'close' : 'wrong';
 
     compareEl.style.display=''; compareEl.className=`quiz-compare ${result}`; compareEl.innerHTML='';
-    const emoji=skipped?'⏭️':result==='correct'?'✅':result==='close'?'🟡':'❌';
+    const emoji=skipped?'skip-forward':result==='correct'?'check-circle':result==='close'?'circle-half':'x-circle';
     const label=skipped?'Skipped — here\'s the full process':result==='correct'?'Correct!':result==='close'?'Close — review below':'Incorrect';
     compareEl.append(
-      el('div',{class:`quiz-label ${result}`},`${emoji} ${label}`),
+      el('div',{class:`quiz-label ${result}`},scLbl(emoji,label)),
       skipped?null:el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em'},`${marksAwarded} / ${requiredAnswers} marks`),
       (card.backImage&&sess.showImages!==false)?el('img',{src:card.backImage,style:'max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-bottom:8px'}):null,
       el('div',{style:'font-size:10px;color:var(--muted);margin:8px 0 6px;text-transform:uppercase;letter-spacing:0.05em'},'Full process:'),
       el('ol',{style:'text-align:left;margin:0;padding-left:20px;line-height:1.8;font-size:13px'},
-        ...steps.map((s,i)=>el('li',{style:`color:${skipped?'var(--text)':hits[i]?'#22c55e':'var(--text)'}`},skipped?'':hits[i]?'✅ ':'⬜ ',setRichText(el('span'),s)))
+        ...steps.map((s,i)=>el('li',{style:`color:${skipped?'var(--text)':hits[i]?'#22c55e':'var(--text)'}`},skipped?null:scIcon(hits[i]?'check-circle':'square'),setRichText(el('span'),s)))
       ),
       el('div',{style:'font-size:11px;color:var(--muted);margin-top:8px;font-style:italic'},'Keyword matching can be too strict for a causal chain — self-rate honestly against the full process above.')
     );
     if(citBadge) compareEl.appendChild(citBadge);
     const rateRow=el('div',{class:'quiz-self-rate'});
-    [{label:'✅ Got it',rating:4,color:'#22c55e'},{label:'🟡 Close',rating:2,color:'#FB923C'},{label:'❌ Wrong',rating:1,color:'#ef4444'}].forEach(rb=>{
+    [{label:[scIcon('check-circle'),'Got it'],rating:4,color:'#22c55e'},{label:[scIcon('circle-half'),'Close'],rating:2,color:'#FB923C'},{label:[scIcon('x-circle'),'Wrong'],rating:1,color:'#ef4444'}].forEach(rb=>{
       rateRow.appendChild(el('button',{class:'btn btn-sm',style:`background:color-mix(in srgb, ${rb.color} 8%, transparent);color:${rb.color};border:1px solid color-mix(in srgb, ${rb.color} 20%, transparent)`,onclick:()=>rateCard(rb.rating)},rb.label));
     });
     stickyFooter.appendChild(rateRow);
@@ -1636,13 +1636,13 @@ function renderCalcQuizCard(card, citBadge) {
     const result = totalAwarded===totalMarks ? 'correct' : totalAwarded>0 ? 'close' : 'wrong';
 
     compareEl.style.display=''; compareEl.className=`quiz-compare ${result}`; compareEl.innerHTML='';
-    const emoji=result==='correct'?'✅':result==='close'?'🟡':'❌';
+    const emoji=result==='correct'?'check-circle':result==='close'?'circle-half':'x-circle';
     const label=result==='correct'?'Correct!':result==='close'?'Close — review below':'Incorrect';
     const finalNote = finalResult==='close'
       ? el('div',{style:'font-size:11px;color:#FB923C;margin-bottom:6px'},'Right number, but the unit was missing or wrong.')
       : null;
     compareEl.append(
-      el('div',{class:`quiz-label ${result}`},`${emoji} ${label}`),
+      el('div',{class:`quiz-label ${result}`},scLbl(emoji,label)),
       el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em'},`${totalAwarded} / ${totalMarks} marks`),
       finalNote,
       (card.backImage&&sess.showImages!==false)?el('img',{src:card.backImage,style:'max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-bottom:8px'}):null,
@@ -1650,12 +1650,12 @@ function renderCalcQuizCard(card, citBadge) {
       setRichText(el('div',{class:'quiz-answer-text'}),`${card.back}${card.calcUnit?` ${card.calcUnit}`:''}`),
       workingInput?el('div',{style:'font-size:10px;color:var(--muted);margin:10px 0 6px;text-transform:uppercase;letter-spacing:0.05em'},'Method marks:'):null,
       workingInput?el('ul',{style:'text-align:left;margin:0;padding-left:20px;line-height:1.7;font-size:13px'},
-        ...card.methodPool.map((k,i)=>el('li',{style:`color:${methodHits[i]?'#22c55e':'var(--text)'}`},`${methodHits[i]?'✅ ':'⬜ '}${k}`))
+        ...card.methodPool.map((k,i)=>el('li',{style:`color:${methodHits[i]?'#22c55e':'var(--text)'}`},scIcon(methodHits[i]?'check-circle':'square'),k))
       ):null
     );
     if(citBadge) compareEl.appendChild(citBadge);
     const rateRow=el('div',{class:'quiz-self-rate'});
-    [{label:'✅ Got it',rating:4,color:'#22c55e'},{label:'🟡 Close',rating:2,color:'#FB923C'},{label:'❌ Wrong',rating:1,color:'#ef4444'}].forEach(rb=>{
+    [{label:[scIcon('check-circle'),'Got it'],rating:4,color:'#22c55e'},{label:[scIcon('circle-half'),'Close'],rating:2,color:'#FB923C'},{label:[scIcon('x-circle'),'Wrong'],rating:1,color:'#ef4444'}].forEach(rb=>{
       rateRow.appendChild(el('button',{class:'btn btn-sm',style:`background:color-mix(in srgb, ${rb.color} 8%, transparent);color:${rb.color};border:1px solid color-mix(in srgb, ${rb.color} 20%, transparent)`,onclick:()=>rateCard(rb.rating)},rb.label));
     });
     stickyFooter.appendChild(rateRow);
@@ -1755,15 +1755,15 @@ function renderTableQuizCard(card, citBadge) {
     const result = awarded===totalMarks ? 'correct' : awarded>0 ? 'close' : 'wrong';
 
     compareEl.style.display=''; compareEl.className=`quiz-compare ${result}`; compareEl.innerHTML='';
-    const emoji=result==='correct'?'✅':result==='close'?'🟡':'❌';
+    const emoji=result==='correct'?'check-circle':result==='close'?'circle-half':'x-circle';
     const label=result==='correct'?'Correct!':result==='close'?'Partially correct':'Incorrect';
     compareEl.append(
-      el('div',{class:`quiz-label ${result}`},`${emoji} ${label}`),
+      el('div',{class:`quiz-label ${result}`},scLbl(emoji,label)),
       el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em'},`${awarded} / ${totalMarks} marks`),
     );
     if(citBadge) compareEl.appendChild(citBadge);
     const rateRow=el('div',{class:'quiz-self-rate'});
-    [{label:'✅ Got it',rating:4,color:'#22c55e'},{label:'🟡 Close',rating:2,color:'#FB923C'},{label:'❌ Wrong',rating:1,color:'#ef4444'}].forEach(rb=>{
+    [{label:[scIcon('check-circle'),'Got it'],rating:4,color:'#22c55e'},{label:[scIcon('circle-half'),'Close'],rating:2,color:'#FB923C'},{label:[scIcon('x-circle'),'Wrong'],rating:1,color:'#ef4444'}].forEach(rb=>{
       rateRow.appendChild(el('button',{class:'btn btn-sm',style:`background:color-mix(in srgb, ${rb.color} 8%, transparent);color:${rb.color};border:1px solid color-mix(in srgb, ${rb.color} 20%, transparent)`,onclick:()=>rateCard(rb.rating)},rb.label));
     });
     stickyFooter.appendChild(rateRow);
@@ -1802,7 +1802,7 @@ function renderQuizCard(card, citBadge, scrollArea) {
     timerLabel=el('span',{style:'font-size:11px;font-weight:800;color:var(--text);min-width:28px;text-align:right'},`${sess.timeLeft}s`);
     const timerFill=el('div',{style:'height:100%;width:100%;background:var(--blue);border-radius:3px;transition:width 1s linear, background 0.3s'});
     timerBar=el('div',{style:'display:flex;align-items:center;gap:8px;margin-bottom:12px'},
-      el('span',{style:'font-size:14px'},'⏱️'),
+      el('span',{style:'font-size:14px;display:inline-flex'},scIcon('stopwatch')),
       el('div',{style:'flex:1;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden'},timerFill),
       timerLabel
     );
@@ -1933,7 +1933,7 @@ function renderQuizCard(card, citBadge, scrollArea) {
         (card.backImage&&sess.showImages!==false)?el('img',{src:card.backImage,style:'max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-bottom:8px'}):null,
         el('div',{style:'font-size:10px;color:var(--muted);margin:8px 0 6px;text-transform:uppercase;letter-spacing:0.05em'},'Mark scheme:'),
         el('ul',{style:'text-align:left;margin:0;padding-left:20px;line-height:1.7;font-size:13px'},
-          ...expectedAnswers.map((k,i)=>setRichText(el('li',{style:`color:${hits[i]?'#22c55e':'var(--text)'}`}),`${hits[i]?'✅ ':'⬜ '}${k}`))
+          ...expectedAnswers.map((k,i)=>el('li',{style:`color:${hits[i]?'#22c55e':'var(--text)'}`},scIcon(hits[i]?'check-circle':'square'),setRichText(el('span'),k)))
         )
       ];
     } else if(!isMulti){
@@ -1971,7 +1971,7 @@ function renderQuizCard(card, citBadge, scrollArea) {
         el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em'},`${correctCount} / ${requiredAnswers} correct`),
         ...rows.map(r=>el('div',{style:'display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:4px 0'},
           setRichText(el('span',{}),r.userAnswer||'(blank)'),
-          el('span',{style:`font-weight:700;color:${r.rowResult==='correct'?'#22c55e':'#ef4444'}`},r.rowResult==='correct'?'✅':'❌')
+          el('span',{style:`font-weight:700;color:${r.rowResult==='correct'?'#22c55e':'#ef4444'}`},scIcon(r.rowResult==='correct'?'check-circle':'x-circle'))
         )),
         el('div',{style:'font-size:10px;color:var(--muted);margin:8px 0 6px;text-transform:uppercase;letter-spacing:0.05em'},'Expected answers:'),
         (card.backImage&&sess.showImages!==false)?el('img',{src:card.backImage,style:'max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-bottom:8px'}):null,
@@ -1979,15 +1979,15 @@ function renderQuizCard(card, citBadge, scrollArea) {
       ];
     }
     compareEl.style.display=''; compareEl.className=`quiz-compare ${result}`; compareEl.innerHTML='';
-    const emoji=sess.timedOut?'⏱️':(result==='correct'?'✅':result==='close'?'🟡':'❌');
+    const emoji=sess.timedOut?'stopwatch':(result==='correct'?'check-circle':result==='close'?'circle-half':'x-circle');
     const label=sess.timedOut?"Time's up!"
       :result==='correct'?'Correct!'
       :result==='close'?'Close — review below'
       :(isExact&&!isMulti?'Incorrect — exact match required':'Incorrect');
-    compareEl.append(el('div',{class:`quiz-label ${result}`},`${emoji} ${label}`), ...resultChildren);
+    compareEl.append(el('div',{class:`quiz-label ${result}`},scLbl(emoji,label)), ...resultChildren);
     if(citBadge) compareEl.appendChild(citBadge);
     const rateRow=el('div',{class:'quiz-self-rate'});
-    [{label:'✅ Got it',rating:4,color:'#22c55e'},{label:'🟡 Close',rating:2,color:'#FB923C'},{label:'❌ Wrong',rating:1,color:'#ef4444'}].forEach(rb=>{
+    [{label:[scIcon('check-circle'),'Got it'],rating:4,color:'#22c55e'},{label:[scIcon('circle-half'),'Close'],rating:2,color:'#FB923C'},{label:[scIcon('x-circle'),'Wrong'],rating:1,color:'#ef4444'}].forEach(rb=>{
       rateRow.appendChild(el('button',{class:'btn btn-sm',style:`background:color-mix(in srgb, ${rb.color} 8%, transparent);color:${rb.color};border:1px solid color-mix(in srgb, ${rb.color} 20%, transparent)`,onclick:()=>rateCard(rb.rating)},rb.label));
     });
     compareEl.appendChild(rateRow);
@@ -2084,19 +2084,19 @@ function finishSession(){
 
   // Extra stat pills for quiz/gap modes
   const extraStats=[];
-  if(log?.wpm>0)             extraStats.push(['⌨️ WPM',     log.wpm,          'var(--blue)']);
-  if(log?.avgKsPerSec>0)     extraStats.push(['⚡ KS/s',    log.avgKsPerSec,  '#A78BFA']);
-  if(log?.avgMsPerCard!=null) extraStats.push(['⏱ Avg/card',`${(log.avgMsPerCard/1000).toFixed(1)}s`,'#FB923C']);
-  if(log?.backspaces>0)      extraStats.push(['⌫ Backspaces',log.backspaces,  'var(--muted)']);
-  if(log?.timeouts>0)        extraStats.push(['💀 Timeouts', log.timeouts,    '#ef4444']);
-  if(log?.avgFlipMs!=null)   extraStats.push(['🃏 Avg flip', `${(log.avgFlipMs/1000).toFixed(1)}s`,'#22c55e']);
+  if(log?.wpm>0)             extraStats.push([scLbl('keyboard','WPM'),     log.wpm,          'var(--blue)']);
+  if(log?.avgKsPerSec>0)     extraStats.push([scLbl('zap','KS/s'),    log.avgKsPerSec,  '#A78BFA']);
+  if(log?.avgMsPerCard!=null) extraStats.push([scLbl('stopwatch','Avg/card'),`${(log.avgMsPerCard/1000).toFixed(1)}s`,'#FB923C']);
+  if(log?.backspaces>0)      extraStats.push([scLbl('backspace','Backspaces'),log.backspaces,  'var(--muted)']);
+  if(log?.timeouts>0)        extraStats.push([scLbl('skull','Timeouts'), log.timeouts,    '#ef4444']);
+  if(log?.avgFlipMs!=null)   extraStats.push([scLbl('card','Avg flip'), `${(log.avgFlipMs/1000).toFixed(1)}s`,'#22c55e']);
 
   c.appendChild(el('div',{class:'card glow',style:'padding:40px;text-align:center;max-width:480px;margin:80px auto'},
-    el('div',{style:'font-size:56px;margin-bottom:12px'},pct>=80?'🎉':pct>=60?'👍':'💪'),
+    el('div',{style:'font-size:52px;margin-bottom:12px'},scIcon(pct>=80?'party':pct>=60?'thumbs-up':'dumbbell')),
     el('div',{style:'font-size:22px;font-weight:900;margin-bottom:6px'},'Session Complete!'),
     el('div',{style:'font-size:14px;color:var(--muted);margin-bottom:24px'},'Consistency builds mastery.'),
     el('div',{class:'grid-3',style:'margin-bottom:16px'},
-      ...[['✅ Correct',sess.stats.correct,'#22c55e'],['❌ Missed',sess.stats.incorrect,'#ef4444'],['⏱️ Seconds',elapsed,'var(--blue)']].map(([l,v,col])=>
+      ...[[scLbl('check-circle','Correct'),sess.stats.correct,'#22c55e'],[scLbl('x-circle','Missed'),sess.stats.incorrect,'#ef4444'],[scLbl('stopwatch','Seconds'),elapsed,'var(--blue)']].map(([l,v,col])=>
         el('div',{style:'background:rgba(255,255,255,0.05);border-radius:12px;padding:14px'},
           el('div',{style:`font-size:22px;font-weight:900;color:${col}`},String(v)),
           el('div',{style:'font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-top:2px'},l))
@@ -2109,7 +2109,7 @@ function finishSession(){
       ))
     ) : null,
     el('div',{style:'font-size:28px;font-weight:900;margin-bottom:4px'},gradText(`${pct}% Accuracy`)),
-    el('div',{style:'color:var(--muted);font-size:12px;margin-bottom:24px'},`Max combo: ${sess.maxCombo} 🔥`),
+    el('div',{style:'color:var(--muted);font-size:12px;margin-bottom:24px;display:flex;align-items:center;justify-content:center;gap:6px'},`Max combo: ${sess.maxCombo}`,scIcon('flame')),
     el('div',{style:'display:flex;gap:10px;justify-content:center'},
       btn('New Session','primary',{onclick:()=>{ studySession=null; renderView('study'); }}),
       btn('Retry','ghost',{onclick:()=>startStudySession(sess.scope,sess.mode)})
@@ -2121,13 +2121,13 @@ function finishSession(){
   // correctness (nothing was revealed while answering).
   if (sess.examResults && sess.examResults.length) {
     const list = el('div', { class: 'card', style: 'padding:20px;max-width:640px;margin:16px auto;text-align:left' });
-    list.appendChild(el('div', { style: 'font-weight:900;margin-bottom:12px' }, '📝 Answers revealed'));
+    list.appendChild(el('div', { style: 'font-weight:900;margin-bottom:12px' }, scLbl('note','Answers revealed')));
     sess.examResults.forEach(r => {
       const col = r.result === 'correct' ? '#22c55e' : r.result === 'close' ? '#FB923C' : r.result === 'wrong' ? '#ef4444' : 'var(--muted)';
       list.appendChild(el('div', { style: 'padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border);margin-bottom:8px' },
         el('div', { style: 'display:flex;gap:8px;align-items:baseline;justify-content:space-between' },
           setRichText(el('div', { style: 'font-weight:700;font-size:13px;flex:1;min-width:0' }), r.card.front || ''),
-          el('span', { style: 'font-size:14px;flex-shrink:0' }, r.result === 'correct' ? '✅' : r.result === 'close' ? '🟡' : r.result === 'wrong' ? '❌' : '⏭️')),
+          el('span', { style: 'font-size:14px;flex-shrink:0;display:inline-flex' }, scIcon(r.result === 'correct' ? 'check-circle' : r.result === 'close' ? 'circle-half' : r.result === 'wrong' ? 'x-circle' : 'skip-forward'))),
         el('div', { style: 'font-size:12px;margin:4px 0 3px' },
           el('span', { style: 'color:var(--muted)' }, 'Your answer: '),
           setRichText(el('span', { style: `font-weight:700;color:${col}` }), r.userText || '(not answered)')),

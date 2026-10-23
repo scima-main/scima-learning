@@ -165,7 +165,7 @@ def rate(page: Page, label: str) -> None:
 
 
 def exit_session(page: Page) -> None:
-    page.get_by_role("button", name="← Exit").click()
+    page.get_by_role("button", name="Exit").click()
 
 
 def session_progress(page: Page) -> tuple[int, int]:

@@ -53,8 +53,8 @@ def test_authored_two_gaps_partial_credit(page, site_base, seeded):
     inputs.nth(1).fill("powerhouse")                # right
     page.get_by_role("button", name="Check Answer (↵)").click()
     expect(page.locator("#view-study")).to_contain_text("Close — 1/2 gaps", timeout=5000)
-    expect(page.locator(".quiz-compare")).to_contain_text("⬜ mitochondria")
-    expect(page.locator(".quiz-compare")).to_contain_text("✅ powerhouse")
+    expect(page.locator(".quiz-compare")).to_contain_text("mitochondria")
+    expect(page.locator(".quiz-compare")).to_contain_text("powerhouse")
 
 
 def test_authored_gaps_are_deterministic(page, site_base, seeded):

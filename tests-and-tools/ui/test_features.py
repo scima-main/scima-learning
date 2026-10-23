@@ -94,7 +94,7 @@ def test_import_fills_missing_non_content_fields(page, base_url, seeded, tmp_pat
     pages.goto_app(page, base_url, "/decks/")
     page.click("#tutorial-target-new-deck")
     pages.expect_modal(page, "Create New Deck")
-    page.get_by_role("button", name="⬆ Import JSON").click()
+    page.get_by_role("button", name="Import JSON").click()
     page.locator("#modal-backdrop:not(.hidden) input[type='file'][accept='.json']").first \
         .set_input_files(str(f))
     expect(page.locator("#modal-body")).to_contain_text("Bare Import", timeout=5000)
@@ -133,7 +133,7 @@ def test_move_deck_to_other_subject(page, base_url, seeded):
     page.locator(".selection-bar").get_by_role("button", name="Move to Subject…").click()
     pages.expect_modal(page, "Move 1 Deck to Subject")
     pages.modal(page).locator("select").select_option("biology")
-    pages.modal(page).get_by_role("button", name="Move →").click()
+    pages.modal(page).get_by_role("button", name="Move").click()
 
     # deck left its misc folder (folders can't straddle subjects)…
     st = storage.read_app_state(page)
@@ -178,7 +178,7 @@ def test_move_folder_between_subjects_carries_subtree(page, base_url, seeded):
     expect(pages.modal(page)).to_contain_text("2 decks")      # spanish + drills
     expect(pages.modal(page)).to_contain_text("1 subfolder")
     pages.modal(page).locator("select").select_option("biology")
-    pages.modal(page).get_by_role("button", name="Move →").click()
+    pages.modal(page).get_by_role("button", name="Move").click()
 
     st = storage.read_app_state(page)
     folders = {f["id"]: f for f in st["folders"]}
@@ -211,7 +211,7 @@ def test_folder_move_from_toolbar(page, base_url, seeded):
     page.get_by_role("button", name="Move to Subject…").click()
     pages.expect_modal(page, "Move Folder to Subject")
     pages.modal(page).locator("select").select_option("french")
-    pages.modal(page).get_by_role("button", name="Move →").click()
+    pages.modal(page).get_by_role("button", name="Move").click()
 
     st = storage.read_app_state(page)
     folders = {f["id"]: f for f in st["folders"]}
@@ -255,7 +255,7 @@ def test_deck_deep_link_opens_detail(page, base_url, seeded):
     seeded("preset:demo")
     pages.goto_app(page, base_url,
                    "/decks/#decks/Miscellaneous/Languages/Spanish%20Basics")
-    expect(page.get_by_role("button", name="← Back")).to_be_visible(timeout=8000)
+    expect(page.get_by_role("button", name="Back")).to_be_visible(timeout=8000)
     expect(page.locator("#view-decks")).to_contain_text("Hello")
     expect(page.locator("#view-decks")).to_contain_text("El agua")
 
@@ -270,7 +270,7 @@ def test_opening_deck_mirrors_deck_into_hash(page, base_url, seeded):
     expect(page).to_have_url(re.compile(r"#decks/Miscellaneous/Languages/Spanish(%20|-)Basics$"))
 
     # ← Back drops the deck segment again
-    page.get_by_role("button", name="← Back").click()
+    page.get_by_role("button", name="Back").click()
     expect(page).to_have_url(re.compile(r"#decks/Miscellaneous/Languages$"))
 
 
@@ -317,7 +317,7 @@ def test_ctrl_alt_m_moves_to_existing_deck(page, base_url, seeded):
     page.keyboard.press("Control+Alt+M")
     pages.expect_modal(page, "Existing Deck")
     pages.modal(page).locator("input[type='text']").first.fill("Biology - Cells")
-    pages.modal(page).get_by_role("button", name="Move →").click()
+    pages.modal(page).get_by_role("button", name="Move").click()
 
     st = storage.read_app_state(page)
     src = next(d for d in st["decks"] if d["name"] == "Spanish Basics")
@@ -384,7 +384,7 @@ def test_quizlet_import_tab(page, base_url, seeded):
     pages.goto_app(page, base_url, "/decks/")
     page.click("#tutorial-target-new-deck")
     pages.expect_modal(page, "Create New Deck")
-    page.get_by_role("button", name="🎴 Quizlet").click()
+    page.get_by_role("button", name="Quizlet").click()
 
     page.locator("#modal-body input[placeholder^='https://quizlet.com']").fill(
         "https://quizlet.com/987654321/euro-capitals")
@@ -418,7 +418,7 @@ def test_quizlet_uses_backend_proxy_first(page, base_url, seeded):
     seeded("preset:empty")
     pages.goto_app(page, base_url, "/decks/")
     page.click("#tutorial-target-new-deck")
-    page.get_by_role("button", name="🎴 Quizlet").click()
+    page.get_by_role("button", name="Quizlet").click()
     page.locator("#modal-body input[placeholder^='https://quizlet.com']").fill(
         "https://quizlet.com/424242/proxied-set")
     page.get_by_role("button", name="Fetch & Preview").click()
@@ -432,7 +432,7 @@ def test_quizlet_paste_tsv_fallback(page, base_url, seeded):
     seeded("preset:empty")
     pages.goto_app(page, base_url, "/decks/")
     page.click("#tutorial-target-new-deck")
-    page.get_by_role("button", name="🎴 Quizlet").click()
+    page.get_by_role("button", name="Quizlet").click()
     page.locator("#modal-body textarea[placeholder^='Paste quizlet-to-scima']").fill(
         "Hello\tHola\nFrance\tParis\tmemo")
     page.get_by_role("button", name="Use pasted data").click()
@@ -459,7 +459,7 @@ def test_quizlet_paste_scima_json_fallback(page, base_url, seeded):
     seeded("preset:empty")
     pages.goto_app(page, base_url, "/decks/")
     page.click("#tutorial-target-new-deck")
-    page.get_by_role("button", name="🎴 Quizlet").click()
+    page.get_by_role("button", name="Quizlet").click()
     page.locator("#modal-body textarea[placeholder^='Paste quizlet-to-scima']").fill(
         json.dumps(envelope))
     page.get_by_role("button", name="Use pasted data").click()
@@ -484,7 +484,7 @@ def test_quizlet_proxy_template_from_settings(page, base_url, seeded):
         settings={"quizletProxy": "https://my-proxy.example/?url={url}"}))
     pages.goto_app(page, base_url, "/decks/")
     page.click("#tutorial-target-new-deck")
-    page.get_by_role("button", name="🎴 Quizlet").click()
+    page.get_by_role("button", name="Quizlet").click()
     page.locator("#modal-body input[placeholder^='https://quizlet.com']").fill(
         "https://quizlet.com/777/proxied")
     page.get_by_role("button", name="Fetch & Preview").click()
@@ -500,7 +500,7 @@ def test_quizlet_import_error_state(page, base_url, seeded):
     seeded("preset:empty")
     pages.goto_app(page, base_url, "/decks/")
     page.click("#tutorial-target-new-deck")
-    page.get_by_role("button", name="🎴 Quizlet").click()
+    page.get_by_role("button", name="Quizlet").click()
     page.locator("#modal-body input[placeholder^='https://quizlet.com']").fill(
         "https://quizlet.com/555/nope")
     page.get_by_role("button", name="Fetch & Preview").click()

@@ -102,7 +102,7 @@ def test_daily_goal_slider_persists(page, base_url, seeded):
 
 def test_data_management_buttons_present(page, base_url, seeded):
     goto_settings(page, base_url, seeded)
-    for label in ("📤 Export All Data (.zip)", "📦 Export Decks Only", "📥 Import"):
+    for label in ("Export All Data (.zip)", "Export Decks Only", "Import"):
         expect(page.get_by_role("button", name=label, exact=True)).to_be_visible()
 
 
@@ -121,11 +121,11 @@ def test_replay_tutorial_button_starts_tour(page, base_url, seeded):
 # presence of each control in its new home.
 
 PANELS = [
-    "📚 Study & Scheduling", "✍️ Scratchpad",
-    "🎨 Appearance & Theme", "📘 Subjects",
-    "♿ Accessibility & Notifications", "🤖 AI & Integrations",
-    "📖 Library & Reading", "🗂️ Navigation",
-    "💾 Data Management", "❓ Help",
+    "Study & Scheduling", "Scratchpad",
+    "Appearance & Theme", "Subjects",
+    "Accessibility & Notifications", "AI & Integrations",
+    "Library & Reading", "Navigation",
+    "Data Management", "Help",
 ]
 
 
@@ -148,8 +148,8 @@ def test_panel_pairing_is_one_grid(page, base_url, seeded):
 def test_theme_schedule_lives_inside_appearance(page, base_url, seeded):
     goto_settings(page, base_url, seeded)
     card = page.locator("#view-settings .card",
-                        has_text="🎨 Appearance & Theme").first
-    expect(card).to_contain_text("🕐 Theme Schedule")
+                        has_text="Appearance & Theme").first
+    expect(card).to_contain_text("Theme Schedule")
     expect(card.locator(
         "button.toggle[aria-label='Enable scheduling']")).to_be_visible()
 
@@ -158,14 +158,14 @@ def test_every_toggle_survived_the_regroup(page, base_url, seeded):
     """All eight feature toggles exist exactly once, in their new panels."""
     goto_settings(page, base_url, seeded)
     homes = {
-        "Auto-suspend leeches": "📚 Study & Scheduling",
-        "Dyslexia-Friendly Mode": "♿ Accessibility & Notifications",
-        "High Contrast": "♿ Accessibility & Notifications",
-        "Power Saving Mode": "♿ Accessibility & Notifications",
-        "Text-to-Speech": "♿ Accessibility & Notifications",
-        "Push Notifications": "♿ Accessibility & Notifications",
-        "Show Pinyin": "📖 Library & Reading",
-        "Single-Word Definitions": "📖 Library & Reading",
+        "Auto-suspend leeches": "Study & Scheduling",
+        "Dyslexia-Friendly Mode": "Accessibility & Notifications",
+        "High Contrast": "Accessibility & Notifications",
+        "Power Saving Mode": "Accessibility & Notifications",
+        "Text-to-Speech": "Accessibility & Notifications",
+        "Push Notifications": "Accessibility & Notifications",
+        "Show Pinyin": "Library & Reading",
+        "Single-Word Definitions": "Library & Reading",
     }
     for label, panel in homes.items():
         rows = page.locator(".toggle-row", has_text=label)
@@ -188,12 +188,12 @@ def test_every_slider_and_select_survived(page, base_url, seeded):
            ).to_have_count(1)
     # AI & Integrations keeps the LLM endpoint + the Quizlet proxy template
     card = page.locator("#view-settings .card",
-                        has_text="🤖 AI & Integrations").first
+                        has_text="AI & Integrations").first
     expect(card).to_contain_text("Server Address")
     expect(card).to_contain_text("Quizlet proxy template")
     expect(card.locator("button", has_text="Test Connection")).to_have_count(1)
     # Library & Reading keeps the resume-position select
-    expect(page.locator("#view-settings .card", has_text="📖 Library & Reading")
+    expect(page.locator("#view-settings .card", has_text="Library & Reading")
            .first.locator("select")).to_have_count(2)   # define lang + open-book
 
 
@@ -238,7 +238,7 @@ def test_settings_panel_copy_link_button(page, site_base, seeded, context):
 
 def test_scratchpad_edit_defaults_opens_settings_in_new_tab(page, site_base,
                                                              seeded, context):
-    """The scratchpad→Settings cross-link is the "⚙ Edit Defaults" button at
+    """The scratchpad→Settings cross-link is the "Edit Defaults" button at
     the BOTTOM of the ⋯ preferences popover: the full defaults panel opens in
     a new tab, deep-linked and highlighted, while the session's own tab never
     navigates. (The old header ⚙ is gone — the popover footer is the entry.)"""

@@ -9,7 +9,7 @@
 function renderAnalytics(c) {
   const allCards=state.decks.flatMap(d=>d.cards);
   if(!state.decks.length){
-    c.appendChild(el('div',{class:'empty-state',style:'padding-top:80px'},el('div',{class:'empty-icon'},'📊'),el('div',{class:'empty-title'},'No data yet'),el('div',{class:'empty-sub'},'Start studying to see your analytics'),
+    c.appendChild(el('div',{class:'empty-state',style:'padding-top:80px'},el('div',{class:'empty-icon'},scIcon('chart-bar')),el('div',{class:'empty-title'},'No data yet'),el('div',{class:'empty-sub'},'Start studying to see your analytics'),
       btn('Create a Deck','primary',{onclick:()=>navigate('decks')})
     ));
     return;
@@ -21,16 +21,16 @@ function renderAnalytics(c) {
   const ret=retCalc.t>0?Math.round((retCalc.c/retCalc.t)*100):0;
 
   const statsGrid=el('div',{class:'grid-4',style:'margin-bottom:24px'});
-  [{label:'Retention',val:`${ret}%`,icon:'🎯',color:ret>=80?'#22c55e':ret>=60?'var(--blue)':'#ef4444'},
-   {label:'Mature Cards',val:mature,icon:'🌳',color:'#22c55e'},
-   {label:'Total Reviews',val:totalRev,icon:'🔄',color:'var(--blue)'},
-   {label:'Leeches',val:leeches,icon:'⚠️',color:leeches>0?'#FB923C':'var(--muted)'},
-  ].forEach(s=>statsGrid.appendChild(el('div',{class:'card stat-card'},el('div',{class:'stat-icon'},s.icon),el('div',{class:'stat-val',style:`color:${s.color}`},String(s.val)),el('div',{class:'stat-lab'},s.label))));
+  [{label:'Retention',val:`${ret}%`,icon:'target',color:ret>=80?'#22c55e':ret>=60?'var(--blue)':'#ef4444'},
+   {label:'Mature Cards',val:mature,icon:'tree',color:'#22c55e'},
+   {label:'Total Reviews',val:totalRev,icon:'refresh',color:'var(--blue)'},
+   {label:'Leeches',val:leeches,icon:'alert',color:leeches>0?'#FB923C':'var(--muted)'},
+  ].forEach(s=>statsGrid.appendChild(el('div',{class:'card stat-card'},el('div',{class:'stat-icon'},scIcon(s.icon)),el('div',{class:'stat-val',style:`color:${s.color}`},String(s.val)),el('div',{class:'stat-lab'},s.label))));
 
   const heatDays=Array.from({length:28},(_,i)=>{ const d=new Date(Date.now()-(27-i)*86400000); return {key:d.toISOString().split('T')[0],count:0}; });
   heatDays.forEach(d=>{ const r=state.reviewHistory.find(r=>r.date===d.key); if(r) d.count=r.total||0; });
   const heatCard=el('div',{class:'card',style:'padding:20px;margin-bottom:16px'});
-  heatCard.appendChild(el('div',{style:'font-weight:800;margin-bottom:14px'},'📅 Review Activity — Last 28 days'));
+  heatCard.appendChild(el('div',{style:'font-weight:800;margin-bottom:14px'},scLbl('calendar',' Review Activity — Last 28 days')));
   const heatGrid=el('div',{class:'heatmap'});
   heatDays.forEach(d=>{ const bg=d.count===0?'rgba(255,255,255,0.04)':d.count<10?'rgba(var(--blue-rgb),0.25)':d.count<25?'rgba(var(--blue-rgb),0.55)':'var(--blue)'; heatGrid.appendChild(el('div',{class:'heat-cell',style:`background:${bg}`,title:`${d.key}: ${d.count}`})); });
   heatCard.appendChild(heatGrid);
@@ -41,7 +41,7 @@ function renderAnalytics(c) {
     return { key, label:d.toLocaleDateString(undefined,{weekday:'short'}), total, pct: total?Math.round((correct/total)*100):null }; });
   const maxTrendTotal=Math.max(1,...trendDays.map(d=>d.total));
   const trendCard=el('div',{class:'card',style:'padding:20px;margin-bottom:16px'});
-  trendCard.appendChild(el('div',{style:'font-weight:800;margin-bottom:14px'},'📈 7-Day Accuracy Trend'));
+  trendCard.appendChild(el('div',{style:'font-weight:800;margin-bottom:14px'},scLbl('trending-up',' 7-Day Accuracy Trend')));
   const trendRow=el('div',{style:'display:flex;align-items:flex-end;gap:8px;height:110px'});
   trendDays.forEach(d=>{
     const barH=Math.max(4,(d.total/maxTrendTotal)*80);
@@ -59,7 +59,7 @@ function renderAnalytics(c) {
   state.decks.forEach(d=>{ const key=d.subject||DEFAULT_SUBJECT_KEY; subjectCounts[key]=(subjectCounts[key]||0)+d.cards.length; });
   const subjectEntries=Object.entries(subjectCounts).filter(([,n])=>n>0).sort((a,b)=>b[1]-a[1]);
   const subjectCard=el('div',{class:'card',style:'padding:20px;margin-bottom:16px'});
-  subjectCard.appendChild(el('div',{style:'font-weight:800;margin-bottom:14px'},'🏷️ Cards by Subject'));
+  subjectCard.appendChild(el('div',{style:'font-weight:800;margin-bottom:14px'},scLbl('tag',' Cards by Subject')));
   if(!subjectEntries.length){
     subjectCard.appendChild(el('div',{class:'u-muted-12'},'No cards yet'));
   } else {
@@ -81,7 +81,7 @@ function renderAnalytics(c) {
   if (readingEntries.length) {
     const maxReadSec = readingEntries[0][1];
     readingTimeCard = el('div',{class:'card',style:'padding:20px;margin-bottom:16px'});
-    readingTimeCard.appendChild(el('div',{style:'font-weight:800;margin-bottom:4px'},'📖 Reading Time by Subject'));
+    readingTimeCard.appendChild(el('div',{style:'font-weight:800;margin-bottom:4px'},scLbl('book-open',' Reading Time by Subject')));
     readingTimeCard.appendChild(el('div',{class:'u-muted-11',style:'margin-bottom:14px'},'Time spent reading library sources, distributed by citation weight'));
     readingEntries.forEach(([key,sec])=>{
       const s=getAllSubjects()[key]; const label=s?.name||key; const color=s?.defaultColor||'var(--blue)';
@@ -97,7 +97,7 @@ function renderAnalytics(c) {
   }
 
   const bottomGrid=el('div',{class:'grid-2'});
-  const memCard=el('div',{class:'card',style:'padding:20px'},el('div',{style:'font-weight:800;margin-bottom:14px'},'🧠 Memory Distribution'));
+  const memCard=el('div',{class:'card',style:'padding:20px'},el('div',{style:'font-weight:800;margin-bottom:14px'},scLbl('brain',' Memory Distribution')));
   [{label:'Mature (≥21d)',count:mature,color:'#22c55e'},{label:'Young (7–21d)',count:young,color:'var(--blue)'},
    {label:'Learning (<7d)',count:allCards.filter(c=>c.interval>0&&c.interval<7).length,color:'var(--pink)'},
    {label:'New',count:newC,color:'#A78BFA'},{label:'Leeches',count:leeches,color:'#FB923C'},
@@ -108,11 +108,11 @@ function renderAnalytics(c) {
       el('div',{class:'prog-bar'},el('div',{style:`height:100%;width:${pct}%;background:${s.color};border-radius:3px`}))
     ));
   });
-  const deckCard=el('div',{class:'card',style:'padding:20px'},el('div',{style:'font-weight:800;margin-bottom:14px'},'📚 Decks'));
+  const deckCard=el('div',{class:'card',style:'padding:20px'},el('div',{style:'font-weight:800;margin-bottom:14px'},scLbl('books',' Decks')));
   state.decks.forEach(d=>{
     const dm=d.cards.filter(c=>c.interval>=21).length;
     deckCard.appendChild(el('div',{style:'margin-bottom:14px'},
-      el('div',{style:'display:flex;justify-content:space-between;align-items:center;margin-bottom:4px'},el('span',{style:'font-size:13px;font-weight:600'},`${d.emoji} ${d.name}`),el('span',{class:'u-muted-11'},`${dm}/${d.cards.length} mature`)),
+      el('div',{style:'display:flex;justify-content:space-between;align-items:center;margin-bottom:4px'},el('span',{style:'font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px'},scAuto(d.emoji||'books'),d.name),el('span',{class:'u-muted-11'},`${dm}/${d.cards.length} mature`)),
       el('div',{class:'prog-bar'},el('div',{style:`height:100%;width:${d.cards.length?dm/d.cards.length*100:0}%;background:var(--grad);border-radius:3px`}))
     ));
   });
@@ -174,73 +174,73 @@ function renderAnalytics(c) {
     const wpmPoints = log.filter(e=>e.wpm>0&&e.mode==='quiz').slice(0,20).reverse()
       .map((e,i)=>({label:`Session ${i+1}`,val:e.wpm}));
     if (wpmPoints.length >= 2)
-      sessionCards.push(mkSparkline(wpmPoints,'var(--blue)',v=>`${v} wpm`,'⌨️ Quiz Typing Speed (WPM) over time'));
+      sessionCards.push(mkSparkline(wpmPoints,'var(--blue)',v=>`${v} wpm`,scLbl('keyboard',' Quiz Typing Speed (WPM) over time')));
 
     // 2. Keystrokes per second trend
     const ksPoints = log.filter(e=>e.avgKsPerSec>0).slice(0,20).reverse()
       .map((e,i)=>({label:`Session ${i+1}`,val:e.avgKsPerSec}));
     if (ksPoints.length >= 2)
-      sessionCards.push(mkSparkline(ksPoints,'#A78BFA',v=>`${v} ks/s`,'⚡ Avg Keystrokes/sec over time'));
+      sessionCards.push(mkSparkline(ksPoints,'#A78BFA',v=>`${v} ks/s`,scLbl('zap',' Avg Keystrokes/sec over time')));
 
     // 3. Average time per card trend (all modes)
     const atpcPoints = log.filter(e=>e.avgMsPerCard!=null).slice(0,20).reverse()
       .map((e,i)=>({label:`Session ${i+1}`,val:Math.round(e.avgMsPerCard/100)/10}));
     if (atpcPoints.length >= 2)
-      sessionCards.push(mkSparkline(atpcPoints,'#FB923C',v=>`${v}s`,'⏱ Avg Time per Card (seconds) over time'));
+      sessionCards.push(mkSparkline(atpcPoints,'#FB923C',v=>`${v}s`,scLbl('stopwatch',' Avg Time per Card (seconds) over time')));
 
     // 4. Flashcard flip speed trend
     const flipPoints = log.filter(e=>e.avgFlipMs!=null).slice(0,20).reverse()
       .map((e,i)=>({label:`Session ${i+1}`,val:Math.round(e.avgFlipMs/100)/10}));
     if (flipPoints.length >= 2)
-      sessionCards.push(mkSparkline(flipPoints,'#22c55e',v=>`${v}s`,'🃏 Avg Flashcard Flip Speed over time'));
+      sessionCards.push(mkSparkline(flipPoints,'#22c55e',v=>`${v}s`,scLbl('card',' Avg Flashcard Flip Speed over time')));
 
     // 5. Accuracy trend (correct vs incorrect per session — last 14 sessions)
     const accItems = log.slice(0,14).reverse().map((e,i)=>({label:`S${i+1}`,a:e.correct,b:e.incorrect}));
     if (accItems.some(i=>i.a+i.b>0))
-      sessionCards.push(mkDualBar(accItems,'#22c55e','#ef4444','✅ Correct vs ❌ Incorrect per Session','Correct','Incorrect'));
+      sessionCards.push(mkDualBar(accItems,'#22c55e','#ef4444',[scIcon('check-circle'),' Correct vs ',scIcon('x-circle'),' Incorrect per Session'],'Correct','Incorrect'));
 
     // 6. Backspaces trend (proxy for revision / second-guessing)
     const bsPoints = log.filter(e=>e.backspaces>0).slice(0,20).reverse()
       .map((e,i)=>({label:`Session ${i+1}`,val:e.backspaces}));
     if (bsPoints.length >= 2)
-      sessionCards.push(mkSparkline(bsPoints,'var(--muted)',v=>`${v}`,'⌫ Backspaces per Session (revision effort)'));
+      sessionCards.push(mkSparkline(bsPoints,'var(--muted)',v=>`${v}`,scLbl('backspace',' Backspaces per Session (revision effort)')));
 
     // 7. Session duration trend
     const durPoints = log.slice(0,20).reverse()
       .map((e,i)=>({label:`Session ${i+1}`,val:Math.round(e.durationSec/6)/10}));
     if (durPoints.length >= 2)
-      sessionCards.push(mkSparkline(durPoints,'var(--pink)',v=>`${v}m`,'⏳ Session Duration (minutes) over time'));
+      sessionCards.push(mkSparkline(durPoints,'var(--pink)',v=>`${v}m`,scLbl('hourglass',' Session Duration (minutes) over time')));
 
     // 8. Max combo trend
     const comboPoints = log.filter(e=>e.maxCombo>0).slice(0,20).reverse()
       .map((e,i)=>({label:`Session ${i+1}`,val:e.maxCombo}));
     if (comboPoints.length >= 2)
-      sessionCards.push(mkSparkline(comboPoints,'#FB923C',v=>`${v}x`,'🔥 Max Combo per Session'));
+      sessionCards.push(mkSparkline(comboPoints,'#FB923C',v=>`${v}x`,scLbl('flame',' Max Combo per Session')));
 
     // 9. Timed quiz timeouts trend (written quiz timed mode)
     const toPoints = log.filter(e=>e.timed&&e.timeouts!=null).slice(0,20).reverse()
       .map((e,i)=>({label:`Session ${i+1}`,val:e.timeouts}));
     if (toPoints.length >= 2)
-      sessionCards.push(mkSparkline(toPoints,'#ef4444',v=>`${v}`,'💀 Timed Quiz Timeouts per Session'));
+      sessionCards.push(mkSparkline(toPoints,'#ef4444',v=>`${v}`,scLbl('skull',' Timed Quiz Timeouts per Session')));
 
     // 10. Skips per session
     const skipPoints = log.filter(e=>e.skipped>0).slice(0,20).reverse()
       .map((e,i)=>({label:`Session ${i+1}`,val:e.skipped}));
     if (skipPoints.length >= 2)
-      sessionCards.push(mkSparkline(skipPoints,'var(--muted)',v=>`${v}`,'⏭ Skips per Session'));
+      sessionCards.push(mkSparkline(skipPoints,'var(--muted)',v=>`${v}`,scLbl('skip-forward',' Skips per Session')));
 
     // 11. Chars typed total per quiz session
     const charsPoints = log.filter(e=>e.charsTyped>0).slice(0,20).reverse()
       .map((e,i)=>({label:`Session ${i+1}`,val:e.charsTyped}));
     if (charsPoints.length >= 2)
-      sessionCards.push(mkSparkline(charsPoints,'var(--blue)',v=>`${v}`,'🔡 Characters Typed per Quiz Session'));
+      sessionCards.push(mkSparkline(charsPoints,'var(--blue)',v=>`${v}`,scLbl('type',' Characters Typed per Quiz Session')));
 
     // 12. Library: characters read per source (top 8 by charsRead)
     const srcWithReads = (state.sources||[]).filter(s=>s.charsRead>0)
       .sort((a,b)=>b.charsRead-a.charsRead).slice(0,8);
     if (srcWithReads.length) {
       const libReadCard = el('div',{class:'card',style:'padding:20px;margin-bottom:16px'});
-      libReadCard.appendChild(el('div',{style:'font-weight:800;margin-bottom:4px'},'📚 Characters Read per Library Source'));
+      libReadCard.appendChild(el('div',{style:'font-weight:800;margin-bottom:4px'},scLbl('books',' Characters Read per Library Source')));
       libReadCard.appendChild(el('div',{class:'u-muted-11',style:'margin-bottom:14px'},'High-water mark — estimated chars scrolled into view'));
       const maxCR = srcWithReads[0].charsRead;
       srcWithReads.forEach(src=>{
@@ -267,15 +267,15 @@ function renderAnalytics(c) {
       const bestWpm = Math.max(...quizLog.map(e=>e.wpm||0));
       const bestKsps = Math.max(...quizLog.map(e=>e.avgKsPerSec||0));
       const lifetimeCard = el('div',{class:'card',style:'padding:20px;margin-bottom:16px'});
-      lifetimeCard.appendChild(el('div',{style:'font-weight:800;margin-bottom:14px'},'🏆 Lifetime Typing Stats'));
+      lifetimeCard.appendChild(el('div',{style:'font-weight:800;margin-bottom:14px'},scLbl('trophy',' Lifetime Typing Stats')));
       const statRows=[
-        ['⌨️ Total keystrokes',totalKS.toLocaleString()],
-        ['🔡 Total chars submitted',totalChars.toLocaleString()],
-        ['🏅 Best WPM',bestWpm>0?`${bestWpm} wpm`:'—'],
-        ['⚡ Best KS/s',bestKsps>0?`${bestKsps}`:'—'],
-        ['⌫ Total backspaces',totalBackspaces.toLocaleString()],
-        ['💀 Total timeouts',totalTimeouts.toLocaleString()],
-        ['📋 Quiz sessions logged',quizLog.length],
+        [scLbl('keyboard',' Total keystrokes'),totalKS.toLocaleString()],
+        [scLbl('type',' Total chars submitted'),totalChars.toLocaleString()],
+        [scLbl('medal',' Best WPM'),bestWpm>0?`${bestWpm} wpm`:'—'],
+        [scLbl('zap',' Best KS/s'),bestKsps>0?`${bestKsps}`:'—'],
+        [scLbl('backspace',' Total backspaces'),totalBackspaces.toLocaleString()],
+        [scLbl('skull',' Total timeouts'),totalTimeouts.toLocaleString()],
+        [scLbl('clipboard',' Quiz sessions logged'),quizLog.length],
       ];
       statRows.forEach(([label,val])=>lifetimeCard.appendChild(
         el('div',{style:'display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},
@@ -294,8 +294,8 @@ function renderAnalytics(c) {
       const gw=gapLog.reduce((a,e)=>a+(e.gapWrong||0),0);
       const gt=gc+gl+gw||1;
       const gapCard=el('div',{class:'card',style:'padding:20px;margin-bottom:16px'});
-      gapCard.appendChild(el('div',{style:'font-weight:800;margin-bottom:14px'},'🔠 Gap-Fill Accuracy Breakdown'));
-      [{label:'✅ Correct',count:gc,color:'#22c55e'},{label:'🟡 Close',count:gl,color:'#FB923C'},{label:'❌ Wrong',count:gw,color:'#ef4444'}]
+      gapCard.appendChild(el('div',{style:'font-weight:800;margin-bottom:14px'},scLbl('type',' Gap-Fill Accuracy Breakdown')));
+      [{label:scLbl('check-circle',' Correct'),count:gc,color:'#22c55e'},{label:scLbl('circle-half',' Close'),count:gl,color:'#FB923C'},{label:scLbl('x-circle',' Wrong'),count:gw,color:'#ef4444'}]
         .forEach(s=>{
           const pct=(s.count/gt)*100;
           gapCard.appendChild(el('div',{style:'margin-bottom:10px'},
@@ -321,75 +321,75 @@ function renderAnalytics(c) {
 
 const ACHIEVEMENT_DEFS=[
   // Streak tiers
-  {id:'streak_7',    name:'Week Warrior',     icon:'🔥',desc:'7-day study streak',      xp:200, goal:7,   check:s=>s.streak>=7},
-  {id:'streak_14',   name:'Fortnight Flame',  icon:'🔥',desc:'14-day study streak',     xp:250, goal:14,  check:s=>s.streak>=14},
-  {id:'streak_30',   name:'Monthly Master',   icon:'🔥',desc:'30-day study streak',     xp:400, goal:30,  check:s=>s.streak>=30},
-  {id:'streak_60',   name:'Two-Month Titan',  icon:'🔥',desc:'60-day study streak',     xp:550, goal:60,  check:s=>s.streak>=60},
-  {id:'streak_100',  name:'Century Streak',   icon:'💯',desc:'100-day study streak',    xp:750, goal:100, check:s=>s.streak>=100},
-  {id:'streak_150',  name:'Relentless',       icon:'🔥',desc:'150-day study streak',    xp:900, goal:150, check:s=>s.streak>=150},
-  {id:'streak_200',  name:'Streak Titan',     icon:'🔥',desc:'200-day study streak',    xp:1000,goal:200, check:s=>s.streak>=200},
-  {id:'streak_365',  name:'Year of Fire',     icon:'🎆',desc:'365-day study streak',    xp:1500,goal:365, check:s=>s.streak>=365},
-  {id:'streak_500',  name:'Legendary Streak', icon:'👑',desc:'500-day study streak',    xp:2000,goal:500, check:s=>s.streak>=500},
-  {id:'streak_1000', name:'Streak Immortal',  icon:'🏆',desc:'1000-day study streak',   xp:3500,goal:1000,check:s=>s.streak>=1000},
+  {id:'streak_7',    name:'Week Warrior',     icon:'flame',desc:'7-day study streak',      xp:200, goal:7,   check:s=>s.streak>=7},
+  {id:'streak_14',   name:'Fortnight Flame',  icon:'flame',desc:'14-day study streak',     xp:250, goal:14,  check:s=>s.streak>=14},
+  {id:'streak_30',   name:'Monthly Master',   icon:'flame',desc:'30-day study streak',     xp:400, goal:30,  check:s=>s.streak>=30},
+  {id:'streak_60',   name:'Two-Month Titan',  icon:'flame',desc:'60-day study streak',     xp:550, goal:60,  check:s=>s.streak>=60},
+  {id:'streak_100',  name:'Century Streak',   icon:'hundred',desc:'100-day study streak',    xp:750, goal:100, check:s=>s.streak>=100},
+  {id:'streak_150',  name:'Relentless',       icon:'flame',desc:'150-day study streak',    xp:900, goal:150, check:s=>s.streak>=150},
+  {id:'streak_200',  name:'Streak Titan',     icon:'flame',desc:'200-day study streak',    xp:1000,goal:200, check:s=>s.streak>=200},
+  {id:'streak_365',  name:'Year of Fire',     icon:'fireworks',desc:'365-day study streak',    xp:1500,goal:365, check:s=>s.streak>=365},
+  {id:'streak_500',  name:'Legendary Streak', icon:'crown',desc:'500-day study streak',    xp:2000,goal:500, check:s=>s.streak>=500},
+  {id:'streak_1000', name:'Streak Immortal',  icon:'trophy',desc:'1000-day study streak',   xp:3500,goal:1000,check:s=>s.streak>=1000},
 
   // Card-creation tiers
-  {id:'first_card',  name:'First Steps',      icon:'🌱',desc:'Create your first flashcard',xp:50,  goal:1,   check:s=>s.totalCards>=1},
-  {id:'ten_cards',   name:'Getting Started',  icon:'📝',desc:'Create 10 flashcards',      xp:100, goal:10,  check:s=>s.totalCards>=10},
-  {id:'cards_50',    name:'Card Collector',   icon:'🗃️',desc:'Create 50 flashcards',      xp:250, goal:50,  check:s=>s.totalCards>=50},
-  {id:'cards_100',   name:'Flashcard Fanatic',icon:'🎴',desc:'Create 100 flashcards',     xp:450, goal:100, check:s=>s.totalCards>=100},
-  {id:'cards_250',   name:'Card Hoarder',     icon:'📦',desc:'Create 250 flashcards',     xp:700, goal:250, check:s=>s.totalCards>=250},
-  {id:'cards_500',   name:'Card Architect',   icon:'🏗️',desc:'Create 500 flashcards',     xp:1100,goal:500, check:s=>s.totalCards>=500},
-  {id:'cards_1000',  name:'Card Legend',      icon:'👑',desc:'Create 1000 flashcards',    xp:2000,goal:1000,check:s=>s.totalCards>=1000},
+  {id:'first_card',  name:'First Steps',      icon:'seedling',desc:'Create your first flashcard',xp:50,  goal:1,   check:s=>s.totalCards>=1},
+  {id:'ten_cards',   name:'Getting Started',  icon:'note',desc:'Create 10 flashcards',      xp:100, goal:10,  check:s=>s.totalCards>=10},
+  {id:'cards_50',    name:'Card Collector',   icon:'archive',desc:'Create 50 flashcards',      xp:250, goal:50,  check:s=>s.totalCards>=50},
+  {id:'cards_100',   name:'Flashcard Fanatic',icon:'cards',desc:'Create 100 flashcards',     xp:450, goal:100, check:s=>s.totalCards>=100},
+  {id:'cards_250',   name:'Card Hoarder',     icon:'box',desc:'Create 250 flashcards',     xp:700, goal:250, check:s=>s.totalCards>=250},
+  {id:'cards_500',   name:'Card Architect',   icon:'construction',desc:'Create 500 flashcards',     xp:1100,goal:500, check:s=>s.totalCards>=500},
+  {id:'cards_1000',  name:'Card Legend',      icon:'crown',desc:'Create 1000 flashcards',    xp:2000,goal:1000,check:s=>s.totalCards>=1000},
 
   // Review-count tiers
-  {id:'century',     name:'Century Club',     icon:'💯',desc:'Review 100 cards',         xp:500, goal:100,  check:s=>s.totalReviews>=100},
-  {id:'reviews_500', name:'Dedicated Reviewer',icon:'🔁',desc:'Review 500 cards',        xp:900, goal:500,  check:s=>s.totalReviews>=500},
-  {id:'reviews_1000',name:'Review Machine',   icon:'⚙️',desc:'Review 1000 cards',        xp:1400,goal:1000, check:s=>s.totalReviews>=1000},
-  {id:'reviews_2500',name:'Review Powerhouse',icon:'💪',desc:'Review 2500 cards',        xp:2200,goal:2500, check:s=>s.totalReviews>=2500},
-  {id:'reviews_5000',name:'Review Titan',     icon:'🗿',desc:'Review 5000 cards',        xp:3200,goal:5000, check:s=>s.totalReviews>=5000},
-  {id:'reviews_10000',name:'Review Immortal', icon:'🏆',desc:'Review 10,000 cards',      xp:5000,goal:10000,check:s=>s.totalReviews>=10000},
+  {id:'century',     name:'Century Club',     icon:'hundred',desc:'Review 100 cards',         xp:500, goal:100,  check:s=>s.totalReviews>=100},
+  {id:'reviews_500', name:'Dedicated Reviewer',icon:'repeat',desc:'Review 500 cards',        xp:900, goal:500,  check:s=>s.totalReviews>=500},
+  {id:'reviews_1000',name:'Review Machine',   icon:'gear',desc:'Review 1000 cards',        xp:1400,goal:1000, check:s=>s.totalReviews>=1000},
+  {id:'reviews_2500',name:'Review Powerhouse',icon:'dumbbell',desc:'Review 2500 cards',        xp:2200,goal:2500, check:s=>s.totalReviews>=2500},
+  {id:'reviews_5000',name:'Review Titan',     icon:'moai',desc:'Review 5000 cards',        xp:3200,goal:5000, check:s=>s.totalReviews>=5000},
+  {id:'reviews_10000',name:'Review Immortal', icon:'trophy',desc:'Review 10,000 cards',      xp:5000,goal:10000,check:s=>s.totalReviews>=10000},
 
   // Deck-count tiers
-  {id:'polyglot',    name:'Polyglot',         icon:'🌍',desc:'Create 3 different decks', xp:150, goal:3,  check:s=>s.totalDecks>=3},
-  {id:'decks_5',     name:'Subject Explorer', icon:'🧭',desc:'Create 5 different decks', xp:300, goal:5,  check:s=>s.totalDecks>=5},
-  {id:'decks_10',    name:'Curriculum Builder',icon:'📚',desc:'Create 10 different decks',xp:600, goal:10, check:s=>s.totalDecks>=10},
-  {id:'decks_20',    name:'Knowledge Architect',icon:'🏛️',desc:'Create 20 different decks',xp:1200,goal:20, check:s=>s.totalDecks>=20},
+  {id:'polyglot',    name:'Polyglot',         icon:'globe',desc:'Create 3 different decks', xp:150, goal:3,  check:s=>s.totalDecks>=3},
+  {id:'decks_5',     name:'Subject Explorer', icon:'compass',desc:'Create 5 different decks', xp:300, goal:5,  check:s=>s.totalDecks>=5},
+  {id:'decks_10',    name:'Curriculum Builder',icon:'books',desc:'Create 10 different decks',xp:600, goal:10, check:s=>s.totalDecks>=10},
+  {id:'decks_20',    name:'Knowledge Architect',icon:'landmark',desc:'Create 20 different decks',xp:1200,goal:20, check:s=>s.totalDecks>=20},
 
   // Long-term memory tiers — cards that have graduated to mature (interval>=21d).
   // A durable, one-way count (mature cards don't get "un-matured"), unlike a
   // live retention percentage that can rise and fall day to day.
-  {id:'mature_10',   name:'Taking Root',      icon:'🌱',desc:'Grow 10 mature cards',      xp:150, goal:10,  check:s=>s.matureCards>=10},
-  {id:'mature_50',   name:'Long-Term Memory', icon:'🌳',desc:'Grow 50 mature cards',      xp:400, goal:50,  check:s=>s.matureCards>=50},
-  {id:'mature_200',  name:'Deep Roots',       icon:'🌲',desc:'Grow 200 mature cards',     xp:900, goal:200, check:s=>s.matureCards>=200},
-  {id:'mature_500',  name:'Evergreen Mind',   icon:'🏔️',desc:'Grow 500 mature cards',     xp:1800,goal:500, check:s=>s.matureCards>=500},
+  {id:'mature_10',   name:'Taking Root',      icon:'seedling',desc:'Grow 10 mature cards',      xp:150, goal:10,  check:s=>s.matureCards>=10},
+  {id:'mature_50',   name:'Long-Term Memory', icon:'tree',desc:'Grow 50 mature cards',      xp:400, goal:50,  check:s=>s.matureCards>=50},
+  {id:'mature_200',  name:'Deep Roots',       icon:'pine',desc:'Grow 200 mature cards',     xp:900, goal:200, check:s=>s.matureCards>=200},
+  {id:'mature_500',  name:'Evergreen Mind',   icon:'mountain',desc:'Grow 500 mature cards',     xp:1800,goal:500, check:s=>s.matureCards>=500},
 
   // Citation tiers — linking cards back to source material.
-  {id:'cite_10',     name:'Scholar',          icon:'📖',desc:'Cite sources on 10 cards',  xp:150, goal:10,  check:s=>s.citedCards>=10},
-  {id:'cite_50',     name:'Researcher',       icon:'📚',desc:'Cite sources on 50 cards',  xp:400, goal:50,  check:s=>s.citedCards>=50},
-  {id:'cite_150',    name:'Archivist',        icon:'🎓',desc:'Cite sources on 150 cards', xp:900, goal:150, check:s=>s.citedCards>=150},
+  {id:'cite_10',     name:'Scholar',          icon:'book-open',desc:'Cite sources on 10 cards',  xp:150, goal:10,  check:s=>s.citedCards>=10},
+  {id:'cite_50',     name:'Researcher',       icon:'books',desc:'Cite sources on 50 cards',  xp:400, goal:50,  check:s=>s.citedCards>=50},
+  {id:'cite_150',    name:'Archivist',        icon:'graduation',desc:'Cite sources on 150 cards', xp:900, goal:150, check:s=>s.citedCards>=150},
 
   // Library tiers — books/PDFs/articles imported as sources.
-  {id:'library_1',   name:'Bookworm',         icon:'📥',desc:'Import your first source',  xp:50,  goal:1,  check:s=>s.totalSources>=1},
-  {id:'library_10',  name:'Bibliophile',      icon:'📕',desc:'Import 10 sources',         xp:300, goal:10, check:s=>s.totalSources>=10},
-  {id:'library_25',  name:'Librarian',        icon:'🏛️',desc:'Import 25 sources',         xp:700, goal:25, check:s=>s.totalSources>=25},
+  {id:'library_1',   name:'Bookworm',         icon:'download',desc:'Import your first source',  xp:50,  goal:1,  check:s=>s.totalSources>=1},
+  {id:'library_10',  name:'Bibliophile',      icon:'book',desc:'Import 10 sources',         xp:300, goal:10, check:s=>s.totalSources>=10},
+  {id:'library_25',  name:'Librarian',        icon:'landmark',desc:'Import 25 sources',         xp:700, goal:25, check:s=>s.totalSources>=25},
 
   // Best single-day tiers — a personal record that only ever goes up.
-  {id:'bestday_50',  name:'Study Sprint',     icon:'⚡',desc:'Review 50 cards in one day', xp:250, goal:50, check:s=>s.bestDay>=50},
-  {id:'bestday_150', name:'Study Surge',      icon:'🌩️',desc:'Review 150 cards in one day',xp:600, goal:150,check:s=>s.bestDay>=150},
-  {id:'bestday_300', name:'Marathon Session', icon:'🏃',desc:'Review 300 cards in one day',xp:1200,goal:300,check:s=>s.bestDay>=300},
+  {id:'bestday_50',  name:'Study Sprint',     icon:'zap',desc:'Review 50 cards in one day', xp:250, goal:50, check:s=>s.bestDay>=50},
+  {id:'bestday_150', name:'Study Surge',      icon:'cloud-zap',desc:'Review 150 cards in one day',xp:600, goal:150,check:s=>s.bestDay>=150},
+  {id:'bestday_300', name:'Marathon Session', icon:'runner',desc:'Review 300 cards in one day',xp:1200,goal:300,check:s=>s.bestDay>=300},
 ];
 
 /** Groups ACHIEVEMENT_DEFS into progression tracks for the tiered dot-bar display —
  *  each family is one full-width card with one node per tier, in ascending order. */
 const ACHIEVEMENT_FAMILIES=[
-  {title:'Day Streaks',      icon:'🔥', statLabel:'day streak',   ids:['streak_7','streak_14','streak_30','streak_60','streak_100','streak_150','streak_200','streak_365','streak_500','streak_1000']},
-  {title:'Flashcards Created',icon:'🎴', statLabel:'cards',       ids:['first_card','ten_cards','cards_50','cards_100','cards_250','cards_500','cards_1000']},
-  {title:'Cards Reviewed',   icon:'🔁', statLabel:'reviews',      ids:['century','reviews_500','reviews_1000','reviews_2500','reviews_5000','reviews_10000']},
-  {title:'Decks Created',    icon:'📚', statLabel:'decks',        ids:['polyglot','decks_5','decks_10','decks_20']},
-  {title:'Mature Cards',     icon:'🌳', statLabel:'mature cards', ids:['mature_10','mature_50','mature_200','mature_500']},
-  {title:'Cited Cards',      icon:'📖', statLabel:'cited cards',  ids:['cite_10','cite_50','cite_150']},
-  {title:'Library Sources',  icon:'📥', statLabel:'sources',      ids:['library_1','library_10','library_25']},
-  {title:'Best Study Day',   icon:'⚡', statLabel:'cards in a day',ids:['bestday_50','bestday_150','bestday_300']},
+  {title:'Day Streaks',      icon:'flame', statLabel:'day streak',   ids:['streak_7','streak_14','streak_30','streak_60','streak_100','streak_150','streak_200','streak_365','streak_500','streak_1000']},
+  {title:'Flashcards Created',icon:'cards', statLabel:'cards',       ids:['first_card','ten_cards','cards_50','cards_100','cards_250','cards_500','cards_1000']},
+  {title:'Cards Reviewed',   icon:'repeat', statLabel:'reviews',      ids:['century','reviews_500','reviews_1000','reviews_2500','reviews_5000','reviews_10000']},
+  {title:'Decks Created',    icon:'books', statLabel:'decks',        ids:['polyglot','decks_5','decks_10','decks_20']},
+  {title:'Mature Cards',     icon:'tree', statLabel:'mature cards', ids:['mature_10','mature_50','mature_200','mature_500']},
+  {title:'Cited Cards',      icon:'book-open', statLabel:'cited cards',  ids:['cite_10','cite_50','cite_150']},
+  {title:'Library Sources',  icon:'download', statLabel:'sources',      ids:['library_1','library_10','library_25']},
+  {title:'Best Study Day',   icon:'zap', statLabel:'cards in a day',ids:['bestday_50','bestday_150','bestday_300']},
 ];
 
 /** Pure snapshot of the numbers ACHIEVEMENT_DEFS' check() functions read —
@@ -418,7 +418,7 @@ function notifyClaimableAchievements() {
   const claimableCount=ACHIEVEMENT_DEFS.filter(a=>!state.achievements.includes(a.id)&&a.check(s)).length;
   if(claimableCount>0){
     showToast(
-      `🏆 ${claimableCount} achievement${claimableCount===1?'':'s'} ready to claim!`,
+      `${claimableCount} achievement${claimableCount===1?'':'s'} ready to claim — open Quests to claim!`,
       4000,
       { label:'View', onClick:()=>navigate('quests') }
     );
@@ -434,7 +434,7 @@ function claimAchievement(id) {
   if(!a.check(s)) return; // guard against a stale button click
   state.achievements.push(a.id);
   addXP(a.xp);
-  showToast(`Achievement claimed: ${a.name} ${a.icon} +${a.xp} XP`);
+  showToast(`Achievement claimed: ${a.name} +${a.xp} XP`);
   scheduleSave();
 }
 
@@ -449,18 +449,18 @@ function renderQuests(c) {
   const matureCount=allCards.filter(c=>c.interval>=21).length;
   const citedCount=allCards.filter(c=>c.citation).length;
   const QUEST_DEFS=[
-    {id:'daily_review',name:'Daily Review',   desc:'Review 20 cards today',          goal:20,icon:'📚',xp:100,prog:(todayEntry?.total||0)},
-    {id:'daily_create', name:'Card Creator',   desc:'Create 5 new cards',             goal:5, icon:'✏️',xp:75, prog:allCards.filter(c=>c.created>=todayStart).length},
-    {id:'daily_accuracy',name:'Sharp Mind',    desc:'Get 90%+ accuracy on 10+ reviews today', goal:1, icon:'🎯',xp:120,
+    {id:'daily_review',name:'Daily Review',   desc:'Review 20 cards today',          goal:20,icon:'books',xp:100,prog:(todayEntry?.total||0)},
+    {id:'daily_create', name:'Card Creator',   desc:'Create 5 new cards',             goal:5, icon:'pencil',xp:75, prog:allCards.filter(c=>c.created>=todayStart).length},
+    {id:'daily_accuracy',name:'Sharp Mind',    desc:'Get 90%+ accuracy on 10+ reviews today', goal:1, icon:'target',xp:120,
       prog:(todayEntry&&todayEntry.total>=10&&(todayEntry.correct/todayEntry.total)>=0.9)?1:0},
-    {id:'daily_spread', name:'Well Rounded',   desc:'Review cards from 3 different decks today', goal:3, icon:'🗂️',xp:90, prog:decksTouchedToday},
-    {id:'weekly_streak', name:'Stay on Track', desc:'Keep a 3-day study streak',      goal:3, icon:'🔥',xp:150, prog:Math.min(state.streak,3)},
-    {id:'mature_grower', name:'Long-Term Memory', desc:'Grow your mature cards to 50', goal:50,icon:'🌳',xp:200, prog:matureCount},
-    {id:'citation_quest',name:'Cite Your Sources', desc:'Add citations to 10 cards',  goal:10,icon:'📖',xp:80, prog:citedCount},
+    {id:'daily_spread', name:'Well Rounded',   desc:'Review cards from 3 different decks today', goal:3, icon:'dividers',xp:90, prog:decksTouchedToday},
+    {id:'weekly_streak', name:'Stay on Track', desc:'Keep a 3-day study streak',      goal:3, icon:'flame',xp:150, prog:Math.min(state.streak,3)},
+    {id:'mature_grower', name:'Long-Term Memory', desc:'Grow your mature cards to 50', goal:50,icon:'tree',xp:200, prog:matureCount},
+    {id:'citation_quest',name:'Cite Your Sources', desc:'Add citations to 10 cards',  goal:10,icon:'book-open',xp:80, prog:citedCount},
   ];
 
   const levelCard=el('div',{class:'card glow',style:'padding:24px;margin-bottom:20px;display:flex;align-items:center;gap:20px'},
-    el('div',{style:'width:70px;height:70px;border-radius:16px;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0'},'⭐'),
+    el('div',{style:'width:70px;height:70px;border-radius:16px;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:30px;flex-shrink:0'},scIcon('star')),
     el('div',{style:'flex:1'},
       el('div',{style:'display:flex;align-items:center;gap:10px;margin-bottom:4px'},
         el('div',{style:'font-weight:900;font-size:20px'},`Level ${level}`),
@@ -475,7 +475,7 @@ function renderQuests(c) {
         el('span',{style:'font-size:10px;color:var(--muted)'},`${fmtXP(xpIntoLevel)}/${fmtXP(xpForNextLevel)}`)
       )
     ),
-    el('div',{style:'text-align:center'},el('div',{style:'font-size:36px'},'🔥'),el('div',{style:'font-weight:900;font-size:22px;color:#FB923C'},String(state.streak)),el('div',{style:'font-size:10px;color:var(--muted)'},'DAY STREAK'))
+    el('div',{style:'text-align:center'},el('div',{style:'font-size:34px'},scIcon('flame')),el('div',{style:'font-weight:900;font-size:22px;color:#FB923C'},String(state.streak)),el('div',{style:'font-size:10px;color:var(--muted)'},'DAY STREAK'))
   );
 
   const tabBar=el('div',{class:'tab-bar'});
@@ -489,7 +489,7 @@ function renderQuests(c) {
         const pct=Math.min(100,(q.prog/q.goal)*100), done=q.prog>=q.goal;
         contentEl.appendChild(el('div',{class:`card quest-item${done?' glow':''}`,style:'padding:20px;margin-bottom:12px'},
           el('div',{style:'display:flex;align-items:center;gap:14px'},
-            el('div',{style:`width:44px;height:44px;border-radius:12px;${done?'background:var(--grad)':'background:rgba(255,255,255,0.06)'};display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0`},done?'✅':q.icon),
+            el('div',{style:`width:44px;height:44px;border-radius:12px;${done?'background:var(--grad)':'background:rgba(255,255,255,0.06)'};display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0`},done?scIcon('check-circle'):scAuto(q.icon)),
             el('div',{style:'flex:1'},
               el('div',{style:'display:flex;justify-content:space-between'},el('div',{style:'font-weight:800;font-size:14px'},q.name),el('span',{style:'font-size:12px;color:#FBBF24;font-weight:700'},`+${q.xp} XP`)),
               el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:8px'},q.desc),
@@ -520,14 +520,14 @@ function renderQuests(c) {
           };
           if(claimable) nodeAttrs.onclick=()=>{ claimAchievement(a.id); renderView('quests'); };
           track.appendChild(el('div',{class:'tier-step'},
-            el('div',nodeAttrs, claimed?'✓':''),
+            el('div',nodeAttrs, claimed?scIcon('check'):''),
             el('div',{class:'tier-goal-label'}, String(a.goal))
           ));
         });
         wrap.appendChild(el('div',{class:`card${claimedCount===defs.length?' glow':''}`,style:'padding:20px 24px;width:100%;box-sizing:border-box'},
           el('div',{style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:2px'},
             el('div',{style:'display:flex;align-items:center;gap:10px'},
-              el('span',{style:'font-size:20px'},fam.icon),
+              el('span',{style:'font-size:19px;display:inline-flex'},scIcon(fam.icon)),
               el('span',{style:'font-weight:800;font-size:14px'},fam.title)
             ),
             mkTag(`${claimedCount}/${defs.length} claimed`, claimedCount===defs.length?'#22c55e':'var(--blue)')
@@ -540,8 +540,8 @@ function renderQuests(c) {
     }
   }
 
-  [['quests','🎯 Quests'],['achievements','🏆 Achievements']].forEach(([id,label])=>{
-    const b=el('button',{class:`tab-btn${activeTab===id?' active':''}`,onclick:()=>{ activeTab=id; _lastQuestsTab=id; tabBar.querySelectorAll('.tab-btn').forEach(tb=>tb.classList.toggle('active',tb===b)); renderTab(); }},label);
+  [['quests','target','Quests'],['achievements','trophy','Achievements']].forEach(([id,ico,label])=>{
+    const b=el('button',{class:`tab-btn${activeTab===id?' active':''}`,onclick:()=>{ activeTab=id; _lastQuestsTab=id; tabBar.querySelectorAll('.tab-btn').forEach(tb=>tb.classList.toggle('active',tb===b)); renderTab(); }},scLbl(ico,label));
     tabBar.appendChild(b);
   });
   renderTab();

@@ -189,7 +189,7 @@ function openPackDetail(p) {
     _scPacksLastHash = frag;
   }
   const href = (window.SCIMA_PAGE?.root || '') + PACKS_DIR_REL + encodeURIComponent(p.file);
-  openModal(`📦 ${p.name || p.file}`, body => {
+  openModal(scLbl('package', p.name || p.file), body => {
     body.appendChild(el('div', { class: 'u-muted-12', style: 'line-height:1.6' },
       p.description || 'No description provided.'));
     body.appendChild(el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' },
@@ -211,17 +211,17 @@ function openPackDetail(p) {
       })
       .catch(err => { contents.textContent = '⚠ Could not read pack: ' + ((err && err.message) || err); });
     body.appendChild(el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:4px' },
-      btn('➕ Add to Decks', 'primary', { onclick: async e => {
+      btn([scIcon('plus'),' Add to Decks'], 'primary', { onclick: async e => {
         const b = e.currentTarget;
         const msg = await addPackToLocalDecks(p, b);
-        if (msg) b.textContent = '✓ Added';
+        if (msg) b.replaceChildren(scIcon('check'), ' Added');
       } }),
       el('a', { class: 'btn btn-ghost', href, download: p.file, style: 'text-decoration:none',
-        'aria-label': `Download ${p.name || p.file}` }, '⬇ Download'),
-      btn('🔗 Copy link', 'ghost', { onclick: async e => {
+        'aria-label': `Download ${p.name || p.file}` }, [scIcon('download'),' Download']),
+      btn([scIcon('link'),' Copy link'], 'ghost', { onclick: async e => {
         const ok = (typeof copyTextToClipboard === 'function') && await copyTextToClipboard(packDeepLink(p));
         showToast(ok ? 'Pack link copied ✓' : 'Copy failed — link: ' + packDeepLink(p), ok ? 2500 : 6000);
-        if (ok) e.currentTarget.textContent = '✓ Copied';
+        if (ok) e.currentTarget.replaceChildren(scIcon('check'), ' Copied');
       } })));
     body.appendChild(el('div', { class: 'u-muted-11' },
       'Anyone opening this page\'s current link lands straight on this pack.'));
@@ -279,7 +279,7 @@ function packCard(p) {
   const title = el('div', { role: 'button', tabindex: '0', title: 'View pack details',
     style: 'font-weight:800;font-size:15px;cursor:pointer',
     onclick: () => openPackDetail(p),
-    onkeydown: clickKeys(() => openPackDetail(p)) }, `📦 ${p.name || p.file}`);
+    onkeydown: clickKeys(() => openPackDetail(p)) }, scIcon('package'), ' ' + (p.name || p.file));
   const card = el('div', { class: 'card', style: 'padding:16px;display:flex;flex-direction:column;gap:10px' },
     el('div', { style: 'display:flex;justify-content:space-between;gap:8px;align-items:flex-start' },
       title,
@@ -287,18 +287,18 @@ function packCard(p) {
         `${Math.max(1, Math.round(p.bytes / 1024))} KB`) : null),
     el('div', { class: 'u-muted-11', style: 'flex:1' }, p.description || p.file),
     el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' },
-      btn('➕ Add to Decks', 'primary', { small: true, onclick: async e => {
+      btn([scIcon('plus'),' Add to Decks'], 'primary', { small: true, onclick: async e => {
         const b = e.currentTarget;
         const msg = await addPackToLocalDecks(p, b);
-        if (msg) b.textContent = '✓ Added';
+        if (msg) b.replaceChildren(scIcon('check'), ' Added');
       } }),
       el('a', { class: 'btn btn-ghost btn-sm', href, download: p.file,
-        style: 'text-decoration:none', 'aria-label': `Download ${p.name || p.file}` }, '⬇ Download'),
-      btn('🔗', 'ghost', { small: true, title: 'Copy a shareable link to this pack',
+        style: 'text-decoration:none', 'aria-label': `Download ${p.name || p.file}` }, [scIcon('download'),' Download']),
+      btn(scIcon('link'), 'ghost', { small: true, title: 'Copy a shareable link to this pack',
         'aria-label': `Copy shareable link to ${p.name || p.file}`, onclick: async e => {
         const ok = (typeof copyTextToClipboard === 'function') && await copyTextToClipboard(packDeepLink(p));
         showToast(ok ? 'Pack link copied ✓' : 'Copy failed — link: ' + packDeepLink(p), ok ? 2500 : 6000);
-        if (ok) e.currentTarget.textContent = '✓';
+        if (ok) e.currentTarget.replaceChildren(scIcon('check'));
       } })));
   return card;
 }

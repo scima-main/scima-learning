@@ -136,7 +136,7 @@ def test_multiple_choice_marks_option(page, base_url, seeded):
 
     # newer builds wait for an explicit Next; older minified bundles still
     # auto-advance — accept either, then assert we're on card 2
-    nxt = page.get_by_role("button", name=re.compile(r"^(Next|Finish) →$"))
+    nxt = page.get_by_role("button", name=re.compile(r"^(Next|Finish)$"))
     if nxt.count():
         nxt.first.click()
     expect(page.locator("#view-study span",
@@ -267,15 +267,15 @@ def test_exam_mode_navigates_and_reveals_at_end(page, site_base, seeded):
         .get_by_role("button", name="Start").click()
     page.wait_for_selector(".quiz-input-area")
     # global clock in the progress row
-    expect(page.locator("#view-study span", has_text="⏱")).to_be_visible()
+    expect(page.locator("#view-study .session-clock")).to_be_visible()
     # type, move on, come back — answer auto-cached, no feedback shown
     page.locator(".quiz-input-area").first.fill("alpha")
     expect(page.locator(".quiz-compare")).to_be_hidden()
-    page.get_by_role("button", name="Next →").click()
-    page.get_by_role("button", name="← Prev").click()
+    page.get_by_role("button", name="Next").click()
+    page.get_by_role("button", name="Prev").click()
     assert page.locator(".quiz-input-area").first.input_value() == "alpha"
     # finish grades everything and reveals the per-card list
-    page.get_by_role("button", name="🏁 Finish & reveal").click()
+    page.get_by_role("button", name="Finish & reveal").click()
     expect(page.locator("#view-study")).to_contain_text("Session Complete!")
     expect(page.locator("#view-study")).to_contain_text("Answers revealed")
     expect(page.locator("#view-study")).to_contain_text("Your answer:")
@@ -322,21 +322,21 @@ def test_exam_inputs_clear_on_new_card_and_restore_cached(page, site_base,
     # type on Q1 WITHOUT saving, move on: Q2's boxes are clear
     page.locator(".quiz-input-area").first.fill("alpha")
     page.locator(".quiz-input-area").nth(1).fill("beta")
-    page.get_by_role("button", name="Next →").click()
+    page.get_by_role("button", name="Next").click()
     page.wait_for_timeout(200)
     assert vals() == ["", ""], vals()
     # …and coming back restores the auto-cached typing
-    page.get_by_role("button", name="← Prev").click()
+    page.get_by_role("button", name="Prev").click()
     page.wait_for_timeout(200)
     assert vals() == ["alpha", "beta"], vals()
     # explicit save, wander two cards, return: still restored, and only the
     # answered card counts as recorded
-    page.get_by_role("button", name="Next →").click()
-    page.get_by_role("button", name="Next →").click()
+    page.get_by_role("button", name="Next").click()
+    page.get_by_role("button", name="Next").click()
     page.wait_for_timeout(200)
     assert vals() == ["", ""]
-    page.get_by_role("button", name="← Prev").click()
-    page.get_by_role("button", name="← Prev").click()
+    page.get_by_role("button", name="Prev").click()
+    page.get_by_role("button", name="Prev").click()
     page.wait_for_timeout(200)
     assert vals() == ["alpha", "beta"]
     assert page.evaluate("() => Object.keys(studySession.recorded)") == \
@@ -351,9 +351,9 @@ def test_exam_footer_has_big_nav_and_no_save_button(page, site_base, seeded):
     page.locator("#view-study .card", has_text="Written Quiz") \
         .get_by_role("button", name="Start").click()
     page.wait_for_selector(".quiz-input-area")
-    assert page.get_by_role("button", name="💾 Save answer").count() == 0
-    prev_b = page.get_by_role("button", name="← Prev")
-    next_b = page.get_by_role("button", name="Next →")
+    assert page.get_by_role("button", name="Save answer").count() == 0
+    prev_b = page.get_by_role("button", name="Prev")
+    next_b = page.get_by_role("button", name="Next")
     expect(prev_b).to_be_visible()
     expect(next_b).to_be_visible()
     # big tap targets
@@ -409,7 +409,7 @@ def test_recents_never_duplicate_the_all_decks_pill(page, site_base, seeded):
     page.evaluate("() => { pushRecentScope([{type:'all',id:null}]);"
                   " pushRecentScope([{type:'all',id:null}]); renderView('study'); }")
     pills = page.evaluate("""() => [...document.querySelectorAll('#view-study button')]
-        .map(b => b.textContent.trim()).filter(t => t === '🌍 All Decks').length""")
+        .map(b => b.textContent.trim()).filter(t => t === 'All Decks').length""")
     assert pills == 1, pills
     # and a legacy saved duplicate entry is deduped at render time
     page.evaluate("""() => { state.recentStudyScopes.unshift(
@@ -420,10 +420,10 @@ def test_recents_never_duplicate_the_all_decks_pill(page, site_base, seeded):
         {key:'deck:d_demo_1', scopes:[{type:'deck',id:'d_demo_1'}], icon:'📚',
          label:'Dupe', ts: Date.now()-1, pinned:false}); renderView('study'); }""")
     dupes = page.evaluate("""() => [...document.querySelectorAll('#view-study button')]
-        .map(b => b.textContent.trim()).filter(t => t.startsWith('📚 Dupe')).length""")
+        .map(b => b.textContent.trim()).filter(t => t.startsWith('📚Dupe')).length""")
     assert dupes == 1, dupes
     pills = page.evaluate("""() => [...document.querySelectorAll('#view-study button')]
-        .map(b => b.textContent.trim()).filter(t => t === '🌍 All Decks').length""")
+        .map(b => b.textContent.trim()).filter(t => t === 'All Decks').length""")
     assert pills == 1, pills
 
 
@@ -470,12 +470,12 @@ def test_exam_has_no_check_buttons_and_skips_table_cards(page, site_base,
     types = page.evaluate("() => studySession.queue.map(c => c.type || 'basic')")
     assert "table" not in types and len(types) == 5, types
     for i in range(5):
-        for name in ("Check Answer (Ctrl+↵)", "Check Answer (↵)", "Skip →"):
+        for name in ("Check Answer (Ctrl+↵)", "Check Answer (↵)", "Skip"):
             assert page.get_by_role("button", name=name).count() == 0, (i, name)
-        expect(page.get_by_role("button", name="Next →")).to_be_visible() \
+        expect(page.get_by_role("button", name="Next")).to_be_visible() \
             if i < 4 else None
         if i < 4:
-            page.get_by_role("button", name="Next →").click()
+            page.get_by_role("button", name="Next").click()
             page.wait_for_timeout(150)
 
 
@@ -495,9 +495,9 @@ def test_exam_grades_process_calc_markscheme_at_reveal(page, site_base, seeded):
             page.locator(".quiz-input-area").nth(k).fill(
                 vals[k] if k < len(vals) else "")
         if i < 4:
-            page.get_by_role("button", name="Next →").click()
+            page.get_by_role("button", name="Next").click()
             page.wait_for_timeout(150)
-    page.get_by_role("button", name="🏁 Finish & reveal").click()
+    page.get_by_role("button", name="Finish & reveal").click()
     page.wait_for_selector("text=Answers revealed", timeout=8000)
     graded = page.evaluate(
         "() => Object.fromEntries(state.sessionLog[0].answers"

@@ -42,30 +42,34 @@ const DEBUG = false;
 // Order here is just the *fallback* — the effective order/visibility a user
 // sees comes from state.settings.navOrder / hiddenTabs (customizable in
 // Settings → Navigation, see getOrderedNavItems()/getVisibleNavItems()).
+/* Icon fields name symbols in the shared SVG set (assets/svg/, rendered via
+   shared/icons.js). User-chosen emoji (deck/folder glyphs) flow through the
+   same renderers and are detected by scIsIconName() — names are kebab-case,
+   emoji are not. */
 const NAV_ITEMS = [
-  { id: 'home',      icon: '🏠', label: 'Home'      },
-  { id: 'decks',     icon: '📚', label: 'Decks'     },
-  { id: 'study',     icon: '🧠', label: 'Study'     },
-  { id: 'library',   icon: '📖', label: 'Library'   },
-  { id: 'analytics', icon: '📊', label: 'Analytics' },
-  { id: 'community', icon: '🌐', label: 'Community' },
-  { id: 'settings',  icon: '⚙️', label: 'Settings'  },
-  { id: 'about',     icon: '❓', label: 'About'     },
+  { id: 'home',      icon: 'home',      label: 'Home'      },
+  { id: 'decks',     icon: 'books',     label: 'Decks'     },
+  { id: 'study',     icon: 'brain',     label: 'Study'     },
+  { id: 'library',   icon: 'book-open', label: 'Library'   },
+  { id: 'analytics', icon: 'chart-bar', label: 'Analytics' },
+  { id: 'community', icon: 'globe',     label: 'Community' },
+  { id: 'settings',  icon: 'gear',      label: 'Settings'  },
+  { id: 'about',     icon: 'help',      label: 'About'     },
 ];
 const NAV_ITEMS_DEFAULT_ORDER = NAV_ITEMS.map(n => n.id);
 
 // Per-view icon/label for the in-page tab bar on merged pages
 // (Analytics⇄Quests).
 const VIEW_TABS = {
-  home:      { icon: '🏠', label: 'Home'      },
-  decks:     { icon: '📚', label: 'Decks'     },
-  study:     { icon: '🧠', label: 'Study'     },
-  library:   { icon: '📖', label: 'Library'   },
-  analytics: { icon: '📊', label: 'Analytics' },
-  quests:    { icon: '🎯', label: 'Quests'    },
-  community: { icon: '🌐', label: 'Community' },
-  settings:  { icon: '⚙️', label: 'Settings'  },
-  about:     { icon: '❓', label: 'About'     },
+  home:      { icon: 'home',      label: 'Home'      },
+  decks:     { icon: 'books',     label: 'Decks'     },
+  study:     { icon: 'brain',     label: 'Study'     },
+  library:   { icon: 'book-open', label: 'Library'   },
+  analytics: { icon: 'chart-bar', label: 'Analytics' },
+  quests:    { icon: 'target',    label: 'Quests'    },
+  community: { icon: 'globe',     label: 'Community' },
+  settings:  { icon: 'gear',      label: 'Settings'  },
+  about:     { icon: 'help',      label: 'About'     },
 };
 
 // ── Multi-page site router constants ─────────────────────────────────
@@ -929,7 +933,7 @@ function parseManualAIReply(raw) {
 
 // Image/Emoji helpers
 function readImageFile(file){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(e){res(e.target.result);};r.onerror=function(){rej(new Error('fail'));};r.readAsDataURL(file);});}
-function mkIcon(emoji,image,size,radius){size=size||'28px';radius=radius||'6px';if(image)return el('img',{src:image,style:'width:'+size+';height:'+size+';object-fit:cover;border-radius:'+radius+';flex-shrink:0'});return el('span',{style:'font-size:'+size+';line-height:1;flex-shrink:0'},emoji||'\u{1F4C1}');}
+function mkIcon(emoji,image,size,radius){size=size||'28px';radius=radius||'6px';if(image)return el('img',{src:image,style:'width:'+size+';height:'+size+';object-fit:cover;border-radius:'+radius+';flex-shrink:0'});if(scIsIconName(emoji))return scIcon(emoji,{cls:'mk-icon'});return el('span',{style:'font-size:'+size+';line-height:1;flex-shrink:0'},emoji||'\u{1F4C1}');}
 // Source-type icon (📗 epub / 📱 mobi / 📄 pdf / 📝 text) — used by the
 // citation pickers (dashboard-decks.js openCitationPicker, dashboard-capture.js
 // Quick Add) AND by the Library list/reader (dashboard-library.js). Lives in
@@ -938,24 +942,24 @@ function mkIcon(emoji,image,size,radius){size=size||'28px';radius=radius||'6px';
 // call sites resolve it from here (core always loads first). Pure fn, no deps.
 function sourceTypeIcon(src) {
   const n = src.name?.toLowerCase() || '';
-  if(n.endsWith('.epub')) return '📗';
-  if(n.endsWith('.mobi')||n.endsWith('.azw3')) return '📱';
-  if(src.type==='pdf'||n.endsWith('.pdf')) return '📄';
-  return '📝';
+  if(n.endsWith('.epub')) return 'book';
+  if(n.endsWith('.mobi')||n.endsWith('.azw3')) return 'phone';
+  if(src.type==='pdf'||n.endsWith('.pdf')) return 'file-text';
+  return 'note';
 }
 function mkIconPicker(curEmoji,curImg,onEmoji,onImg){
   var wrap=el('div',{style:'display:flex;align-items:center;gap:10px;margin-bottom:8px'});
   var prev=el('div',{style:'width:52px;height:52px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;overflow:hidden'});
   var _e=curEmoji||'\u{1F4D6}',_i=curImg||null;
-  function up(){prev.innerHTML='';if(_i)prev.appendChild(el('img',{src:_i,style:'width:100%;height:100%;object-fit:cover'}));else prev.textContent=_e;}
+  function up(){prev.innerHTML='';if(_i)prev.appendChild(el('img',{src:_i,style:'width:100%;height:100%;object-fit:cover'}));else prev.appendChild(scAuto(_e));}
   up();
   var ei=el('input',{type:'text',value:_e,style:'width:60px;text-align:center;font-size:22px;padding:6px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text);font-family:inherit'});
   ei.addEventListener('input',function(e){_e=e.target.value;_i=null;fi.value='';cb.style.display='none';onEmoji(_e);onImg(null);up();});
-  var il=el('label',{style:'cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap'},'\uD83D\uDDBC Photo');
+  var il=el('label',{style:'cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap'},scIcon('image'),' Photo');
   var fi=el('input',{type:'file',accept:'image/*',style:'display:none'});
   fi.addEventListener('change',async function(e){var f=e.target.files&&e.target.files[0];if(!f)return;var d=await readImageFile(f);_i=d;onImg(d);cb.style.display='';up();});
   il.appendChild(fi);
-  var cb=el('button',{style:'display:'+(curImg?'':'none')+';padding:4px 8px;border-radius:6px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#ef4444;font-size:11px;cursor:pointer;font-family:inherit'},'\u2715 Clear');
+  var cb=el('button',{style:'display:'+(curImg?'':'none')+';padding:4px 8px;border-radius:6px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#ef4444;font-size:11px;cursor:pointer;font-family:inherit'},scLbl('close',' Clear'));
   cb.addEventListener('click',function(){_i=null;fi.value='';onImg(null);cb.style.display='none';up();});
   var right=el('div',{style:'display:flex;flex-direction:column;gap:6px'});
   right.append(el('div',{style:'font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em'},'Icon / Emoji'),el('div',{style:'display:flex;align-items:center;gap:6px'},ei,il,cb));
@@ -967,11 +971,11 @@ function mkCardImagePicker(label,curImg,onChange){
   var row=el('div',{style:'display:flex;align-items:center;gap:8px'});
   var thumb=el('div',{style:'width:48px;height:36px;border-radius:6px;overflow:hidden;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);display:'+(curImg?'block':'none')});
   if(curImg)thumb.appendChild(el('img',{src:curImg,style:'width:100%;height:100%;object-fit:cover'}));
-  var fl=el('label',{style:'cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);font-size:11px;font-weight:700;color:var(--muted)'},'\uD83D\uDDBC Add Image');
+  var fl=el('label',{style:'cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);font-size:11px;font-weight:700;color:var(--muted)'},scIcon('image'),' Add Image');
   var finp=el('input',{type:'file',accept:'image/*',style:'display:none'});
   finp.addEventListener('change',async function(e){var f=e.target.files&&e.target.files[0];if(!f)return;var d=await readImageFile(f);onChange(d);thumb.innerHTML='';thumb.appendChild(el('img',{src:d,style:'width:100%;height:100%;object-fit:cover'}));thumb.style.display='block';clr.style.display='';});
   fl.appendChild(finp);
-  var clr=el('button',{style:'display:'+(curImg?'':'none')+';padding:4px 8px;border-radius:6px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#ef4444;font-size:11px;cursor:pointer;font-family:inherit'},'\u2715');
+  var clr=el('button',{'aria-label':'Remove image',style:'display:'+(curImg?'':'none')+';padding:4px 8px;border-radius:6px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#ef4444;font-size:11px;cursor:pointer;font-family:inherit'},scIcon('close'));
   clr.addEventListener('click',function(){finp.value='';onChange(null);thumb.style.display='none';thumb.innerHTML='';clr.style.display='none';});
   row.append(thumb,fl,clr);wrap.appendChild(row);return wrap;
 }
@@ -1508,16 +1512,16 @@ function getDescendantFolderIds(folderId) {
 // ── Multi-scope study selection (Study page 'Recents' + deck explorer overlay) ──
 function scopeKey(scope) { return `${scope.type}:${scope.id}`; }
 function scopeLabel(scope) {
-  if (scope.type === 'all') return { icon:'🌍', label:'All Decks' };
-  if (scope.type === 'deck') { const d=state.decks.find(x=>x.id===scope.id); return d?{icon:d.emoji||'📚',label:d.name}:{icon:'🃏',label:'(deleted deck)'}; }
-  if (scope.type === 'folder') { const f=state.folders.find(x=>x.id===scope.id); return f?{icon:f.emoji||'📁',label:f.name}:{icon:'📁',label:'(deleted folder)'}; }
-  if (scope.type === 'subject') { const s=getSubjectSafe(scope.id); return {icon:'📘',label:s.short||s.name}; }
-  return { icon:'❓', label:'Unknown' };
+  if (scope.type === 'all') return { icon:'globe', label:'All Decks' };
+  if (scope.type === 'deck') { const d=state.decks.find(x=>x.id===scope.id); return d?{icon:d.emoji||'books',label:d.name}:{icon:'card',label:'(deleted deck)'}; }
+  if (scope.type === 'folder') { const f=state.folders.find(x=>x.id===scope.id); return f?{icon:f.emoji||'folder',label:f.name}:{icon:'folder',label:'(deleted folder)'}; }
+  if (scope.type === 'subject') { const s=getSubjectSafe(scope.id); return {icon:'book',label:s.short||s.name}; }
+  return { icon:'help', label:'Unknown' };
 }
 function scopeSetLabel(scopes) {
-  if (!scopes || !scopes.length) return { icon:'🌍', label:'All Decks' };
+  if (!scopes || !scopes.length) return { icon:'globe', label:'All Decks' };
   if (scopes.length === 1) return scopeLabel(scopes[0]);
-  return { icon:'🧩', label:`${scopes.length} selected` };
+  return { icon:'puzzle', label:`${scopes.length} selected` };
 }
 function sameScopeSet(a, b) {
   if (!a || !b || a.length !== b.length) return false;
@@ -1601,9 +1605,9 @@ function toggleRecentPin(key) {
 /** A single scope-pill: main click applies the scope, optional 📌 toggles pinning. */
 function mkScopePill(icon, label, active, onClick, pinInfo) {
   const wrap = el('div',{style:`display:inline-flex;align-items:center;border-radius:20px;overflow:hidden;background:${active?'var(--grad)':'rgba(255,255,255,0.08)'}`});
-  wrap.appendChild(el('button',{style:`padding:7px 10px;border:none;cursor:pointer;background:transparent;color:${active?'var(--on-gradient)':'var(--text)'};font-family:inherit;font-weight:700;font-size:12px`,onclick:onClick},`${icon} ${label}`));
+  wrap.appendChild(el('button',{style:`display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:none;cursor:pointer;background:transparent;color:${active?'var(--on-gradient)':'var(--text)'};font-family:inherit;font-weight:700;font-size:12px`,onclick:onClick},scAuto(icon),label));
   if (pinInfo) {
-    wrap.appendChild(el('button',{title:pinInfo.pinned?'Unpin':'Pin to keep this at the top',style:`padding:6px 8px 6px 2px;border:none;cursor:pointer;background:transparent;font-size:12px;opacity:${pinInfo.pinned?1:0.5}`,onclick:e=>{ e.stopPropagation(); pinInfo.onToggle(); }},'📌'));
+    wrap.appendChild(el('button',{title:pinInfo.pinned?'Unpin':'Pin to keep this at the top','aria-label':pinInfo.pinned?'Unpin':'Pin to keep this at the top',style:`display:inline-flex;padding:6px 8px 6px 2px;border:none;cursor:pointer;background:transparent;font-size:12px;opacity:${pinInfo.pinned?1:0.5}`,onclick:e=>{ e.stopPropagation(); pinInfo.onToggle(); }},scIcon('pin')));
   }
   return wrap;
 }
@@ -1638,9 +1642,9 @@ function openDeckExplorerOverlay(opts = {}) {
 
   const overlay = el('div',{id:opts.overlayId||(single?'deck-picker-overlay':'study-scope-overlay'),style:'position:fixed;inset:0;z-index:1000;background:var(--bg);display:flex;flex-direction:column;animation:fadeIn 0.2s ease;'});
   const header = el('div',{style:'display:flex;align-items:center;gap:12px;padding:16px 24px;border-bottom:1px solid var(--border);flex-shrink:0'},
-    el('div',{style:'font-weight:900;font-size:16px'}, opts.title || (single?'📂 Choose a Deck':'📂 Choose Study Scope')),
+    scLbl('folder-open', opts.title || (single?'Choose a Deck':'Choose Study Scope')),
     el('div',{style:'margin-left:auto;font-size:11px;color:var(--muted)'}, opts.hint || (single?'Click to browse · select exactly one deck':'Click to browse · check a box to select')),
-    el('button',{style:'background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:0 4px',onclick:()=>closeOverlay()},'✕')
+    el('button',{'aria-label':'Close',style:'background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:0 4px',onclick:()=>closeOverlay()},scIcon('close'))
   );
   const recentsRow = el('div',{style: single ? 'display:none' : 'display:flex;gap:8px;flex-wrap:wrap;padding:14px 24px 0;flex-shrink:0'});
   const bodyWrap = el('div',{style:'flex:1;overflow-y:auto;padding:16px 24px 24px'});
@@ -1674,7 +1678,7 @@ function openDeckExplorerOverlay(opts = {}) {
     recentsRow.innerHTML='';
     recentsRow.appendChild(el('div',{style:'width:100%;font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px'},'Recent'));
     const allActive = isChecked({type:'all',id:null}) && selection.size===1;
-    recentsRow.appendChild(mkScopePill('🌍','All Decks', allActive, ()=>{ selection.clear(); selection.set(scopeKey({type:'all',id:null}),{type:'all',id:null}); refreshAll(); }, null));
+    recentsRow.appendChild(mkScopePill('globe','All Decks', allActive, ()=>{ selection.clear(); selection.set(scopeKey({type:'all',id:null}),{type:'all',id:null}); refreshAll(); }, null));
     orderedRecentScopes().forEach(r=>{
       const active = r.scopes.length===selection.size && r.scopes.every(s=>isChecked(s));
       recentsRow.appendChild(mkScopePill(r.icon, r.label, active, ()=>{ selection.clear(); r.scopes.forEach(s=>selection.set(scopeKey(s),s)); refreshAll(); }, { pinned:r.pinned, onToggle:()=>{ toggleRecentPin(r.key); renderRecents(); } }));
@@ -1683,7 +1687,7 @@ function openDeckExplorerOverlay(opts = {}) {
 
   function renderBreadcrumb(){
     const bc = el('div',{class:'breadcrumb',style:'margin-bottom:14px'});
-    bc.appendChild(el('span',{class:`breadcrumb-part${nav.view==='subjects'?' active':''}`,onclick:nav.view==='subjects'?null:()=>{ nav={view:'subjects'}; renderBody(); }},'📚 All Subjects'));
+    bc.appendChild(el('span',{class:`breadcrumb-part${nav.view==='subjects'?' active':''}`,onclick:nav.view==='subjects'?null:()=>{ nav={view:'subjects'}; renderBody(); }},scLbl('books','All Subjects')));
     if(nav.view==='subject'||nav.view==='folder'){
       const s=getSubjectSafe(nav.subjectKey);
       bc.append(el('span',{class:'breadcrumb-sep'},'›'), el('span',{class:`breadcrumb-part${nav.view==='subject'?' active':''}`,style:`color:${s.defaultColor}`,onclick:nav.view==='subject'?null:()=>{ nav={view:'subject',subjectKey:nav.subjectKey}; renderBody(); }},s.name));
@@ -1710,7 +1714,7 @@ function openDeckExplorerOverlay(opts = {}) {
         const due=getDueCards(fd.flatMap(d=>d.cards)).length;
         const row=el('div',{class:'folder-item'+(!single&&isChecked({type:'folder',id:f.id})?' explorer-selected':'')},
           single?null:checkbox({type:'folder',id:f.id}),
-          mkIcon(f.emoji||'📁',f.image,'22px','4px'),
+          mkIcon(f.emoji||'folder',f.image,'22px','4px'),
           el('div',{style:'flex:1;min-width:0'},el('div',{class:'folder-name'},f.name),el('div',{class:'folder-meta'},`${fd.length} deck${fd.length!==1?'s':''}${sf.length?` · ${sf.length} subfolder${sf.length!==1?'s':''}`:''}${due>0?` · ${due} due`:''}`)),
           el('span',{style:'color:var(--muted);font-size:16px;margin-left:4px'},'›')
         );
@@ -1735,7 +1739,7 @@ function openDeckExplorerOverlay(opts = {}) {
       });
       bodyWrap.appendChild(grid);
     }
-    if(!folders.length && !decks.length) bodyWrap.appendChild(el('div',{class:'empty-state'},el('div',{class:'empty-icon'},'📂'),el('div',{class:'empty-title'},'Empty')));
+    if(!folders.length && !decks.length) bodyWrap.appendChild(el('div',{class:'empty-state'},el('div',{class:'empty-icon'},scIcon('folder-open')),el('div',{class:'empty-title'},'Empty')));
   }
 
   function renderBody(){
@@ -1747,7 +1751,7 @@ function openDeckExplorerOverlay(opts = {}) {
         const allChecked=isChecked({type:'all',id:null});
         const allRow = el('div',{class:'card'+(allChecked?' explorer-selected':''),style:'display:flex;align-items:center;gap:12px;padding:14px 16px;margin-bottom:14px;cursor:pointer'},
           checkbox({type:'all',id:null}),
-          el('span',{style:'font-size:20px'},'🌍'),
+          scIcon('globe'),
           el('div',{style:'flex:1'},el('div',{style:'font-weight:800;font-size:13px'},'All Decks'),el('div',{class:'u-muted-11'},`${state.decks.length} deck${state.decks.length!==1?'s':''} total`))
         );
         allRow.addEventListener('click',e=>{ if(e.target.closest('.scope-checkbox')) return; toggle({type:'all',id:null}); });
@@ -1755,7 +1759,7 @@ function openDeckExplorerOverlay(opts = {}) {
       }
 
       const subjects = new Set([...state.decks.map(d=>d.subject||DEFAULT_SUBJECT_KEY), ...state.folders.filter(f=>!f.parentId).map(f=>f.subjectKey)]);
-      if(!subjects.size){ bodyWrap.appendChild(el('div',{class:'empty-state'},el('div',{class:'empty-icon'},'📚'),el('div',{class:'empty-title'},'No decks yet'))); return; }
+      if(!subjects.size){ bodyWrap.appendChild(el('div',{class:'empty-state'},el('div',{class:'empty-icon'},scIcon('books')),el('div',{class:'empty-title'},'No decks yet'))); return; }
 
       bodyWrap.appendChild(el('div',{class:'u-section-label'},'Subjects'));
       const grid = el('div',{class:'grid-3'});
@@ -1805,7 +1809,7 @@ function openDeckExplorerOverlay(opts = {}) {
         el('div',{style:'margin-left:auto;display:flex;gap:8px;flex-wrap:wrap'},
           ...extraFooterButtons(),
           btn('Cancel','ghost',{onclick:closeOverlay}),
-          btn(opts.confirmLabel||'Use this deck ✓','primary',{disabled:!deck,onclick:()=>{
+          btn([scIcon('check'), opts.confirmLabel||'Use this deck'],'primary',{disabled:!deck,onclick:()=>{
             if(!deck) return;
             closeOverlay();
             if(typeof opts.onConfirm==='function') opts.onConfirm(deck);
@@ -1822,7 +1826,7 @@ function openDeckExplorerOverlay(opts = {}) {
         ...extraFooterButtons(),
         btn('Clear','ghost',{small:true,onclick:()=>{ selection.clear(); refreshAll(); }}),
         btn('Cancel','ghost',{onclick:closeOverlay}),
-        btn(opts.confirmLabel||'Use Selection ✓','primary',{onclick:()=>{
+        btn([scIcon('check'), opts.confirmLabel||'Use Selection'],'primary',{onclick:()=>{
           closeOverlay();
           if(typeof opts.onConfirm==='function') opts.onConfirm(scopes);
         }})
@@ -2345,7 +2349,7 @@ function renderPageTabs() {
         class: `tab-btn${state.view === v ? ' active' : ''}`,
         'data-view': v,
         onclick: () => navigate(v),
-      }, el('span', { class: 'page-tab-icon' }, meta.icon), meta.label));
+      }, el('span', { class: 'page-tab-icon' }, scIcon(meta.icon)), meta.label));
     });
     host.appendChild(bar);
   });
@@ -2480,16 +2484,16 @@ function renderSidebar() {
   pinWrap.innerHTML = '';
   const pinned = state.decks.filter(d => d.pinned);
   if (pinned.length) {
-    pinWrap.appendChild(el('div', { class: 'nav-section-label', style: 'padding-top:8px' }, '📌 Pinned'));
+    pinWrap.appendChild(el('div', { class: 'nav-section-label', style: 'padding-top:8px' }, scLbl('pin',' Pinned')));
     pinned.forEach(deck => {
       const due = getDueCards(deck.cards).length;
       pinWrap.appendChild(el('div', { class: 'pinned-deck-row', role: 'button', tabindex: '0',
         'aria-label': `Open deck ${deck.name}`, onclick: () => openDeckDetail(deck.id),
         onkeydown: clickKeys(() => openDeckDetail(deck.id)) },
-        el('span', { class: 'pinned-deck-emoji' }, deck.emoji || '📚'),
+        el('span', { class: 'pinned-deck-emoji' }, scAuto(deck.emoji || 'books')),
         el('span', { class: 'pinned-deck-name' }, deck.name),
         due > 0 ? el('span', { class: 'pinned-deck-due' }, String(due)) : null,
-        el('button', { class: 'pinned-deck-study', title: 'Study now', 'aria-label': `Study ${deck.name} now`, onclick: e => { e.stopPropagation(); state.studyScope = [{ type:'deck', id:deck.id }]; navigate('study'); } }, '▶')
+        el('button', { class: 'pinned-deck-study', title: 'Study now', 'aria-label': `Study ${deck.name} now`, onclick: e => { e.stopPropagation(); state.studyScope = [{ type:'deck', id:deck.id }]; navigate('study'); } }, scIcon('play'))
       ));
     });
   }
@@ -2508,7 +2512,7 @@ function renderSidebar() {
       onclick: () => navigate(n.id),
       title: shortcutNum ? `${n.label} (Alt+Shift+${shortcutNum})` : n.label,
     },
-      el('span', { class: 'nav-icon' }, n.icon),
+      el('span', { class: 'nav-icon' }, scIcon(n.icon)),
       el('span', { class: 'nav-label' }, n.label),
     );
 
@@ -2542,12 +2546,12 @@ function renderSidebar() {
   const hiddenItems = getHiddenNavItems();
   if (hiddenItems.length) {
     nav.appendChild(el('button', { class: `nav-drawer-toggle${navDrawerOpen ? ' open' : ''}`, onclick: () => { navDrawerOpen = !navDrawerOpen; renderSidebar(); } },
-      el('span', { class: 'nav-drawer-chevron' }, '▸'), `Hidden (${hiddenItems.length})`));
+      el('span', { class: 'nav-drawer-chevron' }, scIcon('chevron-right')), `Hidden (${hiddenItems.length})`));
     if (navDrawerOpen) {
       const drawer = el('div', { class: 'nav-drawer' });
       hiddenItems.forEach(n => {
         drawer.appendChild(el('button', { class: `nav-btn nav-btn-hidden${navIdForView(state.view) === n.id ? ' active' : ''}`, onclick: () => navigate(n.id) },
-          el('span', { class: 'nav-icon' }, n.icon), el('span', { class: 'nav-label' }, n.label)));
+          el('span', { class: 'nav-icon' }, scIcon(n.icon)), el('span', { class: 'nav-label' }, n.label)));
       });
       nav.appendChild(drawer);
     }
@@ -2576,9 +2580,9 @@ function renderSidebar() {
 
   const fs = document.getElementById('footer-stats');
   fs.innerHTML = '';
-  [['🔥',state.streak,'Streak'],['⭐',fmtXP(totalXP),'XP'],['🏆',level,'Level']].forEach(([ic,val,lab]) => {
+  [['flame',state.streak,'Streak'],['star',fmtXP(totalXP),'XP'],['trophy',level,'Level']].forEach(([ic,val,lab]) => {
     fs.appendChild(el('div', { class: 'foot-stat' },
-      el('div', {}, ic), el('div', { class: 'fs-val' }, String(val)), el('div', { class: 'fs-lab' }, lab)));
+      el('div', {}, scIcon(ic)), el('div', { class: 'fs-val' }, String(val)), el('div', { class: 'fs-lab' }, lab)));
   });
 }
 
@@ -2601,7 +2605,7 @@ function openModal(title, bodyFn, opts = {}) {
   const body = document.getElementById('modal-body');
   if (!backdrop.classList.contains('hidden')) {
     _modalStack.push({
-      title: document.getElementById('modal-title').textContent,
+      titleNodes: [...document.getElementById('modal-title').childNodes],
       nodes: [...body.childNodes],
       focus: document.activeElement,
       onClose: _modalOnClose,
@@ -2612,7 +2616,9 @@ function openModal(title, bodyFn, opts = {}) {
     body.replaceChildren();   // fresh open: drop the previous dialog's remnants
   }
   _modalOnClose = typeof opts.onClose === 'function' ? opts.onClose : null;
-  document.getElementById('modal-title').textContent = title;
+  const _titleEl = document.getElementById('modal-title');
+  _titleEl.replaceChildren(...(typeof title === 'string' ? [document.createTextNode(title)]
+    : Array.isArray(title) ? title : [title]));
   bodyFn(body);
   backdrop.classList.remove('hidden');
   document.getElementById('modal-box').focus();
@@ -2624,7 +2630,7 @@ function closeModal(all = false) {
   while (all && prev) { fire(prev.onClose); prev = _modalStack.pop(); }
   _modalOnClose = prev ? prev.onClose : null;
   if (prev) {
-    document.getElementById('modal-title').textContent = prev.title;
+    document.getElementById('modal-title').replaceChildren(...(prev.titleNodes || []));
     document.getElementById('modal-body').replaceChildren(...prev.nodes);
     if (prev.focus && prev.focus.isConnected) prev.focus.focus();
     else document.getElementById('modal-box').focus();
@@ -2641,20 +2647,20 @@ document.getElementById('modal-backdrop').addEventListener('click', e => {
 
 // ── Page help (the ⓘ button, top-left, on every screen) ─────────────
 const PAGE_HELP = {
-  home: { icon:'🏠', title:'Home', intro:'Your daily dashboard — a snapshot of what\u2019s due and quick access to your decks.', tips:[
+  home: { icon:'home', title:'Home', intro:'Your daily dashboard — a snapshot of what\u2019s due and quick access to your decks.', tips:[
     'The stat cards show cards due today, how many you\u2019ve reviewed, your retention %, and your day streak.',
     'The Daily Goal bar tracks today\u2019s review count against your target (change it in Settings).',
     'Click a deck\u2019s "Study Now" to jump straight into a session for that deck.',
-    'Click 📌 on a deck card to pin it to the top of the sidebar for quick access.',
+    'Click the pin button on a deck card to pin it to the top of the sidebar for quick access.',
   ]},
-  community: { icon:'🌐', title:'Community', intro:'Search, preview and download decks shared by the SCIMA community — and share your own.', tips:[
+  community: { icon:'globe', title:'Community', intro:'Search, preview and download decks shared by the SCIMA community — and share your own.', tips:[
     'The dot next to the top bar shows whether the community API is reachable; popular decks load beneath the search box.',
     'Search matches names, subjects, authors, descriptions and tags; sort by relevance, newest or popularity.',
-    'Open a deck to see its stats, metadata and tags; "⬇ Download deck" saves its SCIMA JSON export to your device.',
+    'Open a deck to see its stats, metadata and tags; "Download deck" saves its SCIMA JSON export to your device.',
     '"＋ Add to dashboard" copies the deck straight into your own decks under a subject (and optional folder) of your choice — it counts as a download for the deck\'s author.',
     'Drop a SCIMA JSON export on the upload panel to share it: add a description, author and tags, pick subject/level/exam board, then upload.',
   ]},
-  decks: { icon:'📚', title:'Decks', intro:'Organize your flashcards into decks, grouped by subject and folder.', tips:[
+  decks: { icon:'books', title:'Decks', intro:'Organize your flashcards into decks, grouped by subject and folder.', tips:[
     'Drag decks and folders with the mouse — or on a touchscreen, LONG-PRESS (hold ~a third of a second) a deck or folder to lift it, then drag it onto a folder row or a breadcrumb and let go. Taps and scrolls keep their usual meanings.',
     'Browse by subject, then drill into folders and decks.',
     'Use the buttons at the top to create a new deck or folder.',
@@ -2663,35 +2669,35 @@ const PAGE_HELP = {
     'Inside a deck: click a card to select it, Shift+click to select a range, Ctrl/Cmd+click to toggle individual cards, or click-and-drag across empty space to rubber-band select several at once.',
     'With cards selected, use "Move to Deck…" to move them into an existing deck or a brand-new one.',
     'Each deck shows how many cards are "mature" (well-learned) out of the total.',
-    '✦ AI Capture lives inside "+ New Deck": the ✨ AI Capture tab generates cards from pasted text (local LLM server or any chat AI via Copy / Paste) straight into the new deck — or into an existing one via its destination toggle.',
+    'AI Capture lives inside "+ New Deck": the AI Capture tab (sparkles icon) generates cards from pasted text (local LLM server or any chat AI via Copy / Paste) straight into the new deck — or into an existing one via its destination toggle.',
     'The “Aa Case…” buttons (subject, folder, deck and card-selection bars) batch-standardize letter case and end punctuation — with a preview, scope pickers (fronts by card type, backs, hints, deck/folder names) and an Undo toast.',
-    'In the card editor, “✂ Create multi-answer” (right of the 3×2 card-type grid) splits a comma-separated Basic back — “income tax, national insurance, …” — straight into a Multi-answer pool, required-count set to the whole list.',
+    'In the card editor, “Create multi-answer” (scissors icon, right of the 3×2 card-type grid) splits a comma-separated Basic back — “income tax, national insurance, …” — straight into a Multi-answer pool, required-count set to the whole list.',
   ]},
-  study: { icon:'🧠', title:'Study', intro:'Pick a scope and a mode, then start a review session.', tips:[
-    'Recents gives one-click access to scopes you\u2019ve studied before — "All Decks" is always pinned first. Click the 📌 on any recent to pin it too, so it stays put instead of aging out.',
-    'Click "📂 Browse Decks…" to open the full deck explorer: browse Subjects → Folders → Decks and check any combination of them (even across different folders) to build a combined study scope.',
+  study: { icon:'brain', title:'Study', intro:'Pick a scope and a mode, then start a review session.', tips:[
+    'Recents gives one-click access to scopes you\u2019ve studied before — "All Decks" is always pinned first. Click the pin on any recent to pin it too, so it stays put instead of aging out.',
+    'Click "Browse Decks…" to open the full deck explorer: browse Subjects → Folders → Decks and check any combination of them (even across different folders) to build a combined study scope.',
     'Modes: SRS Review (due cards, spaced repetition), Cram (all cards, no scheduling), Written Quiz (type your answer), Fill in the Gaps, Weakness (cards you struggle with), and Multiple Choice (pick the right answer from 4, basic cards only). A green Show Hint button in the corner works in any mode — using it halves that card\'s XP.',
     'During a card: click it (or Reveal) to see the answer, use Hint or Skip, then rate how well you knew it — Again / Hard / Good / Easy — which schedules when you\u2019ll see it next.',
     'Toggle "Show card images during study" if your cards have images and you\u2019d rather hide them.',
     'Session History stores every answer with its correct-ness: “Repeat wrong (N)” on a past session replays only the cards you missed, in the original order and mode.',
   ]},
-  library: { icon:'📖', title:'Library', intro:'Import book, PDF, EPUB, or article source texts so you can cite them from your flashcards.', tips:[
+  library: { icon:'book-open', title:'Library', intro:'Import book, PDF, EPUB, or article source texts so you can cite them from your flashcards.', tips:[
     '"+ Add Source" imports a file; "Import" brings in previously exported Library data.',
     'Use "New Folder" to organize sources into folders.',
     'Open a source to read it, and highlight text to cite it directly into a new or existing card.',
-    'Cards linked to a citation show a 📖 badge and can jump back to the exact passage.',
+    'Cards linked to a citation show a source badge and can jump back to the exact passage.',
   ]},
-  analytics: { icon:'📊', title:'Analytics', intro:'Charts and stats on your learning performance over time.', tips:[
+  analytics: { icon:'chart-bar', title:'Analytics', intro:'Charts and stats on your learning performance over time.', tips:[
     'The heatmap and trend charts show your review activity and accuracy over time.',
     'Deck and subject breakdowns show mature-card progress at a glance.',
     'Use this page to spot which decks or subjects need more attention.',
   ]},
-  quests: { icon:'🎯', title:'Quests & Achievements', intro:'Track your level, XP, streak, daily quests, and unlockable achievements.', tips:[
+  quests: { icon:'target', title:'Quests & Achievements', intro:'Track your level, XP, streak, daily quests, and unlockable achievements.', tips:[
     'The header card shows your level, total XP, and current day streak.',
     'Quests tab: short-lived daily goals (e.g. review 20 cards today) that award bonus XP when completed — they reset each day.',
     'Achievements tab: permanent milestones for card count, review count, deck count, streak length, mature cards, citations, imported sources, and single-day review records. Each one unlocks once and stays unlocked.',
   ]},
-  settings: { icon:'⚙️', title:'Settings', intro:'Configure the SRS algorithm, subjects, notifications, accessibility, appearance, and your data.', tips:[
+  settings: { icon:'gear', title:'Settings', intro:'Configure the SRS algorithm, subjects, notifications, accessibility, appearance, and your data.', tips:[
     'Help: replay the guided tour. It builds a real practice deck as it goes — keep it at the end, or discard it and start clean.',
     'Algorithm & Notifications: choose FSRS or SM-2, auto-suspend leeches, enable text-to-speech or daily reminders, toggle power-saving mode.',
     'AI Card Generation: point it at a local LLM server (LM Studio, Ollama, llama.cpp — anything OpenAI-compatible) to write cards from pasted text. Nothing is sent to a hosted API and there\u2019s no key to store.',
@@ -2702,12 +2708,12 @@ const PAGE_HELP = {
     'Navigation: reorder the sidebar tabs or hide them into the drawer.',
     'Data Management: "Export All Data" downloads a complete .zip backup — every deck/card, folder, source (including bundled PDFs and illustrated EPUBs), review history, achievements, tracker data, streak, and recent study scopes. "Import" reads that .zip (or an older .json export) back in, either merging with or replacing your current data.',
   ]},
-  packs: { icon:'📦', title:'Packs', intro:'Official deck packs curated by SCIMA — prebuilt .json exports you can add to your decks in one tap.', tips:[
-    'Each pack offers exactly two actions: ➕ Add to Decks (imports a fresh copy into YOUR browser — nothing is uploaded and existing decks are never touched) and ⬇ Download (the raw .json file).',
-    'Open a pack (tap its title) for a detail view with its contents and a 🔗 shareable link — anyone following the link lands straight on that pack.',
+  packs: { icon:'package', title:'Packs', intro:'Official deck packs curated by SCIMA — prebuilt .json exports you can add to your decks in one tap.', tips:[
+    'Each pack offers exactly two actions: Add to Decks (imports a fresh copy into YOUR browser — nothing is uploaded and existing decks are never touched) and Download (the raw .json file).',
+    'Open a pack (tap its title) for a detail view with its contents and a shareable link — anyone following the link lands straight on that pack.',
     'Adding the same pack twice creates a second independent copy — packs never merge into decks you already have.',
   ]},
-  about: { icon:'❓', title:'About', intro:'What SCIMA Learning is — rendered live from the ABOUT.md file at the site root.', tips:[
+  about: { icon:'help', title:'About', intro:'What SCIMA Learning is — rendered live from the ABOUT.md file at the site root.', tips:[
     'The markdown is fetched and rendered on every load, so this page always matches the deployed file — no rebuild needed to update it.',
     'Supported markdown: headings, paragraphs, bullet/numbered lists, blockquotes, code fences, inline code, bold, italics, links, and --- rules.',
   ]},
@@ -2726,12 +2732,11 @@ function makeHelpBtn(title, onclick, pinnedToCorner) {
     style: (pinnedToCorner ? 'position:absolute;top:10px;right:10px;' : '') +
       'width:22px;height:22px;border-radius:50%;border:1px solid var(--border);' +
       'background:var(--surface);color:var(--blue);' +
-      'font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:700;' +
-      'font-size:12px;line-height:1;display:inline-flex;align-items:center;' +
+      'line-height:1;display:inline-flex;align-items:center;' +
       'justify-content:center;cursor:pointer;opacity:0.75;flex-shrink:0;padding:0;' +
       'transition:opacity 0.15s,transform 0.15s,box-shadow 0.15s;',
     onclick,
-  }, 'i');
+  }, scIcon('info'));
   b.addEventListener('mouseenter', () => { b.style.opacity = '1'; b.style.transform = 'scale(1.1)'; b.style.boxShadow = '0 4px 12px rgba(0,0,0,0.35)'; });
   b.addEventListener('mouseleave', () => { b.style.opacity = '0.75'; b.style.transform = ''; b.style.boxShadow = ''; });
   return b;
@@ -2741,15 +2746,15 @@ function makeHelpBtn(title, onclick, pinnedToCorner) {
 // and from the Study picker's header. Describes THIS build's schedulers
 // (shared/srs-core.js), not the textbook algorithms.
 function openAlgorithmHelp() {
-  openModal('🧠 FSRS vs SM-2 — how reviews get scheduled', body => {
+  openModal(scLbl('brain', ' FSRS vs SM-2 — how reviews get scheduled'), body => {
     body.appendChild(el('div', { style: 'font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:6px' },
       'Both schedulers pick the next review date the same way: an ease factor (1.3–3.5) multiplies the current interval — Hard ×(ease−0.5), Good ×ease, Easy ×ease×1.3, kept strictly ordered and at least a day each — and Again always means “redo it now” plus one lapse. They differ in how the ease itself learns from your ratings:'));
     [
-      ['🔄 FSRS — the default, recommended', [
+      [scLbl('refresh', ' FSRS — the default, recommended'), [
         'Ease moves by fixed steps per rating: Again −0.30, Hard −0.15, Good ±0, Easy +0.15.',
         'Smooth and symmetric: a card you keep rating Good holds its ease indefinitely; misses decay it gently, wins grow it slowly.',
         'Review count keeps climbing across lapses, so your stats read as one continuous history.']],
-      ['📜 SM-2 — the SuperMemo classic', [
+      [scLbl('history', ' SM-2 — the SuperMemo classic'), [
         'The original SM-2 ease formula, fed by your rating as a 2–5 quality score: Easy +0.10, Good ±0, Hard −0.14, Again −0.32.',
         'On a lapse the repetition count resets to 0 — classic SM-2 relearns the card from scratch.',
         'A touch punchier at both ends than FSRS: kinder to Easy, harsher on Again.']],
@@ -2765,7 +2770,7 @@ function openAlgorithmHelp() {
 }
 function openPageHelp() {
   const info = PAGE_HELP[state.view] || PAGE_HELP.home;
-  openModal(`${info.icon} ${info.title}`, body => {
+  openModal(scLbl(info.icon, info.title), body => {
     body.appendChild(el('div',{style:'font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:16px'},info.intro));
     const list=el('ul',{style:'padding-left:18px;display:flex;flex-direction:column;gap:10px;margin:0'});
     info.tips.forEach(t=>list.appendChild(el('li',{style:'font-size:13px;line-height:1.6'},t)));
@@ -2773,6 +2778,15 @@ function openPageHelp() {
   });
 }
 document.getElementById('info-btn').addEventListener('click', openPageHelp);
+// ── Chrome glyph upgrade: the shell's ≡ / i / × text marks (no-JS fallbacks)
+// are replaced by their sprite twins as soon as the icon system is up. ──
+(function upgradeChromeGlyphs() {
+  const swaps = [['logo-icon', 'menu'], ['info-btn', 'info'], ['modal-close', 'close']];
+  for (const [id, name] of swaps) {
+    const node = document.getElementById(id);
+    if (node && !node.querySelector('.sc-icon')) { node.replaceChildren(scIcon(name)); }
+  }
+})();
 // Nav drawer wiring (openNav/closeNav above): the ≡ logo mark toggles, the
 // dim backdrop closes on click-outside — same shape as the modal backdrop.
 // Initial ARIA state mirrors the shell markup (drawer closed).
@@ -2817,7 +2831,7 @@ function populateCmdPalette() {
       class:'cmd-item', id:`cmd-item-${idx}`, role:'option', 'aria-selected':'false',
       'data-label':n.label.toLowerCase(), onclick:()=>{ navigate(n.id); closeCmd(); },
     },
-      el('span', { class:'cmd-item-icon' }, n.icon),
+      el('span', { class:'cmd-item-icon' }, scIcon(n.icon)),
       el('span', { class:'cmd-item-label' }, `Go to ${n.label}`),
       badge
     ));

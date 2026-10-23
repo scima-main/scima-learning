@@ -25,7 +25,7 @@
  *  two tabs open on /#home and /#study whose sidebars disagree are two cached
  *  copies of different deploys, and a fetch would just report whatever the
  *  (possibly stale) cache says ABOUT.md contains. Bump both together. */
-const APP_VERSION = '2026.10.022-alpha';
+const APP_VERSION = '2026.10.023-alpha';
 
 /** XP per mark formula: XP = XP_COEFFICIENT × grade⁻² */
 const XP_COEFFICIENT = 1000;
@@ -770,7 +770,7 @@ function sanitizeDeck(raw) {
   return {
     id: typeof r.id === 'string' && r.id ? r.id : `d_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
     name: typeof r.name === 'string' && r.name ? r.name : 'Untitled deck',
-    emoji: typeof r.emoji === 'string' ? r.emoji : '📚',
+    emoji: typeof r.emoji === 'string' ? r.emoji : 'books',
     image: typeof r.image === 'string' ? r.image : null,
     subject: typeof r.subject === 'string' ? r.subject : DEFAULT_SUBJECT_KEY,
     folderId: typeof r.folderId === 'string' ? r.folderId : null,
@@ -789,7 +789,7 @@ function sanitizeFolder(raw) {
   return {
     id: typeof r.id === 'string' && r.id ? r.id : `f_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
     name: typeof r.name === 'string' && r.name ? r.name : 'Untitled folder',
-    emoji: typeof r.emoji === 'string' ? r.emoji : '📁',
+    emoji: typeof r.emoji === 'string' ? r.emoji : 'folder',
     image: typeof r.image === 'string' ? r.image : null,
     subjectKey: typeof r.subjectKey === 'string' && r.subjectKey ? r.subjectKey : DEFAULT_SUBJECT_KEY,
     parentId: typeof r.parentId === 'string' ? r.parentId : null,

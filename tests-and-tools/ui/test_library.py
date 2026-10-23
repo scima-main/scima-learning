@@ -25,7 +25,7 @@ def test_seeded_source_row(page, base_url, seeded):
     row = page.locator("#view-library .source-name",
                        has_text="Cells - A Short Introduction.txt")
     expect(row).to_be_visible()
-    expect(page.locator("#view-library .source-icon").first).to_have_text("📝")
+    expect(page.locator("#view-library .source-icon use").first).to_have_attribute("href", "#i-note")
 
 
 def test_add_plain_text_source(page, base_url, seeded):

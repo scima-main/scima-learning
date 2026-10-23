@@ -897,7 +897,7 @@ function wireAboutMedia(box) {
       const chip = el('span', {
         class: 'md-img-missing',
         title: `not found: ${img.getAttribute('src') || ''}`,
-      }, `🖼 ${img.getAttribute('alt') || 'image'} — not in ./home/assets/media/`);
+      }, scIcon('image'), ` ${img.getAttribute('alt') || 'image'} — not in ./home/assets/media/`);
       img.replaceWith(chip);
     }, { once: true });
   });

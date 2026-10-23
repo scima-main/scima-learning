@@ -82,7 +82,7 @@ def test_deck_detail_and_back(page, base_url, seeded):
     expect(page.locator("#view-decks")).to_contain_text("Hola")
     expect(page.locator("#view-decks")).to_contain_text("El agua")
 
-    page.get_by_role("button", name="← Back").click()
+    page.get_by_role("button", name="Back").click()
     expect(page.locator("#view-decks .subject-tile, #view-decks .deck-card").first).to_be_visible()
 
 
@@ -186,7 +186,7 @@ def test_study_now_scopes_to_deck(page, base_url, seeded):
     goto_decks(page, base_url, seeded)
     open_subject_and_folder(page)
     page.locator(".deck-card", has_text="Spanish Basics").get_by_role(
-        "button", name="▶ Study Now").click()
+        "button", name="Study Now").click()
 
     pages.expect_at(page, "study")
     pages.app_ready(page)
@@ -215,7 +215,7 @@ def _import_file_via_modal(page, path):
         page.wait_for_selector(".container-actions", timeout=8000)
     page.get_by_role("button", name="+ New Folder").first.click()
     pages.expect_modal(page)
-    page.locator("#modal-body button", has_text="⬆ Import Folder").click()
+    page.get_by_role("button", name="Import Folder", exact=True).click()
     page.locator("#modal-body input[type=file][accept='.json']") \
         .set_input_files(path)
     page.locator("#modal-body button", has_text="Import Folder JSON").click()
@@ -387,11 +387,11 @@ def test_subject_and_folder_bars_share_one_layout(page, site_base, seeded):
     page.wait_for_timeout(300)
     folder_bar = page.locator(".container-actions").first
     folder_labels = folder_bar.locator("button").all_inner_texts()
-    assert subject_labels == ["▶ Study", "Aa Case…", "⬇ Export",
-                              "✏️ Edit Subject", "+ New Folder", "+ New Deck"], subject_labels
-    assert folder_labels == ["▶ Study", "Aa Case…", "⬇ Export",
-                             "📂 Move to Folder…", "📚 Move to Subject…",
-                             "✏ Rename", "× Delete",
+    assert subject_labels == ["Study", "Aa Case…", "Export",
+                              "Edit Subject", "+ New Folder", "+ New Deck"], subject_labels
+    assert folder_labels == ["Study", "Aa Case…", "Export",
+                             "Move to Folder…", "Move to Subject…",
+                             "Rename", "× Delete",
                              "+ New Folder", "+ New Deck"], folder_labels
     # shared edges: ▶ Study opens the bar, + New Deck (primary) closes it
     assert folder_labels[:3] == subject_labels[:3]
@@ -422,7 +422,7 @@ def test_action_orders_primary_at_the_ends(page, site_base, seeded):
     pages.goto_app(page, site_base, "/decks/")
     # root bar: manage → creations, primary closes the bar
     root = [t.strip() for t in page.locator(".container-actions button").all_inner_texts()]
-    assert root == ["📚 Manage Subjects", "+ New Folder", "+ New Deck"], root
+    assert root == ["Manage Subjects", "+ New Folder", "+ New Deck"], root
     assert "primary" in page.locator(".container-actions button").nth(2).get_attribute("class")
     # deck card secondary row (inside a subject): use → edit → exports
     page.locator(".subject-tile", has_text="Miscellaneous").click()
@@ -431,14 +431,17 @@ def test_action_orders_primary_at_the_ends(page, site_base, seeded):
     page.wait_for_timeout(400)
     card = page.locator(".deck-card").first
     labels = [t.strip() for t in card.locator("button").all_inner_texts()]
-    # …▶ Study Now (primary, full width) then use → edit → exports
-    assert labels[-4:] == ["Manage Cards", "Aa", "⬇️", "🖨️"], labels
+    # …Study Now (primary, full width) then use → edit → exports; the two
+    # export buttons are icon-only (SVG) and carry aria-labels instead of text
+    assert labels[-4:] == ["Manage Cards", "Aa", "", ""], labels
+    assert card.locator("button[title='Export deck as JSON']").count() == 1
+    assert card.locator("button[title='Export double-sided PDF']").count() == 1
     # deck-grid selection bar: use → move → utilities → primary LAST
     card.locator(".deck-name").click()          # click the tile itself to select
     page.wait_for_timeout(300)
     sel = page.locator(".selection-bar")
     labels = [b.inner_text().strip() for b in sel.locator("button").all()]
-    assert labels == ["▶ Study Selected", "Move to Subject…",
+    assert labels == ["Study Selected", "Move to Subject…",
                       "Select All", "Clear", "Move to Folder…"], labels
     assert "primary" in sel.locator("button").nth(len(labels) - 1).get_attribute("class")
     # card-grid selection bar inside deck detail: primary LAST here too
@@ -448,7 +451,7 @@ def test_action_orders_primary_at_the_ends(page, site_base, seeded):
     page.wait_for_timeout(300)
     sel2 = page.locator(".selection-bar")
     labels2 = [b.inner_text().strip() for b in sel2.locator("button").all()]
-    assert labels2 == ["▶ Study Selected", "Aa Case…",
+    assert labels2 == ["Study Selected", "Aa Case…",
                        "Select All", "Clear", "Move to Deck…"], labels2
     assert "primary" in sel2.locator("button").nth(len(labels2) - 1).get_attribute("class")
 
@@ -466,7 +469,7 @@ def test_manage_subjects_opens_modal_not_redirect(page, site_base, seeded,
     seeded("preset:demo")
     pages.goto_app(page, site_base, "/decks/")
     page.locator(".container-actions button",
-                 has_text="📚 Manage Subjects").click()
+                 has_text="Manage Subjects").click()
     expect(page.locator("#modal-backdrop")).not_to_have_class(re.compile(r"hidden"))
     expect(page.locator("#modal-title")).to_contain_text("Manage Subjects")
     body = page.locator("#modal-body")
@@ -495,7 +498,7 @@ def test_subjects_modal_stacks_subdialogs_and_edits_in_place(page, site_base,
     seeded("preset:demo")
     pages.goto_app(page, site_base, "/decks/")
     page.locator(".container-actions button",
-                 has_text="📚 Manage Subjects").click()
+                 has_text="Manage Subjects").click()
     body = page.locator("#modal-body")
     # Add Subject stacks on top …
     body.locator("button", has_text="+ Add Subject").click()
@@ -535,7 +538,7 @@ def test_edit_subject_actions_open_the_same_modal(page, site_base, seeded):
     # container bar ✏️ Edit Subject (inside the subject)
     row.click()
     page.wait_for_selector(".container-actions", timeout=8000)
-    page.locator(".container-actions button", has_text="✏️ Edit Subject").click()
+    page.locator(".container-actions button", has_text="Edit Subject").click()
     expect(page.locator("#modal-title")).to_contain_text("Manage Subjects")
     expect(page.locator("#modal-body .subject-edit-row").first).to_be_visible()
     assert "/settings/" not in page.url
@@ -552,7 +555,7 @@ def test_ai_capture_go_to_settings_opens_new_tab_keeps_dialog(page, site_base,
     pages.goto_app(page, site_base, "/decks/")
     page.locator(".container-actions button", has_text="+ New Deck").click()
     expect(page.locator("#modal-title")).to_contain_text("Create New Deck")
-    page.locator("#modal-body button", has_text="✨ AI Capture").click()
+    page.locator("#modal-body button", has_text="AI Capture").click()
     go = page.locator("#modal-body button", has_text="Go to Settings")
     expect(go).to_be_visible()
     with context.expect_page() as new_page:
