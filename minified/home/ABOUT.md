@@ -1,4 +1,10 @@
-# CHANGELOG (last updated 23th October 2026, UTC)
+# CHANGELOG (last updated 24th October 2026, UTC)
+
+#### VERSION 2026.10.25-ALPHA	
+
+- security fixes
+- updated dependencies
+- quizlet removal due to scraping blocks
 
 #### VERSION 2026.10.24-ALPHA
 
