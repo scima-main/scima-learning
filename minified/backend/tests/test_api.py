@@ -416,61 +416,6 @@ def test_deck_internal_fields_not_promoted_to_metadata(client):
     assert export["deck"]["cards"][0]["back"] == "Hola"
 
 
-# ── /api/v1/import/quizlet (server-side Quizlet proxy) ──────────────────────
-
-class _StubUpstream:
-    def __init__(self, status=200, content=b'{"responses":[]}'):
-        self.status_code = status
-        self.content = content
-
-
-class _StubHttpClient:
-    captured = []
-
-    def __init__(self, **kwargs):
-        pass
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        return False
-
-    async def get(self, url, headers=None):
-        _StubHttpClient.captured.append((url, headers))
-        return _StubUpstream()
-
-
-def test_import_quizlet_proxies_upstream(client, monkeypatch):
-    from app import main as main_module
-    _StubHttpClient.captured = []
-    monkeypatch.setattr(main_module.httpx, "AsyncClient", _StubHttpClient)
-    r = client.get("/api/v1/import/quizlet", params={"set": "12345"})
-    assert r.status_code == 200
-    assert r.json() == {"responses": []}
-    url, headers = _StubHttpClient.captured[0]
-    assert "studiableContainerId%5D=12345" in url
-    assert "perPage=50" in url and "page=1" in url
-    assert headers["referer"] == "https://quizlet.com/12345/"
-
-
-def test_import_quizlet_rejects_non_numeric_set(client):
-    r = client.get("/api/v1/import/quizlet", params={"set": "abc"})
-    assert r.status_code == 422
-
-
-def test_import_quizlet_upstream_block_becomes_502(client, monkeypatch):
-    from app import main as main_module
-
-    class _Blocked(_StubHttpClient):
-        async def get(self, url, headers=None):
-            return _StubUpstream(status=403, content=b"")
-
-    monkeypatch.setattr(main_module.httpx, "AsyncClient", _Blocked)
-    r = client.get("/api/v1/import/quizlet", params={"set": "1"})
-    assert r.status_code == 502
-
-
 def test_meta_description_safety_net(client):
     """HTML served without a meta description gets the site default injected."""
     from fastapi.responses import HTMLResponse
@@ -555,3 +500,63 @@ def test_deeplink_rewrite_keeps_asset_404s_honest(client):
     r = client.get("/app/does-not-exist.js", follow_redirects=False)
     assert r.status_code == 404
     assert r.json() == {"detail": "Not Found"}
+
+
+# ── Security headers / Content-Security-Policy (review S1-S3 hardening) ──
+
+import base64 as _base64
+import hashlib as _hashlib
+import re as _re
+
+
+def _csp(response) -> str:
+    return response.headers.get("content-security-policy", "")
+
+
+def test_baseline_security_headers_on_html(client):
+    r = client.get("/")
+    assert r.status_code == 200
+    assert r.headers.get("x-content-type-options") == "nosniff"
+    assert r.headers.get("x-frame-options") == "DENY"
+    assert r.headers.get("referrer-policy") == "strict-origin-when-cross-origin"
+    assert "camera=()" in r.headers.get("permissions-policy", "")
+    csp = _csp(r)
+    assert "default-src 'self'" in csp
+    assert "object-src 'none'" in csp
+    assert "frame-ancestors 'none'" in csp
+    # script-src must stay strict: hashes only, never 'unsafe-inline'
+    script_src = csp.split("script-src", 1)[1].split(";", 1)[0]
+    assert "'unsafe-inline'" not in script_src
+    assert "'unsafe-eval'" not in csp
+
+
+def test_csp_hashes_cover_inline_page_script(client):
+    """Every page's one inline <script> (window.SCIMA_PAGE) must be covered
+    by a sha256 source hash, recomputed here independently of the
+    middleware — if the hashing regex or the pages drift apart, the app
+    would fail to boot in production, so this is a load-bearing test."""
+    for route in ("/", "/study/", "/library/", "/decks/"):
+        r = client.get(route)
+        assert r.status_code == 200, route
+        m = _re.search(rb"<script>(.*?)</script>", r.content, _re.S)
+        assert m, f"{route} should declare SCIMA_PAGE inline"
+        digest = _base64.b64encode(
+            _hashlib.sha256(m.group(1)).digest()).decode("ascii")
+        assert f"'sha256-{digest}'" in _csp(r), route
+
+
+def test_csp_on_json_has_no_hashes(client):
+    r = client.get("/api/v1/health")
+    assert r.headers.get("x-content-type-options") == "nosniff"
+    csp = _csp(r)
+    assert csp.startswith("default-src 'self'")
+    assert "sha256-" not in csp  # non-HTML bodies carry no inline scripts
+
+
+def test_hsts_only_behind_tls(client):
+    plain = client.get("/api/v1/health")
+    assert "strict-transport-security" not in plain.headers
+    tls = client.get(
+        "/api/v1/health", headers={"x-forwarded-proto": "https"})
+    assert tls.headers.get(
+        "strict-transport-security", "").startswith("max-age=31536000")

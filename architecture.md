@@ -215,20 +215,6 @@ copy-its-link button; and bootstrap's init() resolves the hash's FIRST path
 - **AI Capture** (Create Deck modal): talks to a *user-local*
   OpenAI-compatible server (`settings.aiEndpoint`, e.g. LM Studio) or
   builds a copy/paste prompt — never to the SCIMA backend.
-- **Quizlet import** (Create Deck modal, 🎴 tab): paste a set link; the
-  ported `quizlet-to-scima` pipeline paginates Quizlet's public
-  `studiable-item-documents` webapi, converts rich text/entities, maps
-  custom side labels by label-then-position, sends surplus sides to
-  `hint`, and runs every card through `sanitizeCard()` on create.
-  Quizlet sends no CORS headers and rejects shared public proxies, so
-  fetches walk a strategy chain: **1)** same-origin backend proxy
-  `GET /api/v1/import/quizlet?set=<digits>` (server-side httpx fetch with
-  browser-like headers, rate-limited 30/min, digits-only set id — no CORS
-  involved), **2)** optional user proxy template `settings.quizletProxy`
-  (`{url}` placeholder), **3)** direct, **4)** public CORS proxies as best
-  effort. The winning strategy locks for the whole paging walk. When every
-  path fails the tab offers a paste fallback: stamped scima JSON (e.g. the
-  `quizlet-to-scima.js` console helper) or tab-separated pairs.
 - **Arcade (hidden route)**: `/games/` (noindex, absent from nav until launch)
   hosts the Tier-0/0.5 game system: `shared/scima-games.js` holds the object
   catalog + pure reducer (`createGameSession`/`feedGameSession`), and

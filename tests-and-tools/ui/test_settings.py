@@ -186,11 +186,10 @@ def test_every_slider_and_select_survived(page, base_url, seeded):
            ).to_have_count(1)
     expect(page.locator("select[aria-label='Define target language']"),
            ).to_have_count(1)
-    # AI & Integrations keeps the LLM endpoint + the Quizlet proxy template
+    # AI & Integrations keeps the LLM endpoint
     card = page.locator("#view-settings .card",
                         has_text="AI & Integrations").first
     expect(card).to_contain_text("Server Address")
-    expect(card).to_contain_text("Quizlet proxy template")
     expect(card.locator("button", has_text="Test Connection")).to_have_count(1)
     # Library & Reading keeps the resume-position select
     expect(page.locator("#view-settings .card", has_text="Library & Reading")

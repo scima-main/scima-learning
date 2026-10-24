@@ -1502,7 +1502,7 @@ body{font-family:system-ui,sans-serif;background:#e5e7eb;padding:20px}
 </style></head><body>
 <div class="instr">
   <h1>${esc(deck.emoji)} ${esc(deck.name)}</h1>
-  <button class="pbtn" onclick="window.print()">&#128424; Print flashcards</button>
+  <button class="pbtn" id="sc-print-btn">&#128424; Print flashcards</button>
   <ol>
     <li>Click <b>Print flashcards</b> above (or Ctrl+P).</li>
     <li>Enable <b>Two-sided / Duplex</b> printing.</li>
@@ -1525,6 +1525,13 @@ ${pagesHtml}
     printTab.document.open();
     printTab.document.write(html);
     printTab.document.close();
+    // The print button's handler is attached here rather than as an inline
+    // onclick="" in the template: the about:blank popup inherits THIS
+    // document's CSP (script-src 'self' + per-page hashes), which forbids
+    // inline event handlers. Property assignment is not CSP-restricted.
+    // printTab.print() (not window.print()) so the POPUP prints itself.
+    const printBtn = printTab.document.getElementById('sc-print-btn');
+    if (printBtn) printBtn.onclick = () => { try { printTab.print(); } catch (e) { /* popup gone */ } };
     showToast(`Print preview ready — ${nOf(cards.length,'card')}, ${totalSheets} sheet${totalSheets!==1?'s':''} \uD83D\uDDA8\uFE0F`);
   } else {
     showToast('Popup blocked — allow popups for this page in Chrome', 5000);
@@ -2031,185 +2038,6 @@ function renderAICapture(wrap) {
     genControls, errEl, rawDetails, generatedSection);
 }
 
-// ── Quizlet import (port of the quizlet-to-scima.js console reference) ──────
-// Pastes of a set link are fetched from Quizlet's public studiable-item-documents
-// webapi. quizlet.com sends no CORS headers for cross-origin browsers, so the
-// direct attempt is followed by public CORS proxies until one answers.
-const QZ_NAMED_ENTITIES = {
-  amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",nbsp:' ',shy:'',ndash:'–',mdash:'—',
-  hellip:'…',lsquo:'‘',rsquo:'’',ldquo:'“',rdquo:'”',laquo:'«',raquo:'»',
-  euro:'€',pound:'£',yen:'¥',cent:'¢',deg:'°',times:'×',divide:'÷',plusmn:'±',
-  frac12:'½',frac14:'¼',frac34:'¾',sup2:'²',sup3:'³',micro:'µ',middot:'·',bull:'•',
-  dagger:'†',permil:'‰',prime:'′',trade:'™',copy:'©',reg:'®',sect:'§',para:'¶',
-  agrave:'à',aacute:'á',acirc:'â',atilde:'ã',auml:'ä',aring:'å',aelig:'æ',
-  egrave:'è',eacute:'é',ecirc:'ê',euml:'ë',igrave:'ì',iacute:'í',icirc:'î',iuml:'ï',
-  ograve:'ò',oacute:'ó',ocirc:'ô',otilde:'õ',ouml:'ö',oslash:'ø',ugrave:'ù',
-  uacute:'ú',ucirc:'û',uuml:'ü',yacute:'ý',yum:'ÿ',yuml:'ÿ',ntilde:'ñ',ccedil:'ç',
-  szlig:'ß',Agrave:'À',Aacute:'Á',Acirc:'Â',Atilde:'Ã',Auml:'Ä',Aring:'Å',AElig:'Æ',
-  Egrave:'È',Eacute:'É',Ecirc:'Ê',Euml:'Ë',Igrave:'Ì',Iacute:'Í',Icirc:'Î',Iuml:'Ï',
-  Ograve:'Ò',Oacute:'Ó',Ocirc:'Ô',Otilde:'Õ',Ouml:'Ö',Oslash:'Ø',Ugrave:'Ù',
-  Uacute:'Ú',Ucirc:'Û',Uuml:'Ü',Ntilde:'Ñ',Ccedil:'Ç',Yacute:'Ý',
-};
-function qzDecodeEntities(s) {
-  const str = String(s);
-  if (!str.includes('&')) return str;
-  try {
-    const ta = document.createElement('textarea');
-    ta.innerHTML = str;
-    return ta.value;
-  } catch (e) { /* fall through */ }
-  return str.replace(/&(#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]{1,31});/g, (m, body) => {
-    if (body[0] === '#') {
-      const hex = body[1] === 'x' || body[1] === 'X';
-      const code = parseInt(hex ? body.slice(2) : body.slice(1), hex ? 16 : 10);
-      return (Number.isFinite(code) && code > 0 && code <= 0x10ffff) ? String.fromCodePoint(code) : m;
-    }
-    return body in QZ_NAMED_ENTITIES ? QZ_NAMED_ENTITIES[body] : m;
-  });
-}
-function qzHtmlToText(html) {
-  const tagless = String(html)
-    .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, ' ')
-    .replace(/<\s*(?:br|\/\s*p|\/\s*div|\/\s*li|\/\s*h[1-6]|\/\s*tr|\/\s*blockquote)\s*\/?\s*>/gi, '\n')
-    .replace(/<[^>]*>/g, '');
-  return qzDecodeEntities(tagless).split('\n')
-    .map(l => l.replace(/[ \t\r\u00a0\u200b]+/g, ' ').trim()).filter(Boolean).join('\n');
-}
-function qzMediaText(m) {
-  if (!m || typeof m !== 'object') return '';
-  if (typeof m.plainText === 'string' && m.plainText.trim()) return m.plainText.trim();
-  if (m.richText) return qzHtmlToText(m.richText);
-  if (typeof m.ttsOnlyText === 'string' && m.ttsOnlyText.trim()) return m.ttsOnlyText.trim();
-  return '';
-}
-function qzSideText(side) { return (side?.media || []).map(qzMediaText).filter(Boolean).join('\n').trim(); }
-const QZ_FRONT_LABELS = new Set(['word','term','question','front','prompt']);
-const QZ_BACK_LABELS  = new Set(['definition','answer','back','meaning','response','solution']);
-function qzParseItem(item) {
-  const sides = Array.isArray(item?.cardSides) ? item.cardSides : [];
-  const profiled = sides.map((s, i) => ({ i, label: String(s?.label || '').trim().toLowerCase(), text: qzSideText(s) }));
-  const textual = profiled.filter(s => s.text);
-  let front = textual.find(s => QZ_FRONT_LABELS.has(s.label)) || null;
-  let back  = textual.find(s => s !== front && QZ_BACK_LABELS.has(s.label)) || null;
-  if (!front && !back) { front = textual.find(s => s.i === 0) || null; back = textual.find(s => s.i === 1) || null; }
-  else if (!front) { front = textual.find(s => s.i === 0 && s !== back) || null; }
-  else if (!back) { back = textual.find(s => s.i === 1 && s !== front) || textual.find(s => s !== front) || null; }
-  const extras = textual.filter(s => s !== front && s !== back);
-  return { front: front?.text || '', back: back?.text || '', extras: extras.map(s => s.text),
-           oneSided: !front?.text || !back?.text ? 1 : 0 };
-}
-function qzBuildCards(parsed, opts = {}) {
-  const { extras = 'hint', dedupe = false, type = 'basic', tags = [] } = opts;
-  const cards = []; const seen = new Set();
-  const meta = { items: parsed.length, cards: 0, duplicatesSkipped: 0, emptyDropped: 0, oneSided: 0 };
-  for (const p of parsed) {
-    if (!p.front && !p.back) { meta.emptyDropped++; continue; }
-    if (dedupe) {
-      const key = `${p.front}\u0000${p.back}`;
-      if (seen.has(key)) { meta.duplicatesSkipped++; continue; }
-      seen.add(key);
-    }
-    let back = p.back, hint = '';
-    if (p.extras.length) {
-      const joined = p.extras.join('\n');
-      if (extras === 'hint') hint = joined;
-      else if (extras === 'back') back = back ? `${back}\n${joined}` : joined;
-    }
-    const card = { type, front: p.front, back };
-    if (hint) card.hint = hint;
-    if (tags.length) card.tags = [...tags];
-    meta.oneSided += p.oneSided;
-    cards.push(card);
-  }
-  meta.cards = cards.length;
-  return { cards, meta };
-}
-async function qzFetchJson(url) {
-  const r = await fetch(url, { headers: { accept: 'application/json' }, credentials: 'omit' });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return await r.json();
-}
-/** Ordered fetch strategies for one Quizlet webapi page. Quizlet sends no
- *  CORS headers and its bot filtering rejects shared public proxies, so the
- *  same-origin backend proxy (/api/v1/import/quizlet, server-side fetch) is
- *  tried first; then a user-configured proxy (settings.quizletProxy,
- *  "{url}" placeholder); then direct; then public proxies as best effort. */
-function qzStrategies(id, pp, page, token) {
-  const qzUrl =
-    `https://quizlet.com/webapi/3.4/studiable-item-documents` +
-    `?filters%5BstudiableContainerId%5D=${id}&filters%5BstudiableContainerType%5D=1` +
-    `&perPage=${pp}&page=${page}` + (token ? `&pagingToken=${encodeURIComponent(token)}` : '');
-  const out = [];
-  const apiBase = window.SCIMA_API_BASE || '/api/v1';
-  out.push(['api', `${apiBase}/import/quizlet?set=${id}&page=${page}&perPage=${pp}`]);
-  const tpl = (typeof state !== 'undefined' && state.settings) ? state.settings.quizletProxy : null;
-  if (typeof tpl === 'string' && tpl.includes('{url}')) {
-    out.push(['userproxy', tpl.replace('{url}', encodeURIComponent(qzUrl))]);
-  }
-  out.push(['direct', qzUrl]);
-  out.push(['allorigins', `https://api.allorigins.win/raw?url=${encodeURIComponent(qzUrl)}`]);
-  out.push(['corsproxy', `https://corsproxy.io/?url=${encodeURIComponent(qzUrl)}`]);
-  return out;
-}
-async function qzFetchSet(id, opts = {}) {
-  const { perPage = 50, delay = 120, maxPages = 40 } = opts;
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-  let pp = perPage, page = 1, token = null, items = [], guard = 0, lockedName = null;
-  while (guard++ < maxPages) {
-    const candidates = qzStrategies(id, pp, page, token)
-      .filter(([name]) => !lockedName || name === lockedName);
-    let res = null, used = null, lastErr = null;
-    for (const [name, url] of candidates) {
-      try {
-        res = await qzFetchJson(url);
-        used = name;
-        break;
-      } catch (e) { lastErr = e; }
-    }
-    if (!res) {
-      // Some deployments cap perPage; retry the whole walk at 5.
-      if (page === 1 && pp !== 5) { pp = 5; page = 1; token = null; items = []; guard = 1; lockedName = null; continue; }
-      throw lastErr || new Error('fetch failed');
-    }
-    lockedName = used;                 // stick with whatever worked for page 1
-    const r0 = res?.responses?.[0];
-    if (!r0?.models) throw new Error('Unexpected Quizlet response shape — the API may have changed.');
-    const chunk = r0.models.studiableItem || [];
-    items.push(...chunk);
-    token = r0.paging?.token ?? null;
-    if (!chunk.length || !token) break;
-    page++;
-    if (delay) await sleep(delay);
-  }
-  return items;
-}
-/** Paste fallback: scima JSON (e.g. quizlet-to-scima.js console output) or
- *  tab-separated term/definition lines. Returns {name, cards}. */
-function qzParsePasted(raw) {
-  const text = String(raw || '').trim();
-  if (!text) return null;
-  if (text[0] === '{' || text[0] === '[') {
-    const data = JSON.parse(text);                       // throws → caller shows ❌
-    const norm = (typeof scimaToFullDeck === 'function') ? scimaToFullDeck(data) : null;
-    const deck = norm || data.deck || data;
-    if (!deck || !Array.isArray(deck.cards)) throw new Error('JSON has no deck.cards');
-    return { name: deck.name || '', cards: deck.cards };
-  }
-  const cards = [];
-  for (const line of text.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    const parts = line.split('\t');
-    if (parts.length < 2) continue;
-    const [front, back, ...rest] = parts.map(s => s.trim());
-    if (!front && !back) continue;
-    const card = { type: 'basic', front, back };
-    if (rest.length) card.hint = rest.join('\n');
-    cards.push(card);
-  }
-  if (!cards.length) throw new Error('No tab-separated pairs found');
-  return { name: '', cards };
-}
-
 function openCreateDeckModal(subjectKey, folderId) {
   openModal('Create New Deck', body => {
     // Tab bar
@@ -2218,8 +2046,7 @@ function openCreateDeckModal(subjectKey, folderId) {
     const tabImport = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('import')},scLbl('upload',' Import JSON'));
     const tabText   = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('text')},scLbl('file-text',' Import Text'));
     const tabAI     = el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('ai')},scLbl('sparkles',' AI Capture'));
-    const tabQuizlet= el('button',{style:'flex:1;padding:8px;font-size:12px;font-weight:700;font-family:inherit;border:none;cursor:pointer;background:rgba(255,255,255,0.06);color:var(--muted)',onclick:()=>switchDeckTab('quizlet')},scLbl('cards',' Quizlet'));
-    tabBar.append(tabCreate, tabImport, tabText, tabAI, tabQuizlet);
+    tabBar.append(tabCreate, tabImport, tabText, tabAI);
     body.appendChild(tabBar);
 
     // --- Community deck browser link ---
@@ -2445,7 +2272,7 @@ function openCreateDeckModal(subjectKey, folderId) {
       return null;
     }
 
-    // ── Spreadsheet pasting (Quizlet-style importer) ──────────────────
+    // ── Spreadsheet pasting (grid importer) ──────────────────
     // Copy/paste from LibreOffice/Excel/Sheets arrives as a quoted-CSV-ish
     // grid (tabs from the clipboard, commas from .csv). splitSheetRows()
     // parses it properly (quoted fields, doubled quotes, newlines inside
@@ -2590,7 +2417,12 @@ function openCreateDeckModal(subjectKey, folderId) {
         document.head.appendChild(s);
       });
       pdfjsLib.GlobalWorkerOptions.workerSrc = assetUrl('lib/pdf.worker.min.js');
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      // isEvalSupported:false — CVE-2024-4367 mitigation: the vendored pdf.js
+      // 3.11 legacy branch never received the upstream eval-removal patch
+      // (GHSA-wgrm-67xf-hhpq, patched 4.2.x only), and the default eval path
+      // lets a crafted PDF execute attacker JS in this origin. Keep disabled
+      // on every getDocument() call site until the bundle upgrades to 4.x.
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, isEvalSupported: false }).promise;
 
       // Collect all text items with position across all pages
       const allItems = [];
@@ -2703,73 +2535,7 @@ function openCreateDeckModal(subjectKey, folderId) {
     const aiPane = el('div',{style:'display:none'});
     let aiBuilt = false;
 
-    // --- Quizlet import pane ---
-    const quizletPane = el('div',{style:'display:none'});
-    const qzLinkField = createField('Quizlet set link','text','https://quizlet.com/123456789/set-slug');
-    const qzNameField = createField('Deck Name (optional override)','text','Leave empty for "Quizlet set <id>"');
-    const qzDedupe = el('input',{type:'checkbox',style:'width:15px;height:15px;accent-color:var(--blue);cursor:pointer'});
-    const qzExtrasSel = el('select',{class:'u-input',style:'width:auto'});
-    [['hint','Extra sides → hint'],['back','Extra sides → back'],['drop','Drop extra sides']]
-      .forEach(([v,t])=>qzExtrasSel.appendChild(el('option',{value:v,class:'u-bg'},t)));
-    const qzStatus = el('div',{style:'font-size:12px;color:var(--muted);margin:8px 0;min-height:18px'});
-    const qzFetchBtn = btn('Fetch & Preview','ghost',{full:true});
-    const qzCreateBtn = btn('Create Deck','primary',{full:true});
-    qzCreateBtn.style.display='none';
-    let qzParsed = null;
-    qzFetchBtn.addEventListener('click', async () => {
-      const link = qzLinkField.querySelector('input').value.trim();
-      const id = (link.match(/\/(\d+)(?:\/|$)/) || [])[1] || (/^\d+$/.test(link) ? link : null);
-      if(!id){ qzStatus.innerHTML='<span style="color:#ef4444">Paste a Quizlet set link — quizlet.com/&lt;id&gt;/…</span>'; return; }
-      qzStatus.textContent='Fetching set…'; qzFetchBtn.disabled=true; qzCreateBtn.style.display='none'; qzParsed=null;
-      try {
-        const items = await qzFetchSet(id);
-        const built = qzBuildCards(items.map(qzParseItem), { extras: qzExtrasSel.value, dedupe: qzDedupe.checked });
-        if(!built.cards.length){ qzStatus.innerHTML='<span style="color:#ef4444">No text cards found in this set.</span>'; return; }
-        qzParsed = { id, ...built };
-        qzStatus.innerHTML=`<span style="color:#22c55e">✓ ${built.cards.length} card${built.cards.length>1?'s':''} ready`
-          + (built.meta.oneSided?` · ${built.meta.oneSided} one-sided`:'')
-          + (built.meta.duplicatesSkipped?` · ${built.meta.duplicatesSkipped} dupes skipped`:'') + `</span>`;
-        qzCreateBtn.style.display='';
-      } catch(err){
-        qzStatus.innerHTML=`<span style="color:#ef4444">❌ ${escHtml((err && err.message) || 'fetch failed')} — Quizlet blocks most browser fetch paths. `
-          + `Set a proxy in Settings, or paste exported JSON / TSV below.</span>`;
-      } finally { qzFetchBtn.disabled=false; }
-    });
-    const qzPasteField = createField('…or paste exported JSON / TSV (term ⇥ definition per line)','text','Paste quizlet-to-scima JSON or TSV lines…',true);
-    const qzPasteBtn = btn('Use pasted data','ghost',{full:true,onclick:()=>{
-      try {
-        const parsed = qzParsePasted(qzPasteField.querySelector('textarea').value);
-        if(!parsed || !parsed.cards.length){ qzStatus.innerHTML='<span style="color:#ef4444">Nothing parseable in the paste.</span>'; return; }
-        qzParsed = { id: 'pasted', name: parsed.name, cards: parsed.cards, meta: { cards: parsed.cards.length } };
-        qzStatus.innerHTML=`<span style="color:#22c55e">✓ ${parsed.cards.length} card${parsed.cards.length>1?'s':''} from paste</span>`;
-        qzCreateBtn.style.display='';
-      } catch(err){
-        qzStatus.innerHTML=`<span style="color:#ef4444">❌ ${escHtml((err && err.message) || 'unparseable paste')}</span>`;
-      }
-    }});
-    qzCreateBtn.addEventListener('click', () => {
-      if(!qzParsed) return;
-      const override = qzNameField.querySelector('input').value.trim();
-      const deck = sanitizeDeck({
-        name: override || qzParsed.name || `Quizlet set ${qzParsed.id}`,
-        emoji: 'cards',
-        subject: subjectKey || DEFAULT_SUBJECT_KEY,
-        folderId: folderId || null,
-        cards: qzParsed.cards.map(c=>sanitizeCard(c)),
-      });
-      state.decks.push(deck);
-      scheduleSave(); checkAchievements(); closeModal(); renderView('decks');
-      showToast(`Imported "${deck.name}" from Quizlet — ${nOf(deck.cards.length,'card')} 🎴`);
-    });
-    quizletPane.append(qzLinkField, qzNameField,
-      el('div',{style:'display:flex;gap:14px;align-items:center;margin:4px 0 8px'},
-        el('label',{style:'font-size:12px;font-weight:700;display:flex;gap:6px;align-items:center;cursor:pointer'},qzDedupe,'Skip duplicates'),
-        el('label',{style:'font-size:12px;font-weight:700;display:flex;gap:6px;align-items:center'},'Extras:',qzExtrasSel)),
-      qzFetchBtn, qzStatus, qzCreateBtn,
-      el('div',{style:'border-top:1px solid var(--border);margin-top:14px;padding-top:12px'}),
-      qzPasteField, qzPasteBtn);
-
-    body.append(createPane, importPane, textPane, aiPane, quizletPane);
+    body.append(createPane, importPane, textPane, aiPane);
 
     function switchDeckTab(t) {
       const activeStyle='background:var(--blue);color:#fff';
@@ -2779,12 +2545,10 @@ function openCreateDeckModal(subjectKey, folderId) {
       tabImport.style.cssText=tabStyle+(t==='import'?activeStyle:inactiveStyle);
       tabText.style.cssText  =tabStyle+(t==='text'  ?activeStyle:inactiveStyle);
       tabAI.style.cssText    =tabStyle+(t==='ai'    ?activeStyle:inactiveStyle);
-      tabQuizlet.style.cssText=tabStyle+(t==='quizlet'?activeStyle:inactiveStyle);
       createPane.style.display=t==='create'?'':'none';
       importPane.style.display=t==='import'?'':'none';
       textPane.style.display  =t==='text'  ?'':'none';
       aiPane.style.display    =t==='ai'    ?'':'none';
-      quizletPane.style.display=t==='quizlet'?'':'none';
       if (t==='ai' && !aiBuilt) { aiBuilt=true; renderAICapture(aiPane); }
     }
   });

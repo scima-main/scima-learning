@@ -1,4 +1,4 @@
-"""Create Deck → Import Text: spreadsheet pasting (Quizlet-style importer).
+"""Create Deck → Import Text: spreadsheet pasting (grid importer).
 
 Tabs from a LibreOffice/Excel copy, commas from .csv — auto-detected grid,
 column mapping, header-row skip. Lives in site/home until re-minified.

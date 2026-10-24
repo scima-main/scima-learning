@@ -15,7 +15,7 @@
    phone widths — see dashboard.css). The same regrouping that used to live
    in "Algorithm & Notifications" + one giant "Study & Accessibility" card is
    now split by domain: scheduling/SRS knobs in Study, the display & sound
-   assist toggles in Accessibility, LLM + Quizlet-proxy integrations in AI,
+   assist toggles in Accessibility, LLM integrations in AI,
    and the reader's language/definition options in Library. The Theme
    Schedule became a subsection of Appearance & Theme.
 
@@ -440,7 +440,7 @@ function renderSettings(c) {
       return wrap;
     })());
 
-  // ── 6. 🤖 AI & Integrations — the local LLM endpoint + Quizlet proxy ──────
+  // ── 6. 🤖 AI & Integrations — the local LLM endpoint ──────
   const aiCard=el('div',{class:'card',style:'padding:20px'},
     panelHeader(scLbl('robot','AI & Integrations'),'ai','var(--blue)'),
     el('div',{style:'font-size:12px;color:var(--muted);margin-bottom:14px'},'AI Card Generation: generate flashcards from pasted text using a local LLM server on your own machine — nothing is sent to a hosted API, and there\u2019s no API key to store. Works with LM Studio, Ollama\u2019s OpenAI-compatible endpoint, llama.cpp server, or anything else that speaks the OpenAI chat-completions format.')
@@ -475,17 +475,6 @@ function renderSettings(c) {
     el('div',{style:'padding-top:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap'},testBtn,testStatus)
   );
 
-  aiCard.appendChild(el('div',{style:'border-top:1px solid rgba(255,255,255,0.05);margin:16px 0 2px'}));
-  // ── Optional Quizlet proxy template (fallback when every built-in fetch path is blocked) ──
-  const proxyWrap=el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'});
-  const proxyInput=el('input',{type:'text',class:'u-input','aria-label':'Quizlet proxy template URL',placeholder:'https://my-proxy.example/?url={url}',style:'margin-top:6px'});
-  proxyInput.value=state.settings.quizletProxy||'';
-  proxyInput.addEventListener('change',()=>{ state.settings.quizletProxy=proxyInput.value.trim(); scheduleSave(); });
-  proxyWrap.append(
-    el('div',{style:'font-size:13px;font-weight:600'},scLbl('shuffle','Quizlet proxy template (optional)')),
-    el('div',{style:'font-size:11px;color:var(--muted);margin:2px 0 6px'},'If Quizlet blocks the built-in server proxy, route webapi calls through your own proxy. {url} is replaced with the encoded Quizlet request.'),
-    proxyInput);
-  aiCard.appendChild(proxyWrap);
   // ✍️ Scratchpad defaults (spec §32) — persisted under state.settings.scratch
   // via dashboard-scratchpad.js's spSetting()/spSetSetting() (loaded before
   // this file on the settings route). Guarded so a stale cache without the

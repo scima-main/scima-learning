@@ -18,5 +18,5 @@
     { "pause": 800 },
     { "assert": { "js": "studySession.reverse", "equals": true } }
   ],
-  "output": "screenshots/12-reverse-study.png"
+  "output": "screenshots/11-reverse-study.png"
 }

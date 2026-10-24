@@ -16,6 +16,56 @@
    the epub parser's bundled path-resolution code expects) to be loaded
    before this file — see dashboard.html's script order. */
 
+/* ── Book-HTML sanitizer (S2 hardening) ────────────────────────────────
+   EPUB/MOBI spine parts are third-party HTML: a shared or downloaded ebook
+   is untrusted input exactly like a community deck, but unlike card text it
+   arrives as full markup. The old pass removed only script/style/nav/head,
+   which left every *inline event handler* (<img onerror=…>, <svg onload=…>),
+   every script-bearing embed (<iframe srcdoc>, <object>, <embed>) and every
+   javascript:/vbscript: URL alive — and buildPartDiv() injects the result
+   with innerHTML, so a crafted book executed arbitrary JS in this origin
+   (full read/write access to localStorage). This sanitizer is the single
+   place book markup is disarmed:
+
+     1. drop container/embed tags outright (script, style, nav, head, iframe,
+        object, embed, applet, frame/frameset, meta, link, base) plus form
+        elements (form/input/button/select/textarea) so a book can neither
+        run code nor spoof app UI with a phishing form;
+     2. strip EVERY on* attribute (inline event handlers) from all elements,
+        including SVG/MathML namespaced ones;
+     3. neuter script-bearing URL schemes (javascript:, vbscript:,
+        data:text/html) in any URL-valued attribute, and srcdoc;
+     4. leave everything else alone — class/style/colspan/id/etc. carry the
+        book's layout and must survive for a readable page.
+
+   data:image/… src values are deliberately kept: EPUBs embed their art as
+   data: URLs and buildPartDiv() re-attaches them post-insertion.
+   Top-level (global) on purpose so the browser test suite can unit-test it
+   from /library/ via page.evaluate. */
+const SC_BOOK_URL_ATTRS = new Set(['href', 'src', 'xlink:href', 'action', 'formaction',
+  'data', 'poster', 'background', 'srcset', 'dynsrc', 'lowsrc', 'codebase', 'usemap', 'ping']);
+function scSanitizeBookDom(parsed) {
+  if (!parsed || typeof parsed.querySelectorAll !== 'function') return parsed;
+  parsed.querySelectorAll(
+    'script,style,nav,head,iframe,object,embed,applet,frame,frameset,' +
+    'meta,link,base,form,input,button,select,textarea'
+  ).forEach(n => n.remove());
+  parsed.querySelectorAll('*').forEach(node => {
+    for (const attr of Array.from(node.attributes || [])) {
+      const name = attr.name.toLowerCase();
+      if (name.startsWith('on')) { node.removeAttribute(attr.name); continue; }
+      if (name === 'srcdoc') { node.removeAttribute(attr.name); continue; }
+      if (SC_BOOK_URL_ATTRS.has(name) || name.endsWith(':href')) {
+        const val = String(attr.value || '').trim().toLowerCase();
+        if (val.startsWith('javascript:') || val.startsWith('vbscript:') || val.startsWith('data:text/html')) {
+          node.removeAttribute(attr.name);
+        }
+      }
+    }
+  });
+  return parsed;
+}
+
 async function extractPDFText(file) {
   if(!window.pdfjsLib){
     await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=assetUrl('lib/pdf.min.js'); s.onload=res; s.onerror=rej; document.head.appendChild(s); });
@@ -24,7 +74,17 @@ async function extractPDFText(file) {
   const buf=await file.arrayBuffer();
   if(!buf || buf.byteLength === 0) throw new Error('File appears to be empty');
   let pdf;
-  try { pdf=await window.pdfjsLib.getDocument({data:buf}).promise; }
+  // isEvalSupported:false — CVE-2024-4367 mitigation (PDF.js arbitrary JS
+  // execution). The vendored pdf.js is the 3.11 legacy branch; the eval-based
+  // font glyph compilation path (advisory GHSA-wgrm-67xf-hhpq, affected
+  // <=4.1.392, patched 4.2.x only) never received the upstream patch on it.
+  // With the default (true) a crafted PDF's font glyphs are compiled through
+  // eval() and execute attacker JS in THIS ORIGIN — which owns every deck and
+  // review history in localStorage. Disabling eval routes glyph rendering
+  // through the safe canvas path; the advisory lists this as the official
+  // workaround. Keep it false on every getDocument() call site until the
+  // vendored bundle is upgraded to pdf.js 4.x.
+  try { pdf=await window.pdfjsLib.getDocument({data:buf, isEvalSupported:false}).promise; }
   catch(e){ throw new Error('PDF could not be parsed: '+(e?.message||String(e)||'unknown error')); }
   let text='';
   for(let i=1;i<=pdf.numPages;i++){ const page=await pdf.getPage(i); const content=await page.getTextContent(); text+=content.items.map(x=>x.str).join(' ')+'\n'; }
@@ -1848,7 +1908,11 @@ function openLibraryReader(sourceId) {
       const data = atob(dataUrl.split(',')[1]);
       const buf = new Uint8Array(data.length);
       for (let i = 0; i < data.length; i++) buf[i] = data.charCodeAt(i);
-      pdfDoc = await window.pdfjsLib.getDocument({ data: buf }).promise;
+      // isEvalSupported:false — CVE-2024-4367 mitigation (see the matching
+      // comment at the text-extraction getDocument call above): the vendored
+      // 3.11 legacy pdf.js has no upstream eval-removal patch, so eval must
+      // stay disabled or a crafted PDF executes JS in this origin.
+      pdfDoc = await window.pdfjsLib.getDocument({ data: buf, isEvalSupported: false }).promise;
       await loadMorePdfPages();
       setupPdfScrollSync();
     })();
@@ -1905,7 +1969,7 @@ function openLibraryReader(sourceId) {
       partDiv.style.cssText = 'margin-bottom:2em;';
       partDiv.dataset.partId = part.id;
       const parsed = new DOMParser().parseFromString(part.html || '', 'text/html');
-      parsed.querySelectorAll('script,style,nav,head').forEach(n => n.remove());
+      scSanitizeBookDom(parsed);
       // Stash data: src values before innerHTML — CSP blocks data: URLs during re-parse
       const imgSrcs = [];
       parsed.querySelectorAll('img').forEach((img, i) => {

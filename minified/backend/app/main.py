@@ -1,5 +1,8 @@
+import base64
+import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import tempfile
@@ -7,7 +10,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Sequence
 
-import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -95,6 +97,106 @@ async def redirect_http_to_https(request: Request, call_next):
         return RedirectResponse(url=str(request.url.replace(scheme="https")),
                                 status_code=301)
     return await call_next(request)
+
+
+# ── Security headers + Content-Security-Policy ─────────────────────────
+# Registered here (i.e. INSIDE GZipMiddleware, which is added below) so the
+# HTML body it hashes is still plaintext.
+#
+# Why hashed script-src instead of 'unsafe-inline': every page carries exactly
+# ONE parser-inserted inline <script> (the window.SCIMA_PAGE declaration) and
+# nothing else — no inline event handlers, no eval, no document.write into the
+# app document (the print-preview popup writes its own document and attaches
+# its button listener via property assignment for exactly this reason).
+# Hashing the inline blocks at response time keeps the policy strict
+# (injected <script> tags and on* handlers fail closed) without breaking any
+# page, and survives edits because the hash is recomputed per response.
+#
+# Directive rationale (see repo review S3):
+#   style-src needs 'unsafe-inline' — card/deck markup and the print sheet
+#     carry style="" attributes and a <style> block; KaTeX emits none but the
+#     app's innerHTML templates do. Google Fonts stylesheet is allowlisted.
+#   img-src data:/blob: — EPUB art is re-attached as data: URLs, deck/card
+#     images and exports ride blob: URLs.
+#   connect-src — same-origin API plus the fonts preconnects and the
+#     Define/Translate endpoints the client actually calls.
+#   worker-src blob: — pdf.js may fall back to a blob-URL worker.
+#   object-src/frame-ancestors 'none' — no plugins, no clickjacking;
+#     X-Frame-Options mirrors frame-ancestors for pre-CSP2 clients.
+_INLINE_SCRIPT_RE = re.compile(
+    rb"<script(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script>", re.S | re.I)
+
+_CSP_TEMPLATE = (
+    "default-src 'self'; "
+    "script-src 'self'{hashes}; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src 'self' data: https://fonts.gstatic.com; "
+    "img-src 'self' data: blob:; "
+    "connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com "
+    "https://translate.googleapis.com https://api.dictionaryapi.dev; "
+    "worker-src 'self' blob:; "
+    "media-src 'self' blob:; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
+
+def _csp_policy(inline_script_hashes: Sequence[str]) -> str:
+    hashes = "".join(f" 'sha256-{h}'" for h in inline_script_hashes)
+    return _CSP_TEMPLATE.format(hashes=hashes)
+
+
+def _inline_script_hashes(body: bytes) -> list[str]:
+    return [
+        base64.b64encode(hashlib.sha256(code).digest()).decode("ascii")
+        for code in _INLINE_SCRIPT_RE.findall(body)
+    ]
+
+
+def _apply_security_headers(headers, csp: str, forwarded_proto: str) -> None:
+    headers["Content-Security-Policy"] = csp
+    headers["X-Content-Type-Options"] = "nosniff"
+    headers["X-Frame-Options"] = "DENY"
+    headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=(), payment=()")
+    # HSTS is only honoured by browsers over HTTPS, so emitting it
+    # unconditionally is safe for plain-http dev uvicorn; behind Cloudflare
+    # the edge proto tells us the client really used TLS.
+    if forwarded_proto == "https":
+        headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains")
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Attach the CSP + baseline security headers to every response. HTML
+    responses are buffered (they are small static pages) so inline <script>
+    blocks can be sha256-hashed into script-src; everything else passes
+    through untouched apart from the headers."""
+    response = await call_next(request)
+    ctype = response.headers.get("content-type", "")
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+
+    if "text/html" in ctype and response.status_code < 400:
+        body = b""
+        async for chunk in response.body_iterator:
+            body += chunk
+        csp = _csp_policy(_inline_script_hashes(body))
+        headers = dict(response.headers)
+        headers.pop("content-length", None)
+        _apply_security_headers(headers, csp, proto)
+        return Response(
+            content=body,
+            status_code=response.status_code,
+            headers=headers,
+            media_type=ctype.split(";")[0],
+        )
+
+    _apply_security_headers(response.headers, _csp_policy(()), proto)
+    return response
 
 
 # ── Middleware ───────────────────────────────────────────────────────
@@ -713,50 +815,6 @@ def export_deck(
         )
 
     return export_data
-
-
-@app.get("/api/v1/import/quizlet")
-async def proxy_quizlet(
-    request: Request,
-    set_id: str = Query(..., alias="set", pattern=r"^[0-9]{1,20}$"),
-    page: int = Query(1, ge=1, le=1000),
-    per_page: int = Query(50, ge=1, le=200),
-):
-    """Same-origin proxy for Quizlet's public studiable-item-documents webapi.
-
-    Browsers cannot call quizlet.com cross-origin (no CORS headers), and
-    Quizlet's bot filtering rejects shared public proxies (403/522/401), so
-    the Create-Deck → 🎴 Quizlet tab calls this endpoint first and the
-    SERVER fetches with browser-like headers. The payload is passed through
-    verbatim; upstream failures surface as 502 so the client can fall back
-    to its other strategies (user proxy, direct, paste).
-    """
-    enforce_rate_limit(request, "quizlet")
-    url = (
-        "https://quizlet.com/webapi/3.4/studiable-item-documents"
-        f"?filters%5BstudiableContainerId%5D={set_id}"
-        "&filters%5BstudiableContainerType%5D=1"
-        f"&perPage={per_page}&page={page}"
-    )
-    headers = {
-        "user-agent": (
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        ),
-        "accept": "application/json, text/plain, */*",
-        "accept-language": "en-US,en;q=0.9",
-        "referer": f"https://quizlet.com/{set_id}/",
-    }
-    try:
-        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
-            upstream = await client.get(url, headers=headers)
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502,
-                           detail=f"Quizlet unreachable: {type(exc).__name__}")
-    if upstream.status_code != 200:
-        raise HTTPException(status_code=502,
-                           detail=f"Quizlet answered HTTP {upstream.status_code}")
-    return Response(content=upstream.content, media_type="application/json")
 
 
 # ── Packs directory listing (hidden /packs/ page) ─────────────────────────
