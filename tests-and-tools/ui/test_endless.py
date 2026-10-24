@@ -202,3 +202,71 @@ def test_endless_xp_full_then_half_no_reschedule(page, base_url, seeded):
 
     assert page.evaluate(snap) == sched_before, "endless never reschedules"
     assert page.evaluate("() => state.adaptive.samples") >= 5
+
+
+def _exit_and_open_history(page):
+    page.get_by_role("button", name="Exit").click()
+    page.wait_for_timeout(300)
+    page.locator("#session-history-toggle").click()
+    page.wait_for_timeout(200)
+
+
+def test_endless_resume_rebuilds_phase_machine(page, base_url, seeded):
+    _seed_capitals(seeded)
+    pages.goto_app(page, base_url, "/study/")
+    page.locator("#view-study .card", has_text="Endless Drill").first \
+        .get_by_role("button", name="Start unchunked").click()
+    page.wait_for_selector("#view-study .flashcard-front-text")
+    # answer two of four MC cards correctly, then bail mid-phase
+    for _ in range(2):
+        page.wait_for_timeout(400)
+        f = _question(page)
+        page.get_by_role("button", name=dict(CARDS)[f], exact=True).first.click()
+        _next(page)
+    answered = page.evaluate("() => Object.keys(studySession._xpGranted || {})")
+    _exit_and_open_history(page)
+
+    row = page.locator("#session-history-panel .card", has_text="Endless").first
+    expect(row).to_be_visible()
+    row.get_by_role("button", name="Resume").click()
+    page.wait_for_selector("#view-study .flashcard-front-text")
+    st = page.evaluate("""() => ({ mode: studySession.mode, phase: studySession.endless.phase,
+        queue: studySession.queue.length, idx: studySession.idx,
+        correct: studySession.stats.correct,
+        xpKeys: Object.keys(studySession._xpGranted || {}),
+        label: document.querySelector('#view-study .ui-action-bar span').textContent })""")
+    assert st["mode"] == "endless" and st["phase"] == "mc"
+    assert st["queue"] == 4 and st["idx"] == 2          # pending list + walk position restored
+    assert st["correct"] == 2                            # stats carried over
+    assert sorted(st["xpKeys"]) == sorted(answered)      # XP grants not re-paid
+    assert "Multiple choice" in st["label"] and "round 1" in st["label"]
+
+    # finishing the resumed MC pass advances to gaps as usual
+    for _ in range(2):
+        page.wait_for_timeout(400)
+        f = _question(page)
+        page.get_by_role("button", name=dict(CARDS)[f], exact=True).first.click()
+        _next(page)
+    assert "Fill in the gaps" in _label(page)
+
+
+def test_endless_repeat_restarts_from_scratch(page, base_url, seeded):
+    _seed_capitals(seeded)
+    pages.goto_app(page, base_url, "/study/")
+    page.locator("#view-study .card", has_text="Endless Drill").first \
+        .get_by_role("button", name="Start unchunked").click()
+    page.wait_for_selector("#view-study .flashcard-front-text")
+    page.wait_for_timeout(400)
+    f = _question(page)
+    page.get_by_role("button", name=dict(CARDS)[f], exact=True).first.click()
+    _next(page)
+    _exit_and_open_history(page)
+    row = page.locator("#session-history-panel .card", has_text="Endless").first
+    row.get_by_role("button", name="Repeat", exact=True).click()
+    page.wait_for_selector("#view-study .flashcard-front-text")
+    st = page.evaluate("""() => ({ phase: studySession.endless.phase,
+        queue: studySession.queue.length, done: Object.keys(studySession.endless.done).length,
+        xp: Object.keys(studySession._xpGranted || {}).length,
+        correct: studySession.stats.correct })""")
+    assert st["phase"] == "mc" and st["queue"] == 4
+    assert st["done"] == 0 and st["xp"] == 0 and st["correct"] == 0

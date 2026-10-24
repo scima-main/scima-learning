@@ -335,6 +335,19 @@ function pushSessionLog(sess, elapsed, status = 'complete') {
     ? Math.round(flipTimes.reduce((a, b) => a + b, 0) / flipTimes.length)
     : null;
 
+  // Endless sessions carry their whole phase machine (chunk id-lists,
+  // phase, round/cycle, mastery + repush sets) so Resume/Repeat can rebuild
+  // it. Capped: scopes whose chunk id-lists exceed 600 ids become stats-only
+  // entries (Resume then says so instead of half-rebuilding).
+  const endlessSnap = sess.endless ? {
+    variant: sess.endless.variant, chunkSize: sess.endless.chunkSize,
+    chunks: (sess.endless.chunks || []).map(cs => (cs || []).map(c => c.id)).filter(ids => ids.length),
+    chunkIdx: sess.endless.chunkIdx || 0, phase: sess.endless.phase || 'mc',
+    round: sess.endless.round || 1, cycle: sess.endless.cycle || 0,
+    pending: (sess.endless.pending || []).map(c => c.id),
+    repush: (sess.endless.repush || []).map(c => c.id),
+    done: Object.keys(sess.endless.done || {}),
+  } : undefined;
   const entry = {
     ts: Date.now(),
     id: (typeof uid === 'function') ? uid('sess') : `sess_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
@@ -345,6 +358,8 @@ function pushSessionLog(sess, elapsed, status = 'complete') {
     // older entries keep their stats but lose replayability (trimmed below).
     idx: sess.idx || 0,
     queueIds: (sess.queue || []).map(c => c.id).slice(0, 200),
+    endless: endlessSnap && endlessSnap.chunks.flat().length <= 600 ? endlessSnap : undefined,
+    xpGranted: sess._xpGranted && Object.keys(sess._xpGranted).length ? sess._xpGranted : undefined,
     // every answer with its correct-ness ({id, r, ok, ms}) — powers
     // "Repeat wrong (N)"; trimmed together with queueIds below
     answers: (sess.answers || []).slice(0, 500),
@@ -390,7 +405,7 @@ function pushSessionLog(sess, elapsed, status = 'complete') {
   // Keep replay data for only the newest 40 sessions; older rows remain as
   // stats-only history (Analytics needs the numbers, not the queues).
   const withQ = state.sessionLog.filter(e => e.queueIds);
-  if (withQ.length > 40) withQ.slice(40).forEach(e => { delete e.queueIds; delete e.scope; delete e.answers; });
+  if (withQ.length > 40) withQ.slice(40).forEach(e => { delete e.queueIds; delete e.scope; delete e.answers; delete e.endless; delete e.xpGranted; });
   scheduleSave();
 }
 
@@ -453,6 +468,45 @@ function startSessionFromEntry(entry, resume, onlyWrong = false) {
     _keystrokes:0, _charsTyped:0, _backspaces:0, _timeouts:0,
     answers: [],
     _gap: mode==='gaps' ? {correct:0,close:0,wrong:0} : null };
+  if (mode === 'endless') {
+    const E = entry.endless;
+    if (!E || !Array.isArray(E.chunks)) {
+      showToast('That endless session is too large to replay — start a new drill');
+      studySession = null; return false;
+    }
+    const byId = new Map(state.decks.flatMap(d => d.cards).map(c => [c.id, c]));
+    const mapIds = ids => (ids || []).map(id => byId.get(id)).filter(Boolean);
+    let chunks = E.chunks.map(mapIds).filter(cs => cs.length);
+    let variant = E.variant === 'plain' ? 'plain' : 'chunked';
+    if (onlyWrong) { chunks = [cards]; variant = 'plain'; }   // wrong-only replay drills one part
+    if (!chunks.length) { showToast('Those cards no longer exist'); studySession = null; return false; }
+    const fresh = !resume || onlyWrong;
+    const done = {};
+    if (!fresh) (E.done || []).forEach(id => { if (byId.has(id)) done[id] = true; });
+    studySession.endless = {
+      variant, chunkSize: E.chunkSize || state.settings.endlessChunk || 10,
+      chunks,
+      chunkIdx: fresh ? 0 : Math.min(E.chunkIdx || 0, chunks.length - 1),
+      phase: fresh ? 'mc' : (['mc','gaps','written','endless'].includes(E.phase) ? E.phase : 'mc'),
+      round: fresh ? 1 : (E.round || 1),
+      cycle: fresh ? 0 : (E.cycle || 0),
+      pending: [], repush: fresh ? [] : mapIds(E.repush), done,
+    };
+    studySession._xpGranted = (!fresh && entry.xpGranted && typeof entry.xpGranted === 'object') ? entry.xpGranted : {};
+    studySession.exam = false; studySession.timed = false;
+    if (fresh) {
+      scEndlessSetupPhase(studySession);
+    } else {
+      // resume keeps the exact pending order stored in queueIds; guard it
+      const pendingIds = new Set((E.pending || []).map(String));
+      if (!studySession.queue.length || studySession.queue.some(c => !pendingIds.has(c.id))) {
+        studySession.endless.pending = studySession.queue.slice(studySession.idx);
+      } else {
+        studySession.endless.pending = studySession.queue.slice();
+      }
+      if (studySession.idx >= studySession.queue.length) scEndlessSetupPhase(studySession);
+    }
+  }
   spSessionStart();
   renderView('study');
   return true;
@@ -464,7 +518,7 @@ function startSessionFromEntry(entry, resume, onlyWrong = false) {
 // Resumed from where they stopped. Open/closed state is module-level so it
 // survives picker re-renders within a page load.
 let _studyHistOpen = false;
-const STUDY_MODE_ICONS = { review:'refresh', cram:'wind', quiz:'pen', gaps:'puzzle', weakness:'alert', multi:'check-square' };
+const STUDY_MODE_ICONS = { review:'refresh', cram:'wind', quiz:'pen', gaps:'puzzle', weakness:'alert', multi:'check-square', endless:'repeat' };
 
 function renderStudyHistorySection() {
   const wrap = el('div', { style: 'margin-bottom:16px' });
@@ -483,7 +537,8 @@ function renderStudyHistorySection() {
     } else {
       entries.slice(0, 25).forEach(e => {
         const existing = cardsForIds(e.queueIds);
-        const resumable = e.status === 'aborted' && (e.idx || 0) < existing.length && existing.length > 0;
+        const resumable = e.status === 'aborted' && (e.idx || 0) < existing.length && existing.length > 0
+          && (e.mode !== 'endless' || !!e.endless);
         const repeatable = existing.length > 0;
         // wrong-only replay needs stored per-answer records AND the missed
         // cards to still exist
@@ -494,7 +549,7 @@ function renderStudyHistorySection() {
         panel.appendChild(el('div', { class: 'card', style: 'padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap' },
           el('div', { style: 'flex:1;min-width:160px' },
             el('div', { style: 'font-weight:800;font-size:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap' },
-              e.exam ? scIcon('note') : null, scAuto(STUDY_MODE_ICONS[e.mode] || 'books'), `${e.mode || 'review'} · ${when}`),
+              e.exam ? scIcon('note') : null, scAuto(STUDY_MODE_ICONS[e.mode] || 'books'), `${e.mode === 'endless' ? `Endless${e.endless && e.endless.variant === 'chunked' ? ' (chunked)' : ' (unchunked)'}` : (e.mode || 'review')} · ${when}`),
             el('div', { class: 'u-muted-11' },
               `${e.cardsAttempted || 0}/${e.totalCards || 0} cards · ✅${e.correct || 0} ❌${e.incorrect || 0}` +
               (e.accuracyPct != null ? ` · ${e.accuracyPct}%` : ''))),
@@ -2311,6 +2366,10 @@ function rateCard(rating) {
       addXP(calcCardXP(card,rating)*xpMult*(sess.showHint?0.5:1)*subjectXPMultiplier(state.trackerState?.subjects,sk));
     }
     sess.stats[correct?'correct':'incorrect'] += 1;
+    if (!sess.answers) sess.answers = [];
+    sess.answers.push({ id: card.id, r: rating, ok: correct,
+      ms: sess._cardTimes.length ? sess._cardTimes[sess._cardTimes.length - 1]
+          : Date.now() - (sess._cardStart || Date.now()) });
     sess.combo = correct ? sess.combo+1 : 0;
     sess.maxCombo = Math.max(sess.maxCombo, sess.combo);
     scEndlessOnGrade(sess, card, correct);

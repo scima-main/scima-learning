@@ -454,6 +454,13 @@ loop counting as written): first correct full, further corrects half —
 diminishing returns on loop grinding. Every rep still feeds Crucible
 (§3.5) samples. The progress bar carries the phase label
 (`scEndlessLabel()`): mode · phase · chunk · round/cycle.
+Session History integrates fully: `pushSessionLog()` serialises the whole
+phase machine (`entry.endless`: chunk id-lists, phase, round/cycle, mastery
+and repush sets, plus `entry.xpGranted`) so Resume rebuilds the drill
+mid-pass and Repeat restarts it fresh; wrong-only replay drills the missed
+cards as a single unchunked part. Entries whose chunk id-lists exceed 600
+ids stay stats-only and say so instead of half-resuming. Endless grades
+also push `sess.answers` rows so “Repeat wrong (N)” works on drills.
 
 ## 4. Backend: `backend/`
 

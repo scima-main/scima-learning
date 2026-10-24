@@ -1,5 +1,11 @@
 # CHANGELOG (last updated 24th October 2026, UTC)
 
+#### VERSION 2026.10.28-ALPHA	
+
+- Endless Drill sessions can now be **Resumed and Repeated** from Session History: the drill's phase machine (chunks, pass, round, mastery + repeat sets, XP grants) is stored with the session and rebuilt exactly where you left it
+- Endless sessions record per-answer results, so "Repeat wrong (N)" works on drills too
+- Oversized endless sessions (>600 cards across chunks) stay stats-only in history rather than resuming half-broken
+
 #### VERSION 2026.10.27-ALPHA
 
 - new study mode: **Endless**
