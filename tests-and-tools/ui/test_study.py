@@ -524,3 +524,16 @@ def test_drawer_greys_per_card_timer_in_exam(page, site_base, seeded):
     page.locator("#qp-exam").click()          # …and back
     assert page.evaluate("() => document.getElementById('quiz-timed').disabled") \
         is False
+
+
+def test_graded_compare_view_has_no_null_text(page, base_url, seeded):
+    """Conditional-null children (image/tip ternaries) used to reach DOM
+    append() and render as a literal "null" line above the expected answer."""
+    goto_study(page, base_url, seeded)
+    pages.start_study_mode(page, "Written Quiz")
+    page.wait_for_selector(".quiz-input-area")
+    page.fill(".quiz-input-area", "definitely not the answer")
+    page.get_by_role("button", name="Check Answer").first.click()
+    page.wait_for_selector(".quiz-compare")
+    text = page.locator(".quiz-compare").inner_text()
+    assert "null" not in text.replace("nulla", ""), text

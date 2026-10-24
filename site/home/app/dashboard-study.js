@@ -1141,6 +1141,11 @@ function scEndlessSetupPhase(sess) {
   sess.idx = 0;
 }
 function scEndlessOnGrade(sess, card, correct) {
+  // nextCard() never runs in endless (the phase machine renders directly),
+  // so its per-card resets must happen here or written/gaps inputs arrive
+  // prefilled with the previous card's text.
+  sess.flipped=false; sess.showHint=false; sess.quizAnswer=''; sess.quizAnswers=[]; sess.gapChoice=null;
+  spCardDone();
   const E = sess.endless;
   if (correct) E.done[card.id] = true; else E.repush.push(card);
   sess.idx++;
@@ -2247,7 +2252,9 @@ function renderQuizCard(card, citBadge, scrollArea) {
       :result==='correct'?'Correct!'
       :result==='close'?'Close — review below'
       :(isExact&&!isMulti?'Incorrect — exact match required':'Incorrect');
-    compareEl.append(el('div',{class:`quiz-label ${result}`},scLbl(emoji,label)), ...resultChildren);
+    // filter(Boolean): these go through DOM append(), which would render
+    // conditional-null children (image/tip ternaries) as literal "null" text.
+    compareEl.append(el('div',{class:`quiz-label ${result}`},scLbl(emoji,label)), ...resultChildren.filter(x => x != null));
     if(citBadge) compareEl.appendChild(citBadge);
     const rateRow=el('div',{class:'quiz-self-rate'});
     [{label:[scIcon('check-circle'),'Got it'],rating:4,color:'#22c55e'},{label:[scIcon('circle-half'),'Close'],rating:2,color:'#FB923C'},{label:[scIcon('x-circle'),'Wrong'],rating:1,color:'#ef4444'}].forEach(rb=>{

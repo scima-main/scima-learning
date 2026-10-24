@@ -1,5 +1,10 @@
 # CHANGELOG (last updated 24th October 2026, UTC)
 
+#### VERSION 2026.10.28-ALPHA	
+
+- Fixed: written-quiz graded view could show a literal “null” line above the expected answers (the non-existent images/hints reached the output as "null")
+- Fixed: Endless Drill no longer carries the previous card’s typed text into the next question’s input boxes
+
 #### VERSION 2026.10.27-ALPHA
 
 - new study mode: **Endless**

@@ -2,9 +2,8 @@
 
 #### VERSION 2026.10.28-ALPHA	
 
-- Endless Drill sessions can now be **Resumed and Repeated** from Session History: the drill's phase machine (chunks, pass, round, mastery + repeat sets, XP grants) is stored with the session and rebuilt exactly where you left it
-- Endless sessions record per-answer results, so "Repeat wrong (N)" works on drills too
-- Oversized endless sessions (>600 cards across chunks) stay stats-only in history rather than resuming half-broken
+- Fixed: written-quiz graded view could show a literal “null” line above the expected answers (the non-existent images/hints reached the output as "null")
+- Fixed: Endless Drill no longer carries the previous card’s typed text into the next question’s input boxes
 
 #### VERSION 2026.10.27-ALPHA
 

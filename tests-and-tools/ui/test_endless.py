@@ -270,3 +270,26 @@ def test_endless_repeat_restarts_from_scratch(page, base_url, seeded):
         correct: studySession.stats.correct })""")
     assert st["phase"] == "mc" and st["queue"] == 4
     assert st["done"] == 0 and st["xp"] == 0 and st["correct"] == 0
+
+
+def test_endless_inputs_reset_between_cards(page, base_url, seeded):
+    """Endless bypasses nextCard(); the phase machine must reset the written
+    inputs itself or every card arrives prefilled with the last answer."""
+    _seed_capitals(seeded)
+    pages.goto_app(page, base_url, "/study/")
+    page.locator("#view-study .card", has_text="Endless Drill").first \
+        .get_by_role("button", name="Start unchunked").click()
+    page.wait_for_selector("#view-study .flashcard-front-text")
+    for _ in range(4):                      # clear the MC pass
+        page.wait_for_timeout(300)
+        f = _question(page)
+        page.get_by_role("button", name=dict(CARDS)[f], exact=True).first.click()
+        _next(page)
+    assert "Fill in the gaps" in _label(page)
+    page.wait_for_selector(".quiz-input-area")
+    page.fill(".quiz-input-area", "leftover text from a previous card")
+    page.get_by_role("button", name="Check Answer").first.click()
+    page.get_by_role("button", name="Wrong", exact=True).click()   # miss → repeats later
+    page.wait_for_selector(".quiz-input-area")
+    assert page.locator(".quiz-input-area").first.input_value() == "", \
+        "next gap card must start with empty inputs"

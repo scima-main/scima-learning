@@ -25,7 +25,7 @@
  *  two tabs open on /#home and /#study whose sidebars disagree are two cached
  *  copies of different deploys, and a fetch would just report whatever the
  *  (possibly stale) cache says ABOUT.md contains. Bump both together. */
-const APP_VERSION = '2026.10.027-alpha';
+const APP_VERSION = '2026.10.028-alpha';
 
 /** XP per mark formula: XP = XP_COEFFICIENT × grade⁻² */
 const XP_COEFFICIENT = 1000;
