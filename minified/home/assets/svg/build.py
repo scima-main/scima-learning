@@ -203,6 +203,7 @@ ICONS = {
     "bandage": '<rect x="1.9" y="8.5" width="20.2" height="7" rx="3.5" transform="rotate(-45 12 12)"/><circle cx="10.6" cy="10.6" r=".8" fill="currentColor" stroke="none"/><circle cx="13.4" cy="13.4" r=".8" fill="currentColor" stroke="none"/><circle cx="13.4" cy="10.6" r=".8" fill="currentColor" stroke="none"/><circle cx="10.6" cy="13.4" r=".8" fill="currentColor" stroke="none"/>',
     "burst": '<path d="m12 3.3-2.8 5.3-5.9 1.1 4.1 4.3-.8 5.9 5.4-2.6 5.4 2.6-.8-5.9 4.1-4.3-5.9-1.1Z"/>',
     "heart": '<path d="M12 20.4S3.8 15.6 3.8 9.7A4.4 4.4 0 0 1 12 7.3a4.4 4.4 0 0 1 8.2 2.4c0 5.9-8.2 10.7-8.2 10.7Z"/>',
+    "sharia": '<path d="M12 20.4S3.8 15.6 3.8 9.7A4.4 4.4 0 0 1 12 7.3a4.4 4.4 0 0 1 8.2 2.4c0 5.9-8.2 10.7-8.2 10.7Z"/>',
 
     # ── growth / knowledge (achievement & quest art) ────────────────────────
     "seedling": '<path d="M12 20.6v-6.4"/><path d="M12 14.2c0-4.2-3-6.8-7.4-6.8 0 4.4 3 6.8 7.4 6.8Z"/><path d="M12.6 12.4c.2-3 2.3-4.8 5.4-4.8-.1 3.1-2.2 4.9-5.4 4.8Z"/>',
