@@ -712,12 +712,12 @@ function renderSettings(c) {
   appearCard.appendChild(el('div', { style:'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:8px' }, 'Background Pattern'));
 
   const patternSection = el('div', { style:'margin-bottom:16px' });
-  const curPattern = state.settings.theme?.bgPattern || { type:'none', opacity:0.08, scale:1 };
+  const curPattern = state.settings.theme?.bgPattern || { type:'none', opacity:0.14, scale:1 };
 
   function updatePattern(patch) {
     if (!state.settings.theme) state.settings.theme = { ...DEFAULT_THEME };
     if (!state.settings.theme.bgPattern || state.settings.theme.bgPattern.type === 'none') {
-      state.settings.theme.bgPattern = { type:'none', opacity:0.08, scale:1, ...patch };
+      state.settings.theme.bgPattern = { type:'none', opacity:0.14, scale:1, ...patch };
     } else {
       Object.assign(state.settings.theme.bgPattern, patch);
     }
@@ -743,7 +743,7 @@ function renderSettings(c) {
             state.settings.theme.bgPattern = { type:'image', opacity:0.5, scale:1, imageSize:null, imageDataUrl: curPattern.imageDataUrl||null };
           }
         } else {
-          state.settings.theme.bgPattern = { type, opacity: curPattern.opacity||0.08, scale: curPattern.scale||1 };
+          state.settings.theme.bgPattern = { type, opacity: curPattern.opacity||0.14, scale: curPattern.scale||1 };
         }
         applyThemeVars(state.settings.theme);
         scheduleSave(); renderView('settings');
@@ -848,9 +848,9 @@ function renderSettings(c) {
 
   // ── SVG pattern sliders (opacity + scale) ────────────────────────────
   if (hasSvgPattern) {
-    const opVal   = el('span', { style:'min-width:30px;font-size:11px;color:var(--muted);text-align:right' }, Math.round((curPattern.opacity??0.08)*100)+'%');
+    const opVal   = el('span', { style:'min-width:30px;font-size:11px;color:var(--muted);text-align:right' }, Math.round((curPattern.opacity??0.14)*100)+'%');
     const scVal   = el('span', { style:'min-width:30px;font-size:11px;color:var(--muted);text-align:right' }, (curPattern.scale??1).toFixed(1)+'×');
-    const opSlider = el('input', { type:'range', min:'2', max:'40', value:String(Math.round((curPattern.opacity??0.08)*100)),
+    const opSlider = el('input', { type:'range', min:'2', max:'60', value:String(Math.round((curPattern.opacity??0.14)*100)),
       oninput: e => { opVal.textContent = e.target.value+'%'; updatePattern({ opacity: Number(e.target.value)/100 }); }
     });
     const scSlider = el('input', { type:'range', min:'30', max:'300', value:String(Math.round((curPattern.scale??1)*100)),
@@ -867,9 +867,12 @@ function renderSettings(c) {
       )
     ));
     // Pattern color picker
-    const patColSwatch = mkColorSwatch(curPattern.color || '#ffffff', hex => updatePattern({ color: hex }));
+    const patColSwatch = mkColorSwatch(curPattern.color || state.settings.theme?.text || DEFAULT_THEME.text, hex => updatePattern({ color: hex }));
     patternSection.appendChild(el('div', { style:'display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid var(--border)' },
-      el('div', { style:'font-size:11px;font-weight:600;flex:1' }, 'Pattern Color'),
+      el('div', { style:'font-size:11px;font-weight:600;flex:1' }, 'Pattern Color',
+        el('div', { style:'font-size:10px;font-weight:400;color:var(--muted)' }, 'Defaults to the text colour so it stays visible on any preset')),
+      btn('Auto', 'ghost', { small:true, title:'Follow the theme text colour',
+        onclick: () => { updatePattern({ color: null }); renderView('settings'); } }),
       patColSwatch
     ));
   }

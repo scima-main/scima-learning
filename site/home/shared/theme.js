@@ -70,11 +70,19 @@ const BG_PATTERNS = {
  * Builds the CSS background-image value for the current pattern setting.
  * - SVG patterns  → tiled data:image/svg+xml;base64 URL at `opacity` / `scale`
  * - Custom image  → data URL stored in pattern.imageDataUrl, tiled at `scale`×,
- *                   composited over a semi-transparent colour overlay so the bg
- *                   colour still shows through at 1 – opacity.
+ *                   composited over a semi-transparent colour overlay so the
+ *                   bg colour still shows through at 1 – opacity.
  * Returns '' (empty string) when no pattern / type === 'none'.
+ *
+ * `themeColor` is the adaptive default for the SVG fill/stroke: a data-URI
+ * SVG is its own document, so `currentColor`/`var(--text)` cannot work inside
+ * it — the caller (applyThemeVars) passes the theme's text colour instead.
+ * Before this parameter existed the fill was hardcoded 'white', which made
+ * patterns INVISIBLE on every light preset (white-on-white reads as a solid
+ * background — the "bg mode is always solid" bug) and non-adaptive on dark
+ * ones. An explicit `pattern.color` (Settings → Pattern Color) still wins.
  */
-function buildBgPatternCss(pattern) {
+function buildBgPatternCss(pattern, themeColor) {
   if (!pattern || !pattern.type || pattern.type === 'none') return '';
 
   if (pattern.type === 'image') {
@@ -87,9 +95,9 @@ function buildBgPatternCss(pattern) {
 
   const def = BG_PATTERNS[pattern.type];
   if (!def || !def.svg) return '';
-  const op  = Math.max(0, Math.min(1, pattern.opacity ?? 0.08));
+  const op  = Math.max(0, Math.min(1, pattern.opacity ?? 0.14));
   const sc  = Math.max(0.3, Math.min(4, pattern.scale ?? 1));
-  const col = pattern.color || 'white';
+  const col = pattern.color || themeColor || '#808080';
   const raw = def.svg(op, sc, col);
   const b64 = typeof btoa !== 'undefined' ? btoa(raw) : Buffer.from(raw).toString('base64');
   return `url("data:image/svg+xml;base64,${b64}")`;
@@ -308,9 +316,11 @@ function applyThemeVars(theme, targetEl, prefix = '') {
   // Average the two gradient stops' luminance to decide readable on-gradient text.
   const avgLum = (relLuminance(t.blue) + relLuminance(t.pink)) / 2;
   set('on-gradient', avgLum > 0.6 ? '#0B0F14' : '#FFFFFF');
-  // Background pattern — tiled SVG or custom image overlay on top of --bg solid colour.
+  // Background pattern — tiled SVG or custom image overlay on top of --bg solid
+  // colour. The SVG fill adapts to the theme via the text colour (a data-URI
+  // SVG cannot inherit currentColor), see buildBgPatternCss().
   const pat = t.bgPattern;
-  const patCss = buildBgPatternCss(pat);
+  const patCss = buildBgPatternCss(pat, t.text);
   set('bg-pattern', patCss || 'none');
   if (typeof document !== 'undefined' && !prefix) {
     if (pat?.type === 'image' && pat.imageDataUrl) {
