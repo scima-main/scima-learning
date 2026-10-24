@@ -104,14 +104,31 @@ function sm2Schedule(card, rating, opts = {}) {
   };
 }
 
+// Crucible (in-house adaptive): FSRS-lite mechanics first, then the
+// personalisation interval multiplier from adaptive-core.js (which stays
+// exactly 1.0 — i.e. plain FSRS-lite — until the calibration gate passes).
+// adaptive-core may be absent (extension service worker), hence the guard:
+// Crucible degrades gracefully to its base scheduler there.
+function crucibleSchedule(card, rating, opts = {}) {
+  const scheduled = fsrsSchedule(card, rating, opts);
+  if (typeof scCrucibleInterval === 'function' && opts.adaptive) {
+    scheduled.interval = scCrucibleInterval(
+      opts.adaptive, card.id, card, opts.subjectKey, scheduled.interval);
+    scheduled.due = Date.now() + scheduled.interval * DAY;
+  }
+  return scheduled;
+}
+
 // Single entry point: routes to the scheduler the user picked in Settings.
 function scheduleCard(card, rating, opts = {}) {
-  return opts.algorithm === 'sm2' ? sm2Schedule(card, rating, opts) : fsrsSchedule(card, rating, opts);
+  if (opts.algorithm === 'sm2') return sm2Schedule(card, rating, opts);
+  if (opts.algorithm === 'crucible') return crucibleSchedule(card, rating, opts);
+  return fsrsSchedule(card, rating, opts);
 }
 
 // Export for Node's test runner — no-op in the browser/service-worker contexts this
 // file normally loads in (`module` is undefined there). See shared.js for the same
 // pattern.
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { DAY, clamp, fsrsSchedule, sm2Schedule, scheduleCard };
+  module.exports = { DAY, clamp, fsrsSchedule, sm2Schedule, crucibleSchedule, scheduleCard };
 }

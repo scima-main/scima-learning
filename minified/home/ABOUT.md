@@ -1,5 +1,10 @@
 # CHANGELOG (last updated 24th October 2026, UTC)
 
+#### VERSION 2026.10.26-ALPHA	
+
+- New SRS option: **Crucible (Adaptive, in-house)** — personalises review intervals from various data points.
+- Legal pages added: Privacy Policy, Terms of Service and Cookies Policy (linked from Settings and the no-JS landing page, listed in the sitemap)
+
 #### VERSION 2026.10.25-ALPHA	
 
 - security fixes

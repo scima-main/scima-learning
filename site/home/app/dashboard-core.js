@@ -2826,7 +2826,7 @@ function makeHelpBtn(title, onclick, pinnedToCorner) {
 // and from the Study picker's header. Describes THIS build's schedulers
 // (shared/srs-core.js), not the textbook algorithms.
 function openAlgorithmHelp() {
-  openModal(scLbl('brain', ' FSRS vs SM-2 — how reviews get scheduled'), body => {
+  openModal(scLbl('brain', ' How reviews get scheduled — FSRS, SM-2 & Crucible'), body => {
     body.appendChild(el('div', { style: 'font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:6px' },
       'Both schedulers pick the next review date the same way: an ease factor (1.3–3.5) multiplies the current interval — Hard ×(ease−0.5), Good ×ease, Easy ×ease×1.3, kept strictly ordered and at least a day each — and Again always means “redo it now” plus one lapse. They differ in how the ease itself learns from your ratings:'));
     [
@@ -2838,6 +2838,10 @@ function openAlgorithmHelp() {
         'The original SM-2 ease formula, fed by your rating as a 2–5 quality score: Easy +0.10, Good ±0, Hard −0.14, Again −0.32.',
         'On a lapse the repetition count resets to 0 — classic SM-2 relearns the card from scratch.',
         'A touch punchier at both ends than FSRS: kinder to Easy, harsher on Again.']],
+      [scLbl('sparkles', ' Crucible — the in-house adaptive layer'), [
+        'FSRS-lite underneath, then a personalisation multiplier (0.60–1.25×) from everything the rating alone hides: how long you hesitated after your last keystroke, how many words you missed and WHICH ones, how intrinsically heavy the card is (length, gaps, maths, tables).',
+        'Words you keep missing become a weakness map: cards rich in them are queued sooner and revisited sooner, and the missed words are highlighted in the graded answer.',
+        'No initial bias: every multiplier stays exactly 1.0 until 60 valid reviews are collected (5 per card), and anomalous samples — misclicks, abandoned tabs, pasted answers — are filtered out before they can teach the scheduler anything.']],
     ].forEach(([title, tips]) => {
       body.appendChild(el('div', { style: 'font-weight:800;font-size:13px;margin:12px 0 6px' }, title));
       const list = el('ul', { style: 'padding-left:18px;display:flex;flex-direction:column;gap:8px;margin:0' });

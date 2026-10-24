@@ -13,7 +13,8 @@ from helpers import pages
 pytestmark = [pytest.mark.content]
 
 HOST = "https://study.scima-net.com"
-SITEMAP_ROUTES = ["/", "/decks/", "/study/", "/library/", "/analytics/", "/about/"]
+SITEMAP_ROUTES = ["/", "/decks/", "/study/", "/library/", "/analytics/", "/about/",
+                "/privacy/", "/terms/", "/cookies/"]
 
 
 def _get(base, path):

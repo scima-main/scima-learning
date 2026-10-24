@@ -638,6 +638,9 @@ body.nav-open #sidebar-version {
 .quiz-label.wrong   { color: #ef4444; }
 .quiz-answer-text { font-size: 14px; line-height: 1.5; font-weight: 600; }
 .quiz-self-rate { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+/* Crucible: words the learner missed, highlighted inside the graded
+   correct-answer view. colour-mix keeps it legible on every theme. */
+.ans-miss { background: color-mix(in srgb, #ef4444 20%, transparent); color: color-mix(in srgb, #ef4444 75%, var(--text)); border-radius: 4px; padding: 0 3px; text-decoration: underline wavy color-mix(in srgb, #ef4444 70%, transparent) 1px; text-underline-offset: 3px; }
 
 /* Sticky input footer for quiz mode */
 .quiz-scroll-area { flex: 1; overflow-y: auto; padding: 16px 16px 8px; min-height: 0; }
@@ -1425,6 +1428,14 @@ input[type="number"]:focus { border-color: rgba(var(--blue-rgb),0.5); }
 
 /* Static per-page H1 for crawlers/screen readers: present in the served
    HTML (the app's own headings render later), visually hidden layout-wise. */
+/* Standalone legal pages (privacy / terms / cookies): the app shell's
+   overflow:hidden body would trap their scroll, so they opt out. */
+body.legal-page { overflow: auto; height: auto; min-height: 100%; }
+.legal-wrap { max-width: 780px; margin: 0 auto; padding: 56px 28px 80px; }
+.legal-title { font-size: 26px; margin-bottom: 4px; font-weight: 800; }
+.legal-updated { font-size: 12px; color: var(--muted); margin-bottom: 22px; }
+.legal-links { margin-top: 34px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.legal-links a { color: var(--blue); }
 .seo-h1 { position:absolute; width:1px; height:1px; margin:-1px; padding:0;
           overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
 

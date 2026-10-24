@@ -25,7 +25,7 @@
  *  two tabs open on /#home and /#study whose sidebars disagree are two cached
  *  copies of different deploys, and a fetch would just report whatever the
  *  (possibly stale) cache says ABOUT.md contains. Bump both together. */
-const APP_VERSION = '2026.10.025-alpha';
+const APP_VERSION = '2026.10.026-alpha';
 
 /** XP per mark formula: XP = XP_COEFFICIENT × grade⁻² */
 const XP_COEFFICIENT = 1000;
@@ -820,6 +820,53 @@ function sanitizeSource(raw) {
   };
 }
 
+/**
+ * Repairs the Crucible adaptive-difficulty profile (shared/adaptive-core.js)
+ * stored under mf_state.adaptive. Shape-only deep repair with the same caps
+ * the module itself enforces, so a corrupted or hand-edited blob can never
+ * break scheduling — worst case the profile resets to uncalibrated and the
+ * scheduler behaves like its plain base algorithm again.
+ */
+function sanitizeAdaptiveState(raw) {
+  const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+  const def = (typeof scCrucibleDefaults === 'function') ? scCrucibleDefaults()
+    : { version: 1, samples: 0, anomalies: 0, cards: {}, vocab: {}, baseHesitancy: null, baseThink: null, typeAcc: {} };
+  if (!isObj(raw)) return def;
+  const num = (v, f) => (typeof v === 'number' && Number.isFinite(v) && v >= 0) ? v : f;
+  const unit = (v, f) => Math.min(1, Math.max(0, num(v, f)));
+  const optNum = v => (typeof v === 'number' && Number.isFinite(v) && v > 0) ? v : null;
+  const cards = {};
+  if (isObj(raw.cards)) {
+    Object.entries(raw.cards).slice(0, 20000).forEach(([id, e]) => {
+      if (!isObj(e) || typeof id !== 'string') return;
+      cards[id] = { n: num(e.n, 0), conf: unit(e.conf, 0.5), diff: unit(e.diff, 0.5),
+                    feat: isObj(e.feat) ? e.feat : {}, lastTs: num(e.lastTs, 0) };
+    });
+  }
+  const vocab = {};
+  if (isObj(raw.vocab)) {
+    Object.entries(raw.vocab).slice(0, 5000).forEach(([w, e]) => {
+      if (!isObj(e) || typeof w !== 'string') return;
+      vocab[w] = { seen: num(e.seen, 0), missed: num(e.missed, 0) };
+    });
+  }
+  const typeAcc = {};
+  if (isObj(raw.typeAcc)) {
+    Object.entries(raw.typeAcc).slice(0, 64).forEach(([t, e]) => {
+      if (!isObj(e) || typeof t !== 'string') return;
+      typeAcc[t] = { n: num(e.n, 0), correct: num(e.correct, 0) };
+    });
+  }
+  return {
+    version: num(raw.version, def.version),
+    samples: num(raw.samples, 0),
+    anomalies: num(raw.anomalies, 0),
+    cards, vocab, typeAcc,
+    baseHesitancy: optNum(raw.baseHesitancy),
+    baseThink: optNum(raw.baseThink),
+  };
+}
+
 function sanitizeMfState(raw) {
   const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
   const r = isObj(raw) ? raw : {};
@@ -846,6 +893,8 @@ function sanitizeMfState(raw) {
     // without the "Object.assign(target, 'a string')" footgun of copying numeric
     // string-index keys onto state.settings.
     settings: isObj(r.settings) ? r.settings : {},
+    // Crucible adaptive-difficulty profile — see sanitizeAdaptiveState().
+    adaptive: sanitizeAdaptiveState(r.adaptive),
   };
 }
 

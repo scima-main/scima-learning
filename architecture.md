@@ -384,6 +384,54 @@ before the hold) still scroll. CDP touch tests: `ui/test_mobile.py`.
 
 ---
 
+### 3.5 Crucible — the in-house adaptive difficulty system
+
+`home/shared/adaptive-core.js` (pure logic, Node-exportable) implements
+**Crucible**, an adaptive layer over the base schedulers, selected in
+Settings → SRS Algorithm as “Crucible (Adaptive, in-house)”. It exists
+because a 1–4 rating alone cannot tell a fluent “Good” from a stared-at
+one. Per review, `dashboard-study.js` records a sample carrying:
+
+- **card features** — char/word length, type, gap/answer count, maths,
+  tables, images, front↔back overlap, non-ASCII (typing load);
+- **timing** — think time (reveal→first keystroke), hesitation (last
+  keystroke→submit), keystroke and backspace counts, paste and
+  tab-hidden flags;
+- **outcome detail** — rating, word-level diff of intended vs submitted
+  (`scDiffWords`), partial-credit recall, hint use;
+- **context** — timestamp, card id; the queue weighter additionally sees
+  the deck subject.
+
+Samples pass `scCrucibleFilterSample()` first: <250 ms (misclicks),
+>10 min or hidden-tab (abandoned), pasted or double-rated answers are
+rejected and only bump `adaptive.anomalies`. `scCrucibleRecord()` then
+updates: a per-card Bayesian difficulty (feature prior `scFeaturePrior`
+blended with recency-decayed observed inverse-confidence), a global
+weak-word map (content words missed vs seen), personal timing baselines
+(hesitation is always judged against the user’s *own* median, never
+absolute ms), and per-type accuracy.
+
+**No initial bias:** every personalisation multiplier is exactly 1.0 —
+i.e. plain FSRS-lite — until the profile holds 60 valid samples globally
+and 5 for the card (`scCrucibleCalibrated` / `CRUCIBLE_MIN_CARD_SAMPLES`);
+weak words need ≥4 sightings and ≥2 misses. Settings → Study &
+Scheduling shows the calibration bar, filtered-anomaly count, top weak
+words and a profile reset.
+
+**Effects once calibrated:** `scCrucibleInterval()` multiplies the base
+scheduler’s interval by 0.60–1.25× (difficulty surprise vs the feature
+prior, plus ×0.85 for weak-word-rich cards), and `scCrucibleShuffle()`
+orders session queues by `scCrucibleQueueWeight()` so weak-word-heavy and
+personally hard cards surface sooner. Missed words are wrapped in
+`<mark class="ans-miss">` inside the graded correct-answer view
+(`scHighlightMissed`), so the learner sees *which* words cost the mark.
+
+**Storage:** `mf_state.adaptive`, repaired by `sanitizeAdaptiveState()`
+in `shared.js` (caps mirror the module’s eviction limits). The profile
+never leaves the device and is stripped from nothing, because it is
+never part of any share/export payload — it lives beside the decks, not
+inside them.
+
 ## 4. Backend: `backend/`
 
 `site/backend/` is the ONE canonical backend. `minified/backend/` is a

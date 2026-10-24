@@ -1,4 +1,88 @@
 'use strict';
+
+/* ── Crucible (adaptive-core.js) wiring ───────────────────────────────
+   Session-level typing tracker + per-check capture + wrong-word highlight.
+   The tracker is document-level and inert outside an active session, so
+   every written renderer (quiz / gaps / process / calc / table) gets
+   timing data without each one growing its own keyloggers. */
+let scTypingTrackerOn = false;
+function scInstallTypingTracker() {
+  if (scTypingTrackerOn) return; scTypingTrackerOn = true;
+  document.addEventListener('keydown', e => {
+    const sess = studySession; if (!sess || !sess.active || !sess._typ) return;
+    const t = e.target; if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA')) return;
+    const now = Date.now(); const ty = sess._typ;
+    if (ty.first == null) ty.first = now;
+    ty.last = now; ty.keys++;
+    if (e.key === 'Backspace' || e.key === 'Delete') ty.backs++;
+  }, true);
+  document.addEventListener('paste', () => {
+    const sess = studySession; if (sess && sess.active && sess._typ) sess._typ.pasted = true;
+  }, true);
+  document.addEventListener('visibilitychange', () => {
+    const sess = studySession;
+    if (document.hidden && sess && sess.active && sess._typ) sess._typ.hidden = true;
+  });
+}
+
+/** Stash this card's timing + word-level diffs for rateCard() to record.
+ *  pairs: [{user, intended}] — empty array = timing-only capture. */
+function scCrucibleCapture(sess, pairs) {
+  const nowTs = Date.now();
+  const ty = sess._typ || {};
+  sess._lastTiming = {
+    answerMs: nowTs - (sess._cardStart || nowTs),
+    hesitationMs: ty.last != null ? Math.max(0, nowTs - ty.last) : null,
+    thinkMs: ty.first != null ? Math.max(0, ty.first - (sess._cardStart || nowTs)) : null,
+    keystrokes: ty.keys || 0, backspaces: ty.backs || 0,
+    pasted: !!ty.pasted, hiddenDuringAnswer: !!ty.hidden,
+  };
+  const diffs = (pairs || []).filter(q => q && q.intended != null && q.intended !== '')
+    .map(q => scDiffWords(q.user || '', q.intended));
+  sess._lastDiffs = diffs.length ? diffs : null;
+  return diffs;
+}
+
+/** Weakness-aware session ordering: when the profile is calibrated, cards
+ *  rich in the learner's weak words / personally hard cards surface sooner
+ *  (weight × jitter keeps it from being deterministic-drilling). */
+function scCrucibleShuffle(cards) {
+  if (typeof scCrucibleQueueWeight !== 'function' || !state.adaptive ||
+      !scCrucibleCalibrated(state.adaptive)) return shuffleArr(cards);
+  return cards
+    .map(c => [c, scCrucibleQueueWeight(state.adaptive, c.id, c) * (0.7 + Math.random() * 0.6)])
+    .sort((a, b) => b[1] - a[1]).map(x => x[0]);
+}
+
+/** Wrap the words the learner missed in <mark class="ans-miss"> inside an
+ *  already-rendered answer node (skips KaTeX internals). */
+function scHighlightMissed(node, words) {
+  const set = new Set((words || []).map(w => String(w).toLowerCase()).filter(w => w.length > 2));
+  if (!set.size || !node) return;
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, { acceptNode(n) {
+    if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+    let p = n.parentNode;
+    while (p && p !== node) {
+      if (p.nodeType === 1 && (p.classList.contains('katex') || p.tagName === 'MARK')) return NodeFilter.FILTER_REJECT;
+      p = p.parentNode;
+    }
+    return NodeFilter.FILTER_ACCEPT;
+  }});
+  const targets = []; while (walker.nextNode()) targets.push(walker.currentNode);
+  targets.forEach(tn => {
+    const parts = tn.nodeValue.split(/([A-Za-z0-9'’-]+)/);
+    if (!parts.some(part => set.has(part.toLowerCase()))) return;
+    const frag = document.createDocumentFragment();
+    parts.forEach(part => {
+      if (set.has(part.toLowerCase())) {
+        const m = document.createElement('mark');
+        m.className = 'ans-miss'; m.title = 'missed in your answer'; m.textContent = part;
+        frag.appendChild(m);
+      } else frag.appendChild(document.createTextNode(part));
+    });
+    tn.parentNode.replaceChild(frag, tn);
+  });
+}
 /* dashboard-study.js — the study session: scope picker, flashcard/quiz
    rendering, rating, and session bookkeeping. Part of the dashboard-*.js
    split; see dashboard-core.js's header for the full rationale and
@@ -779,7 +863,7 @@ function openModeHelp(id) {
   c.append(
     el('div',{style:'display:flex;align-items:flex-start;justify-content:space-between;gap:12px'},
       el('div',{},el('div',{class:'section-title'},'Study Mode'),el('div',{class:'section-sub'},'Pick a scope and mode to begin')),
-      makeHelpBtn('How scheduling works (FSRS vs SM-2)', ()=>openAlgorithmHelp(), false)),
+      makeHelpBtn('How scheduling works (FSRS vs SM-2 vs Crucible)', ()=>openAlgorithmHelp(), false)),
     renderStudyHistorySection(),
     el('div',{class:'u-section-label'},'Recents'),
     recentsRow,
@@ -910,7 +994,7 @@ function startStudySession(scopes, mode) {
   // Exam grades written answers only: the table editor's grid UI is a
   // live-check surface, so table cards sit exam sessions out.
   if (exam) cards = cards.filter(c => (c.type || 'basic') !== 'table');
-  studySession={active:true,scope:scopes,mode,queue:qp.shuffle===false?[...cards]:shuffleArr(cards),idx:0,flipped:false,showHint:false,showImages:state.settings.showStudyImages!==false,quizAnswer:'',quizAnswers:[],gapChoice:null,stats:{correct:0,incorrect:0,skipped:0},answers:[],combo:0,maxCombo:0,startTime:Date.now(),matchMode:state.settings.quizMatchMode||'fuzzy',timePerCard,timeLeft:timePerCard,timedOut:false,timed:mode==='quiz'&&!!state.settings.quizTimed&&!exam,reverse:!!state.settings.studyReverse,exam,timeLimitSec:(qp.timeLimitMin|0)*60,multiRequired:qp.multiRequired|0,recorded:{},_examMeta:{},examResults:null,
+  studySession={active:true,scope:scopes,mode,queue:qp.shuffle===false?[...cards]:scCrucibleShuffle(cards),idx:0,flipped:false,showHint:false,showImages:state.settings.showStudyImages!==false,quizAnswer:'',quizAnswers:[],gapChoice:null,stats:{correct:0,incorrect:0,skipped:0},answers:[],combo:0,maxCombo:0,startTime:Date.now(),matchMode:state.settings.quizMatchMode||'fuzzy',timePerCard,timeLeft:timePerCard,timedOut:false,timed:mode==='quiz'&&!!state.settings.quizTimed&&!exam,reverse:!!state.settings.studyReverse,exam,timeLimitSec:(qp.timeLimitMin|0)*60,multiRequired:qp.multiRequired|0,recorded:{},_examMeta:{},examResults:null,
     // ── per-session stat accumulators (prefixed _ to distinguish from display fields) ──
     _cardStart: Date.now(),   // timestamp when current card was shown
     _firstCardMs: null,       // ms until first card was answered/rated
@@ -921,7 +1005,11 @@ function startStudySession(scopes, mode) {
     _backspaces: 0,           // backspace/delete keypress count
     _timeouts: 0,             // timed-quiz cards that expired before submit
     _gap: mode==='gaps' ? {correct:0,close:0,wrong:0} : null,
+    // ── Crucible adaptive-difficulty accumulators ──
+    _typ: {first:null,last:null,keys:0,backs:0,pasted:false,hidden:false},
+    _lastTiming: null, _lastDiffs: null, _ratedCard: false,
   };
+  scInstallTypingTracker();
   spSessionStart();         // ✍️ scratchpad: a new session wipes any leftover pads (spec §31)
   renderView('study');
 }
@@ -935,6 +1023,9 @@ function renderStudySession(c) {
   const card=sess.queue[sess.idx];
   spOnCardRender(card);     // ✍️ scratchpad: bind/rebind the pad to this question (spec §20 restore)
   sess._cardStart = Date.now(); // reset per-card timer on every new card
+  // Crucible: fresh typing window per card (hesitation/think/paste flags)
+  sess._typ = {first:null,last:null,keys:0,backs:0,pasted:false,hidden:false};
+  sess._lastTiming = null; sess._lastDiffs = null; sess._ratedCard = false;
 
   // Always rebuild from a clean slate — prevents stale flashcards/buttons (and
   // their still-attached click handlers, e.g. a old "Reveal" button) sticking
@@ -1159,7 +1250,7 @@ function renderFlashcard(card, citBadge) {
     // short-term relearning-steps queue in this algorithm). Call the real scheduler
     // with the same opts rateCard() uses so the preview can never drift from reality,
     // for either algorithm (FSRS or SM-2).
-    const schedOpts={algorithm:state.settings.algorithm,leechThreshold:state.settings.leechThreshold,autoSuspend:state.settings.autoSuspend};
+    const schedOpts={algorithm:state.settings.algorithm,leechThreshold:state.settings.leechThreshold,autoSuspend:state.settings.autoSuspend,adaptive:state.adaptive,subjectKey:(state.decks.find(d=>d.cards.some(c=>c.id===card.id))?.subject)||DEFAULT_SUBJECT_KEY};
     const previewDays=rating=>scheduleCard(card,rating,schedOpts).interval;
     [{label:'Again',rating:1,color:'#ef4444'},{label:'Hard',rating:2,color:'#FB923C'},
      {label:'Good',rating:3,color:'var(--blue)'},{label:'Easy',rating:4,color:'#22c55e'}
@@ -1362,6 +1453,7 @@ function renderGapCard(card, citBadge) {
 
   function checkGapAnswer(){
     if(checked)return; checked=true;
+    scCrucibleCapture(sess, []);
     const cardMs = Date.now() - (sess._cardStart || Date.now());
     sess._cardTimes.push(cardMs);
     if (sess._firstCardMs === null) sess._firstCardMs = cardMs;
@@ -1369,6 +1461,9 @@ function renderGapCard(card, citBadge) {
     sess._charsTyped += userAnswers.reduce((a,b)=>a+b.length,0);
     // Per-gap grading; the card result is all / some / none.
     const hits = userAnswers.map((u,i)=> (u && !sess.timedOut) ? quizMatch(u, answersToCheck[i]) : 'wrong');
+    // Crucible: word-level diffs (intended vs submitted) + timing window
+    const crucibleDiffs = scCrucibleCapture(sess,
+      userAnswers.map((u,i)=>({user:u, intended:answersToCheck[i]})));
     const nCorrect = hits.filter(h=>h==='correct').length;
     const result = nCorrect===hits.length ? 'correct' : nCorrect>0 ? 'close' : 'wrong';
     if(sess._gap) sess._gap[result==='correct'?'correct':result==='close'?'close':'wrong']++;
@@ -1381,7 +1476,9 @@ function renderGapCard(card, citBadge) {
       el('div',{class:`quiz-label ${result}`},scLbl(emoji,label)),
       el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em'},
         (isMulti?(isMarkscheme?'Missing marking point:':'Missing answer:'):'Missing word:')+(hits.length>1?'s':'')),
-      ...answersToCheck.map((a,i)=>el('div',{class:'quiz-answer-text',style:`margin-bottom:2px;color:${hits[i]==='correct'?'#22c55e':hits[i]==='close'?'#FB923C':'var(--text)'}`},scIcon(hits[i]==='correct'?'check-circle':hits[i]==='close'?'circle-half':'square'),setRichText(el('span'),a))),
+      ...answersToCheck.map((a,i)=>{ const ansSpan=setRichText(el('span'),a);
+        if(hits[i]!=='correct'&&crucibleDiffs[i]) scHighlightMissed(ansSpan, crucibleDiffs[i].missing);
+        return el('div',{class:'quiz-answer-text',style:`margin-bottom:2px;color:${hits[i]==='correct'?'#22c55e':hits[i]==='close'?'#FB923C':'var(--text)'}`},scIcon(hits[i]==='correct'?'check-circle':hits[i]==='close'?'circle-half':'square'),ansSpan); }),
       setRichText(el('div',{style:'font-size:12px;color:var(--muted);margin-top:8px'}),fullAnswerText)
     );
     if(citBadge) compareEl.appendChild(citBadge);
@@ -1447,6 +1544,7 @@ function renderProcessGapCard(card, citBadge) {
 
   function checkStep(){
     if(checked)return; checked=true;
+    scCrucibleCapture(sess, []);
     const cardMs = Date.now() - (sess._cardStart || Date.now());
     sess._cardTimes.push(cardMs);
     if (sess._firstCardMs === null) sess._firstCardMs = cardMs;
@@ -1520,6 +1618,7 @@ function renderProcessQuizCard(card, citBadge) {
 
   function finish(skipped){
     if(checked)return; checked=true;
+    scCrucibleCapture(sess, []);
     const cardMs = Date.now() - (sess._cardStart || Date.now());
     sess._cardTimes.push(cardMs);
     if (sess._firstCardMs === null) sess._firstCardMs = cardMs;
@@ -1608,6 +1707,7 @@ function renderCalcQuizCard(card, citBadge) {
 
   function checkCalcAnswer(){
     if(checked)return; checked=true;
+    scCrucibleCapture(sess, []);
     const cardMs = Date.now() - (sess._cardStart || Date.now());
     sess._cardTimes.push(cardMs);
     if (sess._firstCardMs === null) sess._firstCardMs = cardMs;
@@ -1733,6 +1833,7 @@ function renderTableQuizCard(card, citBadge) {
 
   function checkTableAnswers(){
     if(checked)return; checked=true;
+    scCrucibleCapture(sess, []);
     const cardMs = Date.now() - (sess._cardStart || Date.now());
     sess._cardTimes.push(cardMs);
     if (sess._firstCardMs === null) sess._firstCardMs = cardMs;
@@ -1909,6 +2010,7 @@ function renderQuizCard(card, citBadge, scrollArea) {
 
   function checkQuizAnswer(){
     if(checked)return; checked=true;
+    scCrucibleCapture(sess, []);
     clearQuizTimer();
     // Record per-card timing and net chars submitted.
     const cardMs = Date.now() - (sess._cardStart || Date.now());
@@ -1925,6 +2027,8 @@ function renderQuizCard(card, citBadge, scrollArea) {
       const hitCount = hits.filter(Boolean).length;
       const marksAwarded = Math.min(hitCount, requiredAnswers);
       result = marksAwarded===requiredAnswers ? 'correct' : marksAwarded>0 ? 'close' : 'wrong';
+      // Crucible: unhit mark-scheme keywords are the "missing" intent here
+      const msDiffs = scCrucibleCapture(sess, expectedAnswers.map(k=>({user:userAnswer, intended:k})));
       resultChildren=[
         isExact&&result!=='correct'&&!sess.timedOut
           ? el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:4px;font-style:italic'},'Tip: exact mode requires the keyword phrase verbatim')
@@ -1933,7 +2037,9 @@ function renderQuizCard(card, citBadge, scrollArea) {
         (card.backImage&&sess.showImages!==false)?el('img',{src:card.backImage,style:'max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-bottom:8px'}):null,
         el('div',{style:'font-size:10px;color:var(--muted);margin:8px 0 6px;text-transform:uppercase;letter-spacing:0.05em'},'Mark scheme:'),
         el('ul',{style:'text-align:left;margin:0;padding-left:20px;line-height:1.7;font-size:13px'},
-          ...expectedAnswers.map((k,i)=>el('li',{style:`color:${hits[i]?'#22c55e':'var(--text)'}`},scIcon(hits[i]?'check-circle':'square'),setRichText(el('span'),k)))
+          ...expectedAnswers.map((k,i)=>{ const kSpan=setRichText(el('span'),k);
+            if(!hits[i]&&msDiffs[i]) scHighlightMissed(kSpan, msDiffs[i].missing);
+            return el('li',{style:`color:${hits[i]?'#22c55e':'var(--text)'}`},scIcon(hits[i]?'check-circle':'square'),kSpan); })
         )
       ];
     } else if(!isMulti){
@@ -1941,13 +2047,16 @@ function renderQuizCard(card, citBadge, scrollArea) {
       sess._charsTyped += userAnswer.length;
       if (sess.timedOut) sess._timeouts++;
       result=(userAnswer&&!sess.timedOut)?matcher(userAnswer,expectedAnswers[0]||''):'wrong';
+      const singleDiff=scCrucibleCapture(sess,[{user:userAnswer,intended:expectedAnswers[0]||''}]);
       resultChildren=[
         isExact&&result!=='correct'&&!sess.timedOut
           ? el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:4px;font-style:italic'},'Tip: exact mode requires a perfect match')
           : null,
         el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em'},'Expected answer:'),
         ((sessIsReversed(card)?card.frontImage:card.backImage)&&sess.showImages!==false)?el('img',{src:sessIsReversed(card)?card.frontImage:card.backImage,style:'max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-bottom:8px'}):null,
-        setRichText(el('div',{class:'quiz-answer-text'}),expectedAnswers[0]||'')
+        (()=>{ const ansNode=setRichText(el('div',{class:'quiz-answer-text'}),expectedAnswers[0]||'');
+          if(result!=='correct'&&singleDiff[0]) scHighlightMissed(ansNode, singleDiff[0].missing);
+          return ansNode; })()
       ];
     } else {
       // Greedily pair each typed answer with the closest still-unmatched expected
@@ -2042,7 +2151,7 @@ function applyRating(card, rating, sess) {
   if(ex){ ex.total=(ex.total||0)+1; ex.correct=(ex.correct||0)+(good?1:0); if(wasNew) ex.newSeen=(ex.newSeen||0)+1; }
   else state.reviewHistory.push({date:d,total:1,correct:good?1:0,newSeen:wasNew?1:0});
   bumpStreak();
-  const updated=scheduleCard(card,rating,{algorithm:state.settings.algorithm,leechThreshold:state.settings.leechThreshold,autoSuspend:state.settings.autoSuspend});
+  const updated=scheduleCard(card,rating,{algorithm:state.settings.algorithm,leechThreshold:state.settings.leechThreshold,autoSuspend:state.settings.autoSuspend,adaptive:state.adaptive,subjectKey:sk});
   if(deck){ const i=deck.cards.findIndex(c=>c.id===card.id); if(i>=0) deck.cards[i]=updated; }
   scheduleSave(); checkAchievements();
 }
@@ -2055,6 +2164,33 @@ function rateCard(rating) {
     const cardMs=Date.now()-(sess._cardStart||Date.now());
     sess._cardTimes.push(cardMs);
     if(sess._firstCardMs===null) sess._firstCardMs=cardMs;
+  }
+  // ── Crucible: record this review (anomaly-filtered + calibration-gated
+  //    inside adaptive-core; rejected samples only bump the anomaly count) ──
+  if (typeof scCrucibleRecord === 'function') {
+    if (!state.adaptive || typeof state.adaptive !== 'object') state.adaptive = scCrucibleDefaults();
+    const nowTs = Date.now();
+    const ty = sess._typ || {};
+    const timing = sess._lastTiming || {
+      answerMs: nowTs - (sess._cardStart || nowTs),
+      hesitationMs: null,
+      thinkMs: ty.first != null ? Math.max(0, ty.first - (sess._cardStart || nowTs)) : null,
+      keystrokes: ty.keys || 0, backspaces: ty.backs || 0,
+      pasted: !!ty.pasted, hiddenDuringAnswer: !!ty.hidden,
+    };
+    const diffs = sess._lastDiffs || [];
+    state.adaptive = scCrucibleRecord(state.adaptive, {
+      cardId: card.id, card, ts: nowTs, rating,
+      answerMs: timing.answerMs, hesitationMs: timing.hesitationMs, thinkMs: timing.thinkMs,
+      keystrokes: timing.keystrokes, backspaces: timing.backspaces,
+      pasted: timing.pasted, hiddenDuringAnswer: timing.hiddenDuringAnswer,
+      hintUsed: !!sess.showHint, doubleRated: !!sess._ratedCard,
+      recall: diffs.length ? diffs.reduce((a,d)=>a+(d.recall||0),0)/diffs.length : null,
+      contentMissingCount: diffs.reduce((a,d)=>a+(d.contentMissingCount||0),0),
+      diffWords: diffs.map(d=>({ intended: d.intended||'', missing: d.missing||[] })),
+      features: scCardFeatures(card),
+    });
+    sess._ratedCard = true;
   }
   applyRating(card, rating, sess);
   nextCard();

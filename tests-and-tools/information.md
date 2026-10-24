@@ -39,7 +39,8 @@ tests-and-tools/
 ├── helpers/              server / storage / pages / api_mock / content
 ├── scenarios/            11 ready-to-run render.py scenarios (numbered)
 ├── ui/                   pytest tests: smoke, navigation, home, decks,
-│                         study, library, analytics, settings, community,
+│                         study, library, analytics, settings, adaptive,
+│                         community,
 │                         storage, tour, viewports, mobile, content,
 │                         **features**
 └── screenshots/          all output lands here (gitignored)

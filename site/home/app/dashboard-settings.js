@@ -360,16 +360,44 @@ function renderSettings(c) {
       el('div',{style:'font-weight:800;margin-bottom:4px'},scLbl('help','Help')),
       el('div',{style:'font-size:12px;color:var(--muted)'},'Rewatch the guided walkthrough: subjects, decks, flashcards, studying, the sidebar and the shortcuts. It builds a real practice deck as it goes \u2014 you can keep it or discard it at the end.')
     ),
-    btn('Replay tutorial','primary',{onclick:()=>startTutorial(0,'replay')})
+    btn('Replay tutorial','primary',{onclick:()=>startTutorial(0,'replay')}),
+    el('div',{style:'font-size:12px;color:var(--muted);margin-top:14px'},
+      'Legal: ',
+      el('a',{href:'../privacy/',style:'color:var(--blue)'},'Privacy Policy'),' · ',
+      el('a',{href:'../terms/',style:'color:var(--blue)'},'Terms of Service'),' · ',
+      el('a',{href:'../cookies/',style:'color:var(--blue)'},'Cookies Policy'))
   );
 
 
   // ── 1. 📚 Study & Scheduling — the SRS engine and session-shaping knobs ──
   const studyCard=el('div',{class:'card',style:'padding:20px'},panelHeader(scLbl('books','Study & Scheduling'),'study','var(--pink)'));
   const algoSel=el('select',{class:'u-input','aria-label':'SRS scheduling algorithm',onchange:e=>{ state.settings.algorithm=e.target.value; scheduleSave(); }});
-  [['fsrs','FSRS (Recommended)'],['sm2','SM-2 (Classic)']].forEach(([v,t])=>{ const o=el('option',{value:v,class:'u-bg'},t); if(state.settings.algorithm===v)o.selected=true; algoSel.appendChild(o); });
+  [['fsrs','FSRS (Recommended)'],['sm2','SM-2 (Classic)'],['crucible','Crucible (Adaptive, in-house)']].forEach(([v,t])=>{ const o=el('option',{value:v,class:'u-bg'},t); if(state.settings.algorithm===v)o.selected=true; algoSel.appendChild(o); });
+  // ── Crucible learning profile: calibration state + weak-word map ──
+  const prof0 = state.adaptive || (state.adaptive = scCrucibleDefaults());
+  const calibNow = Math.min(prof0.samples||0, CRUCIBLE_MIN_GLOBAL_SAMPLES);
+  const weakWords = scCrucibleWeakWords(prof0, 8);
+  const profWrap = el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'});
+  profWrap.append(
+    el('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:10px'},
+      el('div',{style:'font-size:13px;font-weight:600'},'Learning profile (Crucible)'),
+      el('div',{style:'font-size:11px;color:var(--muted)'}, scCrucibleCalibrated(prof0)?'calibrated':'calibrating')),
+    el('div',{style:'height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden;margin:8px 0'},
+      el('div',{style:`height:100%;width:${Math.round(100*calibNow/CRUCIBLE_MIN_GLOBAL_SAMPLES)}%;background:var(--grad);transition:width .4s ease`})),
+    el('div',{style:'font-size:11px;color:var(--muted);line-height:1.6'},
+      scCrucibleCalibrated(prof0)
+        ? `${prof0.samples} valid samples · ${prof0.anomalies||0} anomalies filtered · personalisation active while Crucible is the selected algorithm.`
+        : `Personalisation stays off until ${CRUCIBLE_MIN_GLOBAL_SAMPLES} valid reviews exist (now ${prof0.samples||0}) — until then sessions schedule exactly like the base algorithm, so early data can’t bias it.`),
+    weakWords.length ? el('div',{style:'margin-top:10px'},
+      el('div',{style:'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:6px'},'Words you miss most — tested more often'),
+      el('div',{style:'display:flex;gap:6px;flex-wrap:wrap'}, ...weakWords.map(w=>el('span',{style:'font-size:11px;padding:3px 9px;border-radius:99px;background:rgba(var(--pink-rgb),0.10);border:1px solid rgba(var(--pink-rgb),0.3);color:var(--pink)'}, `${w.word} · ${Math.round(w.rate*100)}%`)))) : null,
+    el('div',{style:'margin-top:10px'},
+      btn('Reset profile','ghost',{small:true,onclick:()=>{ confirmDestructive('Reset learning profile?',
+        'All Crucible difficulty estimates, weak-word stats and timing baselines will be discarded. Decks, cards and review history are untouched.',
+        'Reset', ()=>{ state.adaptive = scCrucibleDefaults(); scheduleSave(); renderView('settings'); showToast('Learning profile reset 🗑️'); }); }}))
+  );
   studyCard.append(
-    el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},el('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px'},el('div',{style:'font-size:13px;font-weight:600'},'SRS Algorithm'),makeHelpBtn('FSRS vs SM-2 — how reviews get scheduled', ()=>openAlgorithmHelp(), false)),algoSel),
+    el('div',{style:'padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05)'},el('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px'},el('div',{style:'font-size:13px;font-weight:600'},'SRS Algorithm'),makeHelpBtn('FSRS vs SM-2 vs Crucible — how reviews get scheduled', ()=>openAlgorithmHelp(), false)),algoSel, profWrap),
     makeToggle('Auto-suspend leeches','Suspend cards after too many lapses','autoSuspend'),
     makeRange('Daily Review Goal: ','dailyGoal',5,100,'var(--blue)'),
     makeRange('New Cards Per Day: ','newCardsPerDay',1,50,'var(--pink)'),
