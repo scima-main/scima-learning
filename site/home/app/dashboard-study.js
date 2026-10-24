@@ -107,7 +107,7 @@ function attachNextControls(container, rating){
   const sess = studySession;
   const secs = Math.max(0, Math.min(60, (state.settings.autoNextSeconds|0) || 0));
   const row = el('div',{class:'quiz-next-row',style:'display:flex;gap:12px;align-items:center;justify-content:center;margin-top:12px'});
-  const last = sess && (sess.idx + 1 >= sess.queue.length);
+  const last = sess && (sess.idx + 1 >= sess.queue.length) && sess.mode !== 'endless';  // endless: a pass ending is not the session ending
   const countdown = secs > 0
     ? el('span',{class:'u-muted-11',style:'font-size:12px;font-weight:800;min-width:74px'},`Next in ${secs}s`)
     : null;
@@ -825,6 +825,11 @@ const MODE_HELP = {
   weakness: { icon:'alert', title:'Weakness', blurb:'Only the cards you struggle with enter the queue.', tips:[
     'Scope narrows to cards with at least one lapse or an ease below 2.3 — the ones the SRS is still fighting over.',
     'Rating them well raises ease and lengthens intervals, so cards graduate out of this pool as they strengthen.']},
+  endless: { icon:'repeat', title:'Endless drill', blurb:'Three passes per chunk — multiple choice, fill-the-gaps, written — repeating misses until every card is right once, then an endless written loop until you finish.', tips:[
+    'Each chunk (10 cards by default, adjustable on the card) runs MC → gaps → written; within a pass, only the cards you got wrong repeat, until each is correct at least once.',
+    'After the last chunk finishes its written pass, the session enters an endless written-quiz loop over the whole scope — press Finish whenever you’re done.',
+    'Unchunked treats the whole scope as one single part. Basic cards only (they’re the type all three passes can render).',
+    'XP per card per pass type (choice / gaps / written, the endless loop counting as written): the first correct grants full XP, every further correct grants half — so grinding the endless loop pays diminishing returns. Schedules, review history and streaks stay untouched; your Crucible profile still learns from every rep.']},
   multi: { icon:'check-square', title:'Multiple Choice', blurb:'One correct answer plus three distractors from the session.', tips:[
     'Options are the card\u2019s own answer plus three backs drawn from the other basic cards in the session, shuffled.',
     'Only basic cards qualify (they\u2019re the only type with a single plain answer to offer), and the scope needs at least four of them — that\u2019s why Start gates harder here.']},
@@ -859,6 +864,26 @@ function openModeHelp(id) {
       startBtn
     ));
   });
+
+  // ── Endless drill: its own full-width row beneath the six mode cards ──
+  const basicCount = refinedCards.filter(c=>c.type==='basic').length;
+  const endlessOk = basicCount >= 4;   // MC pass needs 3 distractors, like multi
+  const chunkSel = el('select',{class:'u-input',style:'width:auto;padding:6px 10px;font-size:12px','aria-label':'Endless chunk size',
+    onchange:e=>{ state.settings.endlessChunk=Number(e.target.value); scheduleSave(); }});
+  [5,10,15,20,25].forEach(n=>{ const o=el('option',{value:String(n),class:'u-bg'},`${n} cards`); if((state.settings.endlessChunk||10)===n) o.selected=true; chunkSel.appendChild(o); });
+  const endlessStart=(variant)=>startStudySession(state.studyScope, variant==='chunked'?'endless-chunked':'endless-plain');
+  modeGrid.appendChild(el('div',{class:`card${endlessOk?' glow':''}`,style:`grid-column:1/-1;position:relative;padding:20px;opacity:${endlessOk?1:0.5};display:flex;align-items:center;gap:18px;flex-wrap:wrap`},
+    makeHelpBtn('How Endless works', e=>{ e.stopPropagation(); openModeHelp('endless'); }, true),
+    el('div',{style:'font-size:26px'},scIcon('repeat')),
+    el('div',{style:'flex:1;min-width:220px'},
+      el('div',{style:'font-weight:800;font-size:14px;margin-bottom:4px'},'Endless Drill'),
+      el('div',{style:'font-size:11px;color:var(--muted)'},'Per chunk: pick the answer, complete the sentence, type it from memory — repeating only your misses until each card is right once, then an endless typed drill until you press Finish. Basic cards only. XP: full the first time a card is correct in each pass type (choice, gaps, written), half for repeats; review schedules stay untouched.')),
+    el('div',{style:'display:flex;align-items:center;gap:8px'},
+      el('span',{style:'font-size:11px;color:var(--muted);font-weight:700'},'Chunk:'), chunkSel),
+    el('div',{style:'display:flex;gap:8px;flex-wrap:wrap'},
+      btn('Start chunked','primary',{disabled:!endlessOk,onclick:()=>endlessStart('chunked')}),
+      btn('Start unchunked','ghost',{disabled:!endlessOk,onclick:()=>endlessStart('plain')}))
+  ));
 
   c.append(
     el('div',{style:'display:flex;align-items:flex-start;justify-content:space-between;gap:12px'},
@@ -984,6 +1009,8 @@ function startStudySession(scopes, mode) {
     cards = cards.filter(c=>c.type!=='calculation' && c.type!=='table');
   }
   if(mode==='multi') cards = cards.filter(c=>c.type==='basic');
+  const endlessVariant = mode==='endless-chunked' ? 'chunked' : mode==='endless-plain' ? 'plain' : null;
+  if (endlessVariant) { cards = cards.filter(c=>c.type==='basic'); mode = 'endless'; }
   // ── Quiz parameters: card-type filter, then the count limit ──
   const qp = quizParams();
   if (qp.types && qp.types.length) cards = cards.filter(c => qp.types.some(t => qpTypeMatch(c, t)));
@@ -1010,10 +1037,73 @@ function startStudySession(scopes, mode) {
     _lastTiming: null, _lastDiffs: null, _ratedCard: false,
   };
   scInstallTypingTracker();
+  if (endlessVariant) {
+    const sess = studySession;
+    sess.exam=false; sess.timed=false;
+    const size = Math.max(2, state.settings.endlessChunk||10);
+    const pool = shuffleArr(cards);
+    sess.endless = {
+      variant: endlessVariant,
+      chunkSize: size,
+      chunks: endlessVariant==='chunked' ? scChunkArray(pool, size) : [pool],
+      chunkIdx: 0, phase: 'mc', round: 1, cycle: 0,
+      pending: [], repush: [], done: {},
+    };
+    scEndlessSetupPhase(sess);
+  }
   spSessionStart();         // ✍️ scratchpad: a new session wipes any leftover pads (spec §31)
   renderView('study');
 }
 
+
+// ── Endless drill state machine ────────────────────────────────────
+// Per chunk: mc → gaps → written; within a pass only wrong cards repeat
+// (repush list) until every card in the chunk was correct at least once.
+// After the last chunk's written pass: an endless written loop over the
+// whole scope, re-shuffled each cycle, until the user presses Finish.
+function scChunkArray(arr, n) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out.length ? out : [[]];
+}
+function scEndlessPhaseMode(sess) {
+  const ph = sess.endless ? sess.endless.phase : null;
+  return ph === 'mc' ? 'multi' : ph === 'gaps' ? 'gaps' : 'quiz';   // written + endless
+}
+function scEndlessLabel(sess) {
+  const E = sess.endless;
+  const names = { mc:'Multiple choice', gaps:'Fill in the gaps', written:'Written quiz', endless:'Endless written loop' };
+  const chunk = E.variant==='chunked' ? ` · chunk ${E.chunkIdx+1}/${E.chunks.length}` : '';
+  const cycle = E.phase==='endless' ? ` · cycle ${E.cycle}` : ` · round ${E.round}`;
+  return `Endless · ${names[E.phase]}${chunk}${cycle}`;
+}
+function scEndlessSetupPhase(sess) {
+  const E = sess.endless;
+  E.pending = E.phase==='endless' ? shuffleArr(E.chunks.flat()) : shuffleArr(E.chunks[E.chunkIdx] || []);
+  E.repush = []; E.done = {};
+  if (E.phase !== 'endless') E.round = 1;
+  sess.queue = E.pending.slice();
+  sess.idx = 0;
+}
+function scEndlessOnGrade(sess, card, correct) {
+  const E = sess.endless;
+  if (correct) E.done[card.id] = true; else E.repush.push(card);
+  sess.idx++;
+  if (sess.idx < sess.queue.length) { renderStudySession(document.getElementById('view-study')); return; }
+  if (E.repush.length) {                       // repeat the misses of this pass
+    E.pending = E.repush; E.repush = []; E.round++;
+    sess.queue = E.pending.slice(); sess.idx = 0;
+    renderStudySession(document.getElementById('view-study')); return;
+  }
+  if (E.phase==='mc') E.phase='gaps';
+  else if (E.phase==='gaps') E.phase='written';
+  else if (E.phase==='written') {
+    if (E.chunkIdx + 1 < E.chunks.length) { E.chunkIdx++; E.phase='mc'; }
+    else { E.phase='endless'; E.cycle=1; }
+  } else { E.cycle++; }                        // endless cycle cleared → reshuffle
+  scEndlessSetupPhase(sess);
+  renderStudySession(document.getElementById('view-study'));
+}
 
 function renderStudySession(c) {
   const sess=studySession;
@@ -1026,6 +1116,7 @@ function renderStudySession(c) {
   // Crucible: fresh typing window per card (hesitation/think/paste flags)
   sess._typ = {first:null,last:null,keys:0,backs:0,pasted:false,hidden:false};
   sess._lastTiming = null; sess._lastDiffs = null; sess._ratedCard = false;
+  sess._lastResult = null;   // objective check result, read by Endless mastery
 
   // Always rebuild from a clean slate — prevents stale flashcards/buttons (and
   // their still-attached click handlers, e.g. a old "Reveal" button) sticking
@@ -1052,7 +1143,8 @@ function renderStudySession(c) {
     btn([scIcon('arrow-left'),' Exit'],'ghost',{small:true,onclick:()=>{ clearQuizTimer(); clearNextTimer(); clearSessionClock(); if(window.speechSynthesis) window.speechSynthesis.cancel(); spSessionEnd(); logAbortedSession(studySession); studySession=null; renderView('study'); }}),
     el('div',{style:'flex:1'},
       el('div',{style:'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'},
-        el('span',{style:'font-size:12px;font-weight:700;color:var(--muted)'},`${sess.idx+1} / ${sess.queue.length}`),
+        el('span',{style:'font-size:12px;font-weight:700;color:var(--muted)'},
+          sess.mode==='endless' ? `${sess.idx+1} / ${sess.queue.length} — ${scEndlessLabel(sess)}` : `${sess.idx+1} / ${sess.queue.length}`),
         sess.combo>=3?mkTag(scLbl('flame',`${sess.combo}x`),'#FB923C'):null
       ),
       el('div',{class:'study-progress'},el('div',{class:'study-prog-fill',style:`width:${(sess.idx/sess.queue.length)*100}%`}))
@@ -1074,11 +1166,12 @@ function renderStudySession(c) {
   scrollArea.appendChild(progress);
   const citBadge = card.citation ? el('div',{class:'citation-badge',onclick:()=>openCitationViewer(card.citation)},scLbl('book-open','Source')) : null;
   if(sess.showHint && card.hint){const _h=el('div',{class:'flashcard-hint',style:'margin-bottom:12px'});_h.append(scLbl('bulb','Hint'),setRichText(el('span'),' — '+card.hint));scrollArea.appendChild(_h);}
-  const {scrollContent,stickyFooter} = sess.mode==='quiz'
+  const effMode = sess.mode==='endless' ? scEndlessPhaseMode(sess) : sess.mode;
+  const {scrollContent,stickyFooter} = effMode==='quiz'
     ? renderQuizCard(card,citBadge,scrollArea)
-    : sess.mode==='gaps'
+    : effMode==='gaps'
     ? renderGapCard(card,citBadge)
-    : sess.mode==='multi'
+    : effMode==='multi'
     ? renderMultiChoiceCard(card,citBadge)
     : renderFlashcard(card,citBadge);
   if (sess.exam) {
@@ -1150,6 +1243,7 @@ function renderMultiChoiceCard(card, citBadge) {
         if(options[i].correct) ob.style.cssText+=';border-color:#22c55e;background:rgba(34,197,94,0.12);color:#22c55e';
       });
       if(!opt.correct) b.style.cssText+=';border-color:#ef4444;background:rgba(239,68,68,0.12);color:#ef4444';
+      sess._lastResult = opt.correct ? 'correct' : 'wrong';
       if(sess._gap===null) sess._gap={correct:0,close:0,wrong:0};
       sess._gap[opt.correct?'correct':'wrong']++;
       attachNextControls(optsWrap, opt.correct?4:1);
@@ -1464,8 +1558,10 @@ function renderGapCard(card, citBadge) {
     // Crucible: word-level diffs (intended vs submitted) + timing window
     const crucibleDiffs = scCrucibleCapture(sess,
       userAnswers.map((u,i)=>({user:u, intended:answersToCheck[i]})));
+    sess._lastResult = null;   // set just below once result is known
     const nCorrect = hits.filter(h=>h==='correct').length;
     const result = nCorrect===hits.length ? 'correct' : nCorrect>0 ? 'close' : 'wrong';
+    sess._lastResult = result;
     if(sess._gap) sess._gap[result==='correct'?'correct':result==='close'?'close':'wrong']++;
     inputAreas.forEach((inp,i)=>{ inp.disabled=true;
       inp.style.borderColor = hits[i]==='correct' ? '#22c55e' : hits[i]==='close' ? '#FB923C' : '#ef4444'; });
@@ -2029,6 +2125,7 @@ function renderQuizCard(card, citBadge, scrollArea) {
       result = marksAwarded===requiredAnswers ? 'correct' : marksAwarded>0 ? 'close' : 'wrong';
       // Crucible: unhit mark-scheme keywords are the "missing" intent here
       const msDiffs = scCrucibleCapture(sess, expectedAnswers.map(k=>({user:userAnswer, intended:k})));
+      sess._lastResult = result;
       resultChildren=[
         isExact&&result!=='correct'&&!sess.timedOut
           ? el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:4px;font-style:italic'},'Tip: exact mode requires the keyword phrase verbatim')
@@ -2048,6 +2145,7 @@ function renderQuizCard(card, citBadge, scrollArea) {
       if (sess.timedOut) sess._timeouts++;
       result=(userAnswer&&!sess.timedOut)?matcher(userAnswer,expectedAnswers[0]||''):'wrong';
       const singleDiff=scCrucibleCapture(sess,[{user:userAnswer,intended:expectedAnswers[0]||''}]);
+      sess._lastResult=result;
       resultChildren=[
         isExact&&result!=='correct'&&!sess.timedOut
           ? el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:4px;font-style:italic'},'Tip: exact mode requires a perfect match')
@@ -2076,6 +2174,7 @@ function renderQuizCard(card, citBadge, scrollArea) {
         return {userAnswer,rowResult,matchedExpected};
       });
       result = correctCount===requiredAnswers ? 'correct' : correctCount>0 ? 'close' : 'wrong';
+      sess._lastResult = result;
       resultChildren=[
         el('div',{style:'font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em'},`${correctCount} / ${requiredAnswers} correct`),
         ...rows.map(r=>el('div',{style:'display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:4px 0'},
@@ -2191,6 +2290,31 @@ function rateCard(rating) {
       features: scCardFeatures(card),
     });
     sess._ratedCard = true;
+  }
+  if (sess.mode==='endless') {
+    // Drill mode: feeds the Crucible profile (above) and session stats.
+    // XP rule: the FIRST correct answer for a card in each pass type
+    // (multiple choice / gaps / written — the endless loop counts as
+    // written) grants full XP; every further correct (repeats within a
+    // pass, later passes, endless cycles) grants 50%. applyRating() is
+    // still skipped: endless never reschedules cards and never touches
+    // review history or streaks.
+    const correct = sess._lastResult === 'correct';
+    if (correct) {
+      const passType = sess.endless.phase === 'endless' ? 'written' : sess.endless.phase;
+      const granted = sess._xpGranted || (sess._xpGranted = {});
+      const per = granted[card.id] || (granted[card.id] = {});
+      const xpMult = (per[passType] || 0) === 0 ? 1 : 0.5;
+      per[passType] = (per[passType] || 0) + 1;
+      const deck=state.decks.find(d=>d.cards.some(c=>c.id===card.id));
+      const sk=deck?.subject||DEFAULT_SUBJECT_KEY;
+      addXP(calcCardXP(card,rating)*xpMult*(sess.showHint?0.5:1)*subjectXPMultiplier(state.trackerState?.subjects,sk));
+    }
+    sess.stats[correct?'correct':'incorrect'] += 1;
+    sess.combo = correct ? sess.combo+1 : 0;
+    sess.maxCombo = Math.max(sess.maxCombo, sess.combo);
+    scEndlessOnGrade(sess, card, correct);
+    return;
   }
   applyRating(card, rating, sess);
   nextCard();

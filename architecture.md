@@ -432,6 +432,29 @@ never leaves the device and is stripped from nothing, because it is
 never part of any share/export payload — it lives beside the decks, not
 inside them.
 
+### 3.6 Endless Drill (`mode='endless'` in `dashboard-study.js`)
+
+A seventh study method for `basic` cards, picked from its own full-width
+row under the six mode cards (chunk size selectable on the card, persisted
+as `settings.endlessChunk`, default 10). Two varieties: `endless-chunked`
+(scope split into N-card chunks) and `endless-plain` (scope = one chunk).
+Per chunk the session runs three passes — multiple choice
+(`renderMultiChoiceCard`), fill-in-the-gaps (`renderGapCard`), written quiz
+(`renderQuizCard`) — selected per card by `scEndlessPhaseMode()`; within a
+pass only missed cards repeat (`endless.repush`) until every card in the
+chunk was objectively correct (`sess._lastResult`, the same signal the
+graders already compute) at least once. After the last chunk’s written
+pass the session enters an endless re-shuffled written loop
+(`phase='endless'`, cycles counted) until Exit/Finish. Mastery bookkeeping
+lives in `scEndlessOnGrade()`/`scEndlessSetupPhase()`; `rateCard()` routes
+endless grades there instead of `applyRating()`, so the drill never
+reschedules cards and never touches review history or streaks. XP is
+granted in-session per card per pass type (mc/gaps/written, the endless
+loop counting as written): first correct full, further corrects half —
+diminishing returns on loop grinding. Every rep still feeds Crucible
+(§3.5) samples. The progress bar carries the phase label
+(`scEndlessLabel()`): mode · phase · chunk · round/cycle.
+
 ## 4. Backend: `backend/`
 
 `site/backend/` is the ONE canonical backend. `minified/backend/` is a

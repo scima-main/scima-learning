@@ -1,9 +1,14 @@
 # CHANGELOG (last updated 24th October 2026, UTC)
 
+#### VERSION 2026.10.27-ALPHA
+
+- new study mode: **Endless**
+- it's endless written after you do some multiple choice, then fill in the gaps, then written quiz
+
 #### VERSION 2026.10.26-ALPHA	
 
-- New SRS option: **Crucible (Adaptive, in-house)** — personalises review intervals from various data points.
-- Legal pages added: Privacy Policy, Terms of Service and Cookies Policy (linked from Settings and the no-JS landing page, listed in the sitemap)
+- new SRS option: **Crucible** (adaptive, in-house) — personalizes review intervals from various data points.
+- legal pages added: Privacy Policy, Terms of Service and Cookies Policy (linked from settings and the no-JS landing page, listed in the sitemap)
 
 #### VERSION 2026.10.25-ALPHA	
 
@@ -106,5 +111,6 @@
 *=*
 to implement:
 - separated quizlet program (likely chrome extension) that outputs .json because scraping blocked at quizlet
-*=*
-source code: https://www.github.com/scima-main/scima-learning
+
+  *=*
+  source code: https://www.github.com/scima-main/scima-learning
