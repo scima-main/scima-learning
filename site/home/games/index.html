@@ -101,6 +101,7 @@
        reads this before it evaluates PAGE_VIEWS/ROOT_REL). `root` is
        the relative path from this page back to the landing folder. -->
   <script>window.SCIMA_PAGE = { id: 'games', root: '../', views: ['games'] };</script>
+  <script>/* SCIMA url-sanity guard: a document served at the wrong path (mis-cached edge object, deploy gap) 404s every relative asset and hashes nav onto the wrong document — relocate to this document's real URL before any of that happens. Inline + dependency-free so it survives exactly the mix that kills the external scripts; session-guarded against loops. */(function(){var P=window.SCIMA_PAGE,S={decks:1,study:1,library:1,analytics:1,settings:1,about:1,games:1,packs:1};if(!P||typeof P.id!=="string")return;var R=/\/(?:decks|study|library|analytics|settings|about|games|packs|capture|insights|tracker)\/$/,p=location.pathname,h=R.test(p),w=S[P.id]?!(new RegExp("/"+P.id+"/$")).test(p):h;if(!w)return;try{if(sessionStorage.getItem("scima_url_fix"))return;sessionStorage.setItem("scima_url_fix","1");}catch(e){}var b=p.replace(R,"/");location.replace((S[P.id]?b+P.id+"/":b)+location.search+location.hash);})();</script>
   <script src="../lib/katex/katex.min.js"></script>
   <script src="../lib/katex/mhchem.min.js"></script>
   <script src="../shared/boot-watchdog.js"></script>

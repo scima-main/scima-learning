@@ -161,3 +161,29 @@ def test_crosspage_nav_correct_without_page_declaration(page, base_url, seeded):
         f"Community must reach the landing's #community view, got {page.url}"
     expect(page.locator("#view-community.active")).to_be_attached()
     assert page.locator("#view-community").inner_text().strip() != ""
+
+
+def test_document_served_at_wrong_path_self_corrects(page, base_url, seeded):
+    """Edge/deploy mis-serve simulation: the LANDING document answered for
+    /decks/. Relative assets and cross-page jumps would all break there, so
+    the boot watchdog must relocate to the document's real URL once."""
+    seeded("preset:empty")
+    landing = {"body": None}
+
+    def misserve(route):
+        if route.request.resource_type != "document":
+            route.continue_()
+            return
+        if landing["body"] is None:
+            landing["body"] = route.fetch(url=base_url + "/").text()
+        route.fulfill(body=landing["body"], headers={"Content-Type": "text/html"})
+
+    # /decks/ will be answered with the LANDING document (mis-serve)
+    page.route(base_url + "/decks/", misserve)
+    page.goto(base_url + "/decks/", wait_until="load")
+    page.wait_for_timeout(1500)
+    from urllib.parse import urlparse
+    assert urlparse(page.url).path == "/", \
+        f"mis-served landing document must relocate to /, got {page.url}"
+    expect(page.locator("#view-home.active")).to_be_attached()
+    assert page.evaluate("() => document.querySelectorAll('#nav .nav-btn').length") > 0

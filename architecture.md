@@ -71,7 +71,7 @@ makes a network call.
 | `home/lib/` | Vendored bundles: KaTeX (+mhchem), fflate (zip), EPUB/MOBI parsers, process-shim, lazily-loaded pdf.js. |
 | `backend/app/` | FastAPI app: `main.py` (routes/mounts/middleware), `db.py` (SQLite), `schemas.py` (pydantic API contract), `scimaschema.py` (server mirror of `scima-schema.js`), `ratelimit.py`, `migrate_db.py`. |
 | `backend/tests/` | API sanity tests (`test_api.py`) against a throwaway DB. |
-| `community/` | Legacy standalone community page; still mounted at `/community` (§4.2) but superseded by the `#community` hash view inside the landing document. |
+| `community/` | Legacy standalone community page (archived). `/community` is no longer mounted — it 302s to `/#community` (§4.2); the live view lives in the landing document. |
 | `app/` | Android client (out of scope). |
 | `tests-and-tools/` | Playwright/pytest suite + render/serve/seed CLIs for `home/` (`tests-and-tools/information.md`). |
 

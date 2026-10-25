@@ -1042,46 +1042,28 @@ STUDY_LANDING_DIR = Path(os.environ["SCIMA_STATIC_ROOT"]) \
     if os.environ.get("SCIMA_STATIC_ROOT") else \
     next((p for p in (REPO_ROOT / c for c in STATIC_CANDIDATES)
           if (p / "index.html").exists()), REPO_ROOT / "home")
-# Legacy standalone community page: renamed community/ → community-deprecated/
-# at the repo root, and not shipped inside the minified bundle at all. Probe
-# every place it may live; if absent, the /community mount is skipped below
-# (StaticFiles would raise at import on a missing directory).
-COMMUNITY_DIR = next((p for p in (
-    REPO_ROOT / "archive" / "community-deprecated",
-    REPO_ROOT / "community-deprecated",
-    REPO_ROOT / "community",
-    REPO_ROOT.parent / "community-deprecated",
-    REPO_ROOT.parent / "archive" / "community-deprecated",
-) if p.exists()), None)
+# Legacy standalone community page: the deprecated shell used to be mounted
+# at /community/, but it is a trap — a half-dead document ("community loads
+# without any of the content") that stale edge objects and old bookmarks can
+# still land on. The live community view lives in the landing document at
+# /#community, so /community[/] now 302s there; deeper legacy paths keep
+# working through the 404 deep-link rewrite below.
+
 PACKS_DIR = STUDY_LANDING_DIR / "assets" / "packs"
 
-# Legacy URL family (/dashboard/…). Kept because existing bookmarks use it
-# and the community page loads /dashboard/shared/theme.js root-absolute.
+
+@app.get("/community")
+@app.get("/community/")
+async def community_redirect():
+    return RedirectResponse("/#community", status_code=302)
+
+
 app.mount(
     "/dashboard",
     StaticFiles(directory=STUDY_LANDING_DIR, html=True),
     name="dashboard",
 )
 
-if COMMUNITY_DIR is not None:
-    app.mount(
-        "/community",
-        StaticFiles(
-            directory=COMMUNITY_DIR,
-            html=True,
-        ),
-        name="community",
-    )
-
-
-# Canonical URL family: the workflow routes straight off the domain root —
-# / (Home), /study/, /capture/, /insights/, /settings/, /tracker/. Each
-# route is a subdirectory of the landing folder with its own index.html,
-# served for the directory URL by StaticFiles(html=True); a slash-less
-# /study is 307-redirected to /study/ by Starlette. Every in-page reference
-# (scripts, styles, lazy pdf.js, cross-route links) is relative, so the
-# same files work under this mount and the /dashboard mount above without
-# either family leaking into the other.
 app.mount(
     "/",
     StaticFiles(directory=STUDY_LANDING_DIR, html=True),

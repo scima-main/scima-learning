@@ -590,3 +590,16 @@ def test_html_asset_urls_carry_version_stamp(client):
     # external URLs untouched
     assert 'fonts.googleapis.com/css2?family=Nunito' in client.get("/").text
     assert '?v=' not in client.get("/").text.split('fonts.googleapis.com')[1].split('"')[0]
+
+
+def test_legacy_community_path_redirects_to_landing_view(client):
+    """The deprecated standalone shell must never be served again: /community
+    and /community/ 302 to the landing document's #community view."""
+    for path in ("/community", "/community/"):
+        r = client.get(path, follow_redirects=False)
+        assert r.status_code == 302, path
+        assert r.headers["location"] == "/#community", path
+    # deep legacy links keep working through the 404 rewrite
+    r = client.get("/community/sd_abc123", follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers["location"] == "/#community/sd_abc123"
