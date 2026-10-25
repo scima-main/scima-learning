@@ -112,7 +112,13 @@ async function init() {
   // ── Multi-page site build: view routing + carried-over state ──────────
   // (No-ops in the extension build — SCIMA_PAGE is only declared by the
   // site's .html pages, and PAGE_VIEWS defaults to every view there.)
-  const isSitePage = !isExtension && !!window.SCIMA_PAGE;
+  // Protocol, not the inline declaration, decides site-vs-extension: a
+  // stale-cache mix that drops the inline SCIMA_PAGE script must still
+  // initialise this document as the site page it is (view routing,
+  // page-memory restore) instead of falling through to extension
+  // no-ops and rendering an empty view container.
+  const isSitePage = !isExtension &&
+    (typeof location === 'undefined' || location.protocol !== 'chrome-extension:');
   // This page's in-memory view state, saved on the last pagehide (below):
   // the bits the SPA kept alive across in-document view switches that aren't
   // part of mf_state — the active study session, study scope/refine, the
@@ -308,7 +314,7 @@ try{
 //  - pageshow from the back/forward cache: reload, because a bfcache
 //    restore replays a stale document (stale state, dead listeners) where
 //    the SPA always had the live one.
-if (!isExtension && window.SCIMA_PAGE) {
+if (typeof location !== 'undefined' ? (!isExtension && location.protocol !== 'chrome-extension:') : (!isExtension && window.SCIMA_PAGE)) {
   window.addEventListener('pagehide', () => {
     flushSave();
     try {

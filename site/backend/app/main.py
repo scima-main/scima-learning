@@ -289,15 +289,26 @@ async def enforce_max_body_size(request: Request, call_next):
 # retired pill-shaped page tabs — while the files on disk are current).
 # no-cache forces a revalidation on every use; ETags still make unchanged
 # files cost only a 304, so this is freshness, not extra bandwidth.
-STATIC_REVALIDATE = (".html", ".js", ".css")
+# Every static asset, not just html/js/css: .md (ABOUT.md) and .svg (the
+# icon sprite) are fetch()ed by the frontend, and with NO Cache-Control they
+# got heuristic freshness — a once-cached stale or failed response (a deploy
+# window 404, say) then replayed on every ordinary Ctrl+R while hard
+# reloads bypassed it, which is exactly the "icons/changelog missing until
+# Ctrl+Shift+R" report. no-cache keeps ETag/304 cheapness but forces the
+# revalidation that heuristic freshness skipped. /api/ keeps its own caching
+# semantics (JSON responses carry no cache-control and stay heuristic-free
+# by being dynamic).
+STATIC_REVALIDATE_ALL = True
 
 
 @app.middleware("http")
 async def revalidate_static(request: Request, call_next):
     response = await call_next(request)
     path = request.url.path
-    if request.method in ("GET", "HEAD") and (
-        path.endswith(STATIC_REVALIDATE) or path.endswith("/")
+    if (
+        STATIC_REVALIDATE_ALL
+        and request.method in ("GET", "HEAD")
+        and not path.startswith("/api/")
     ):
         if "cache-control" not in response.headers:
             response.headers["Cache-Control"] = "no-cache"

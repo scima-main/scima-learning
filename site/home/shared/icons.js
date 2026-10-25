@@ -47,8 +47,9 @@
         return chrome.runtime.getURL(SPRITE_PATH);
       }
     } catch (e) { /* not in an extension context */ }
-    var root = (typeof window !== 'undefined' && window.SCIMA_PAGE &&
-                typeof window.SCIMA_PAGE.root === 'string') ? window.SCIMA_PAGE.root : '';
+    var root = (typeof scAssetRoot === 'function') ? scAssetRoot()
+      : ((typeof window !== 'undefined' && window.SCIMA_PAGE &&
+          typeof window.SCIMA_PAGE.root === 'string') ? window.SCIMA_PAGE.root : '');
     return new URL(root + SPRITE_PATH, document.baseURI).href;
   }
 
@@ -70,7 +71,22 @@
   function ensureSprite() {
     if (_state) return;
     _state = 1;
-    fetch(spriteUrl())
+    // cache:'no-cache' revalidates even on ordinary Ctrl+R reloads (heuristic
+    // caching of a once-failed/stale sprite response is exactly how a page
+    // ends up icon-less until a hard reload), and one cache-busting retry
+    // covers a poisoned cache entry or a mid-deploy 404.
+    var url = spriteUrl();
+    var bust = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'sc=' + Date.now();
+    var get = function (u) { return fetch(u, { cache: 'no-cache' }); };
+    // Retry on EITHER a network-level failure (aborted/poisoned connection,
+    // dead edge) or a non-ok response (deploy-window 404) — one cache-busting
+    // attempt covers both before icons degrade to empty boxes.
+    get(url)
+      .catch(function () { return get(bust); })
+      .then(function (r) {
+        if (r.ok) return r;
+        return get(bust + '1');
+      })
       .then(function (r) {
         if (!r.ok) throw new Error('sprite HTTP ' + r.status);
         return r.text();

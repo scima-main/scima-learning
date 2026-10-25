@@ -142,7 +142,15 @@ const ROOT_REL = (typeof window !== 'undefined' && typeof window.SCIMA_PAGE?.roo
 const PAGE_VIEWS = (typeof window !== 'undefined' && window.SCIMA_PAGE
     && Array.isArray(window.SCIMA_PAGE.views) && window.SCIMA_PAGE.views.length)
   ? window.SCIMA_PAGE.views
-  : Object.keys(VIEW_ROUTES);
+  // Fallbacks when the inline SCIMA_PAGE declaration never ran: the
+  // extension's single document genuinely hosts every view, but on the site
+  // a missing declaration must degrade to THIS PAGE's views (derived from
+  // the sniffed CURRENT_PAGE) — falling back to every view used to render
+  // the whole eleven-tab bar across the top of the page whenever a stale
+  // cache mix dropped the inline script.
+  : (typeof location !== 'undefined' && location.protocol === 'chrome-extension:')
+    ? Object.keys(VIEW_ROUTES)
+    : Object.keys(VIEW_ROUTES).filter(v => VIEW_ROUTES[v] === (CURRENT_PAGE === 'home' ? '' : CURRENT_PAGE));
 
 const state = {
   decks: [],

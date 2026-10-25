@@ -876,8 +876,14 @@ let _aboutCache = null;
 function aboutMarkdown() {
   if (!_aboutCache) {
     _aboutCache = (async () => {
-      const url = new URL((window.SCIMA_PAGE?.root || '') + 'ABOUT.md', document.baseURI).href;
-      const res = await fetch(url);
+      const url = new URL((typeof scAssetRoot === 'function' ? scAssetRoot() : (window.SCIMA_PAGE?.root || '')) + 'ABOUT.md', document.baseURI).href;
+      // cache:'no-cache' + one cache-busting retry: a heuristically-cached
+      // stale/failed ABOUT.md response is what made the changelog say
+      // "couldn't load" on ordinary reloads until a hard refresh.
+      let res = await fetch(url, { cache: 'no-cache' }).catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch(url + (url.includes('?') ? '&' : '?') + 'sc=' + Date.now(), { cache: 'no-cache' });
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.text();
     })().catch(e => { _aboutCache = null; throw e; });

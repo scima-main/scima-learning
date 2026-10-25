@@ -1,5 +1,9 @@
 # CHANGELOG (last updated 24th October 2026, UTC)
 
+#### VERSION 2026.10.29-ALPHA	
+
+- Fixed: ordinary reloads (Ctrl+R) could lose the icon sprites, the changelog and the page declaration while a hard reload (Ctrl+Shift+R) worked.
+
 #### VERSION 2026.10.28-ALPHA	
 
 - Fixed: written-quiz graded view could show a literal “null” line above the expected answers (the non-existent images/hints reached the output as "null")

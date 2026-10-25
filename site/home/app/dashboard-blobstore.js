@@ -81,6 +81,6 @@ const blobStore = {
 // All pages resolve 'lib/…' to the same shared landing-folder copy.
 function assetUrl(path) {
   if (isExtension) return chrome.runtime.getURL(path);
-  const root = (typeof window !== 'undefined' && typeof window.SCIMA_PAGE?.root === 'string') ? window.SCIMA_PAGE.root : '';
+  const root = (typeof scAssetRoot === 'function') ? scAssetRoot() : ((typeof window !== 'undefined' && typeof window.SCIMA_PAGE?.root === 'string') ? window.SCIMA_PAGE.root : '');
   return new URL(root + path, document.baseURI).href;
 }

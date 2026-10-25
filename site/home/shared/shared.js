@@ -25,7 +25,7 @@
  *  two tabs open on /#home and /#study whose sidebars disagree are two cached
  *  copies of different deploys, and a fetch would just report whatever the
  *  (possibly stale) cache says ABOUT.md contains. Bump both together. */
-const APP_VERSION = '2026.10.028-alpha';
+const APP_VERSION = '2026.10.029-alpha';
 
 /** XP per mark formula: XP = XP_COEFFICIENT × grade⁻² */
 const XP_COEFFICIENT = 1000;
@@ -310,6 +310,20 @@ function makeDefaultState() {
 // the static files. Falls back to showing the raw $...$ source untouched if
 // KaTeX isn't loaded (e.g. a page that doesn't include it) or a LaTeX
 // snippet fails to parse, so a malformed expression never breaks the card.
+/* Relative path from the current document back to the landing folder.
+   Normally window.SCIMA_PAGE.root (set inline per page); when that inline
+   declaration never ran — the stale-cache mix that also used to summon the
+   eleven-tab bar — sniff the route directory instead, so fetch()ed assets
+   (icon sprite, ABOUT.md, lazy pdf.js) still resolve on the FIRST try from
+   route pages like /study/ instead of 404ing into /study/assets/… */
+function scAssetRoot() {
+  if (typeof window !== 'undefined' && window.SCIMA_PAGE &&
+      typeof window.SCIMA_PAGE.root === 'string') return window.SCIMA_PAGE.root;
+  if (typeof location !== 'undefined' &&
+      /^\/(?:decks|study|library|analytics|settings|about|games|packs|capture|insights|tracker)\//.test(location.pathname)) return '../';
+  return '';
+}
+
 function escapeHtmlText(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
@@ -1479,7 +1493,7 @@ if (typeof module !== 'undefined' && module.exports) {
     hhmm2min, calcSunTimes, resolveScheduledTheme, hexToRgbTriplet, mixHex, relLuminance,
     getEffectiveSubjects, makeDefaultState, sanitizeState, mergeTrackerState, subjectColor, SUBJECTS, LEVEL_TITLES,
     DEFAULT_SCHEDULE, THEME_PRESETS,
-    sanitizeCard, sanitizeDeck, sanitizeFolder, sanitizeMfState,
+    sanitizeCard, sanitizeDeck, sanitizeFolder, sanitizeMfState, scAssetRoot,
     renderRichText, setRichText, latexApproximate, parseAICardText, parseAIJSONCards,
   };
 }

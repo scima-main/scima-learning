@@ -560,3 +560,13 @@ def test_hsts_only_behind_tls(client):
         "/api/v1/health", headers={"x-forwarded-proto": "https"})
     assert tls.headers.get(
         "strict-transport-security", "").startswith("max-age=31536000")
+
+
+def test_non_js_static_assets_also_get_no_cache(client):
+    """ABOUT.md and the icon sprite are fetch()ed by the frontend; without
+    Cache-Control they got heuristic freshness and a once-cached stale or
+    failed response replayed on every ordinary reload (the Ctrl+R bug)."""
+    for path in ("/assets/svg/icons.svg", "/ABOUT.md"):
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert r.headers.get("cache-control") == "no-cache", path
