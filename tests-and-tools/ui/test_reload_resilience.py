@@ -75,3 +75,47 @@ def test_about_markdown_survives_first_failure(page, base_url, seeded):
     expect(page.locator("#view-about")).to_contain_text("CHANGELOG", timeout=8000)
     assert hits["n"] >= 2
     assert "Couldn’t load ABOUT.md" not in page.locator("#view-about").inner_text()
+
+
+def test_boot_watchdog_self_heals_stale_script_mix(page, base_url, seeded):
+    """Simulate the stale-cache mix: the served document loses one core
+    script on the FIRST request only (as a stale cached HTML would). Boot
+    cannot complete; the watchdog must cache-bust-reload once and the second
+    (clean) document must boot fully — no hard reload, no empty shell."""
+    seeded("preset:empty")
+    hits = {"n": 0}
+    docs = []
+    page.on("request", lambda r: docs.append(r.url)
+            if r.resource_type == "document" else None)
+
+    def strip_once(route):
+        if route.request.resource_type != "document":
+            route.continue_()
+            return
+        hits["n"] += 1
+        res = route.fetch()
+        body = res.text().replace('<script src="shared/shared.js"></script>', '', 1)
+        route.fulfill(response=res, body=body)
+
+    # only the bare "/" document is poisoned; the watchdog's ?sc= retry
+    # (different URL) gets the clean document, exactly like a hard reload
+    page.route(base_url + "/", strip_once)
+    page.goto(base_url + "/", wait_until="load")
+    # watchdog fires at ~4s, replaces with ?sc=…, clean doc boots
+    # (nav lives in a closed drawer → attached, not visible)
+    expect(page.locator("#nav .nav-btn").first).to_be_attached(timeout=20000)
+    expect(page.locator("#view-home")).to_contain_text("Create First Deck", timeout=10000)
+    assert hits["n"] == 1, "only the first document should be poisoned"
+    assert len([u for u in docs if u.split('?')[0] == base_url + "/"]) >= 2, \
+        "watchdog must reload a second (clean) document"
+    assert "sc=" in page.url
+    assert page.evaluate("() => window.__scimaBoot && window.__scimaBoot.ok") is True
+
+
+def test_boot_watchdog_stays_quiet_on_healthy_boot(page, base_url, seeded):
+    seeded("preset:empty")
+    pages.goto_app(page, base_url, "/")
+    expect(page.locator("#nav .nav-btn").first).to_be_attached()
+    page.wait_for_timeout(4500)   # past the watchdog window
+    assert "sc=" not in page.url, "healthy boots must never trigger a retry"
+    assert page.evaluate("() => window.__scimaBoot.ok") is True

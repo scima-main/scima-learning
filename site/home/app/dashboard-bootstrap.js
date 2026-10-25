@@ -339,4 +339,7 @@ if (typeof location !== 'undefined' ? (!isExtension && location.protocol !== 'ch
   window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
 }
 
-init();
+// boot-watchdog.js (loaded first on every page) owns the stale-cache
+// recovery; here we just report boot completion to it.
+init().then(() => { if (window.__scimaBoot) window.__scimaBoot.ok = true; })
+  .catch(e => { if (window.__scimaBoot) window.__scimaBoot.err = String((e && e.message) || e); });

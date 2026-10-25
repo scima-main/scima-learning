@@ -570,3 +570,23 @@ def test_non_js_static_assets_also_get_no_cache(client):
         r = client.get(path)
         assert r.status_code == 200, path
         assert r.headers.get("cache-control") == "no-cache", path
+
+
+def test_html_asset_urls_carry_version_stamp(client):
+    """Served HTML stamps relative .js/.css URLs with ?v=<APP_VERSION> so a
+    fresh document can never be answered by stale cached assets (the
+    'empty app until hard reload' mix)."""
+    import re as _re
+    from pathlib import Path as _P
+    ver = _re.search(
+        rb"const APP_VERSION = '([^']+)'",
+        (_P(__file__).resolve().parents[2] / "home" / "shared" / "shared.js").read_bytes(),
+    ).group(1).decode()
+    for route in ("/", "/study/"):
+        body = client.get(route).text
+        assert f"?v={ver}" in body, route
+        assert 'shared/theme.js?v=' in body or '../shared/theme.js?v=' in body, route
+        assert 'app/dashboard.css?v=' in body or '../app/dashboard.css?v=' in body, route
+    # external URLs untouched
+    assert 'fonts.googleapis.com/css2?family=Nunito' in client.get("/").text
+    assert '?v=' not in client.get("/").text.split('fonts.googleapis.com')[1].split('"')[0]

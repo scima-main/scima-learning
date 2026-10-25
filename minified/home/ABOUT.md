@@ -1,5 +1,9 @@
 # CHANGELOG (last updated 24th October 2026, UTC)
 
+#### VERSION 2026.10.30-ALPHA	
+
+- Fixed: Home/Community (and any page) could open empty — nav and content blank until a hard reload — when a stale cached document mixed with fresh scripts. The served HTML now stamps every asset URL with the deployed version (?v=…), and a new boot watchdog detects an incomplete boot and self-heals with one cache-busting reload (or shows a force-reload card if even that fails)
+
 #### VERSION 2026.10.29-ALPHA	
 
 - Fixed: ordinary reloads (Ctrl+R) could lose the icon sprites, the changelog and the page declaration while a hard reload (Ctrl+Shift+R) worked.

@@ -148,6 +148,45 @@ def _csp_policy(inline_script_hashes: Sequence[str]) -> str:
     return _CSP_TEMPLATE.format(hashes=hashes)
 
 
+# ── Asset URL version stamp ─────────────────────────────────────────
+# A stale cached DOCUMENT (browser heuristic cache, CDN edge object from
+# before the no-cache policy) references plain asset URLs that a stale
+# cached asset can answer, producing the "empty app until Ctrl+Shift+R"
+# mix. Stamp every relative .js/.css reference in served HTML with the
+# deployed APP_VERSION so a fresh document always pulls fresh assets
+# (new query string = cache miss everywhere), while the no-cache policy
+# keeps subsequent revalidations cheap. The version is read from the
+# served shared.js (the file APP_VERSION is hand-synced into) and cached
+# per mtime.
+_ASSET_URL_RE = re.compile(
+    rb'((?:src|href)=")((?:\.\./)*)(shared|app|lib|assets)/([^"?#]+\.(?:js|css))(")')
+_ASSET_V_CACHE: dict = {"mtime": None, "ver": ""}
+
+
+def _asset_version() -> str:
+    try:
+        path = STUDY_LANDING_DIR / "shared" / "shared.js"
+        st = path.stat()
+        if _ASSET_V_CACHE["mtime"] != st.st_mtime:
+            txt = path.read_text(encoding="utf-8", errors="ignore")
+            m = re.search(r"const APP_VERSION = '([^']+)'", txt)
+            _ASSET_V_CACHE["ver"] = m.group(1) if m else str(int(st.st_mtime))
+            _ASSET_V_CACHE["mtime"] = st.st_mtime
+        return _ASSET_V_CACHE["ver"]
+    except OSError:
+        return ""
+
+
+def _stamp_asset_urls(body: bytes, ver: str) -> bytes:
+    if not ver:
+        return body
+    tag = f"?v={ver}".encode("utf-8")
+    return _ASSET_URL_RE.sub(
+        lambda m: m.group(1) + m.group(2) + m.group(3) + b"/" + m.group(4) + tag + m.group(5),
+        body,
+    )
+
+
 def _inline_script_hashes(body: bytes) -> list[str]:
     return [
         base64.b64encode(hashlib.sha256(code).digest()).decode("ascii")
@@ -184,6 +223,7 @@ async def security_headers(request: Request, call_next):
         body = b""
         async for chunk in response.body_iterator:
             body += chunk
+        body = _stamp_asset_urls(body, _asset_version())
         csp = _csp_policy(_inline_script_hashes(body))
         headers = dict(response.headers)
         headers.pop("content-length", None)
