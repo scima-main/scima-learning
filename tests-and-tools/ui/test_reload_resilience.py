@@ -119,3 +119,45 @@ def test_boot_watchdog_stays_quiet_on_healthy_boot(page, base_url, seeded):
     page.wait_for_timeout(4500)   # past the watchdog window
     assert "sc=" not in page.url, "healthy boots must never trigger a retry"
     assert page.evaluate("() => window.__scimaBoot.ok") is True
+
+
+def test_crosspage_nav_correct_without_page_declaration(page, base_url, seeded):
+    """With the inline SCIMA_PAGE declaration missing (stale-cache mix),
+    ROOT_REL must still sniff '../' on route pages: Home from /decks/ must
+    cross to /#home (not stick as /decks/#home) and Community must reach the
+    landing's #community view, not hash onto the wrong document."""
+    seeded("preset:empty")
+
+    def strip_on_decks(route):
+        if route.request.resource_type != "document":
+            route.continue_()
+            return
+        res = route.fetch()
+        body = re.sub(r"<script>window\.SCIMA_PAGE[^<]*</script>", "",
+                      res.text(), count=1)
+        route.fulfill(response=res, body=body)
+
+    page.route(base_url + "/decks/", strip_on_decks)
+    page.goto(base_url + "/decks/", wait_until="load")
+    page.wait_for_timeout(900)
+    assert page.evaluate("() => typeof window.SCIMA_PAGE") == "undefined"
+
+    page.locator("#logo-icon").click()
+    page.locator("#nav .nav-btn[data-view='home']").click()
+    page.wait_for_timeout(1200)
+    from urllib.parse import urlparse
+    u = urlparse(page.url)
+    assert u.path == "/", f"Home from /decks/ must cross to the landing, got {page.url}"
+    expect(page.locator("#view-home.active")).to_be_attached()
+
+    # back to the poisoned decks doc, then Community
+    page.goto(base_url + "/decks/", wait_until="load")
+    page.wait_for_timeout(900)
+    page.locator("#logo-icon").click()
+    page.locator("#nav .nav-btn[data-view='community']").click()
+    page.wait_for_timeout(1200)
+    u = urlparse(page.url)
+    assert u.path == "/" and u.fragment == "community", \
+        f"Community must reach the landing's #community view, got {page.url}"
+    expect(page.locator("#view-community.active")).to_be_attached()
+    assert page.locator("#view-community").inner_text().strip() != ""

@@ -320,7 +320,7 @@ function scAssetRoot() {
   if (typeof window !== 'undefined' && window.SCIMA_PAGE &&
       typeof window.SCIMA_PAGE.root === 'string') return window.SCIMA_PAGE.root;
   if (typeof location !== 'undefined' &&
-      /^\/(?:decks|study|library|analytics|settings|about|games|packs|capture|insights|tracker)\//.test(location.pathname)) return '../';
+      /^\/(?:dashboard\/)?(?:decks|study|library|analytics|settings|about|games|packs|capture|insights|tracker)\//.test(location.pathname)) return '../';
   return '';
 }
 

@@ -132,10 +132,14 @@ const CURRENT_PAGE = (typeof window !== 'undefined' && window.SCIMA_PAGE?.id)
       const f = location.pathname.split('/').filter(Boolean).pop() || '';
       return /\.html?$/i.test(f) ? f : (f || 'index.html');
     })();
-// Relative path from the current page to the landing folder root.
+// Relative path from the current page to the landing folder root. When the
+// inline declaration is missing (stale-cache mix), sniff it from the route
+// via scAssetRoot() — a '' fallback here made cross-page jumps build
+// landing-relative URLs against the CURRENT route (/#home from /decks/
+// became /decks/#home, Community opened as an empty hash on the wrong page).
 const ROOT_REL = (typeof window !== 'undefined' && typeof window.SCIMA_PAGE?.root === 'string')
   ? window.SCIMA_PAGE.root
-  : '';
+  : ((typeof scAssetRoot === 'function') ? scAssetRoot() : '');
 // Views hosted by the current page. Without a SCIMA_PAGE declaration (e.g.
 // a single-document build like the extension's dashboard.html) fall back to
 // *every* view, so navigate()/renderView() never leave the page.
@@ -2372,6 +2376,15 @@ function navigate(viewId) {
   // is a real navigation. Single-document builds: PAGE_VIEWS holds every
   // view id, so this never triggers and the in-page switch below runs.
   if (!PAGE_VIEWS.includes(viewId) && !isExtension && viewId in VIEW_ROUTES) {
+    gotoViewPage(viewId);
+    return;
+  }
+  // Safety net for stale mixes: PAGE_VIEWS says this page hosts the view but
+  // the document has no container for it (e.g. the declaration came from a
+  // different page's cached HTML) — make it a real cross-page jump instead
+  // of silently setting a hash on the wrong document.
+  if (!isExtension && viewId in VIEW_ROUTES &&
+      !document.getElementById(`view-${viewId}`)) {
     gotoViewPage(viewId);
     return;
   }
